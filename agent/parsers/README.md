@@ -254,7 +254,7 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 ### 면접 질문 생성 (프롬프트 v1)
 
 
-#### 배민 JD + 김서준 이력서 + 깐깐한 기술 면접관
+#### 배민 JD + 김서준 이력서 + 기술 리드 페르소나
 
 - 질문 7개 생성 (기술 5개 + 인성 2개) -- 정상
 - priority 순서: 상 4개 -> 중 2개 -> 하 1개 -- 정상
@@ -278,14 +278,14 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 
 | 페르소나 | 파일 변수명 | 특징 |
 |---|---|---|
-| 깐깐한 기술 팀장 | PERSONA_STRICT | 정량적 수치, 의사결정 근거를 끈질기게 추궁 |
-| 공감형 인사 담당자 | PERSONA_FRIENDLY | 성장 과정, 협업 태도, 동기에 관심 |
-| 실무형 시니어 개발자 | PERSONA_PRACTICAL | 실제 구현, 디버깅, 트러블슈팅 경험 확인 |
+| 기술 리드 | PERSONA_TECH_LEAD | 정량적 수치, 의사결정 근거를 끈질기게 추궁 |
+| 인사 담당자 | PERSONA_HR | 성장 과정, 협업 태도, 동기에 관심 |
+| 임원 면접관 | PERSONA_EXECUTIVE | 비즈니스 임팩트, 큰 그림, 리더십 확인 |
 
 사용법: 다른 프롬프트의 System Prompt 앞에 페르소나를 붙여서 사용
 
 ```python
-system_prompt = PERSONA_STRICT + QUESTION_GENERATOR_SYSTEM_PROMPT
+system_prompt = PERSONA_TECH_LEAD + QUESTION_GENERATOR_SYSTEM_PROMPT
 ```
 
 
@@ -302,10 +302,11 @@ agent/parsers/
   jd_parser_free.py               -- JD 파서 무료 테스트 버전 (Gemini + 에러 핸들링)
   resume_parser_prompt.py         -- 이력서 파싱 프롬프트 v1
   jd_resume_matcher_prompt.py     -- JD <-> 이력서 매칭 프롬프트 v1
-  answer_evaluator_prompt.py      -- 답변 평가 프롬프트 v1
+  answer_evaluator_prompt.py      -- 답변 평가 프롬프트 v2 (0~100점, 5개 세부 항목)
   question_generator_prompt.py    -- 면접 질문 생성 프롬프트 v1
   follow_up_prompt.py             -- 꼬리질문 생성 프롬프트 v1
-  persona_prompts.py              -- 면접관 페르소나 3종
+  report_generator_prompt.py      -- 최종 리포트 생성 프롬프트 v1
+  persona_prompts.py              -- 면접관 페르소나 3종 v2 (기술 리드/인사 담당자/임원 면접관)
 ```
 
 
@@ -317,14 +318,16 @@ agent/parsers/
 - [x] JD 파싱 프롬프트 v2
 - [x] 이력서 파싱 프롬프트 v1
 - [x] JD <-> 이력서 매칭 프롬프트 v1
-- [x] 답변 평가 프롬프트 v1
+- [x] 답변 평가 프롬프트 v2 (0~100점 체계, 5개 세부 평가 항목)
 - [x] 면접 질문 생성 프롬프트 v1
 - [x] 꼬리질문 생성 프롬프트 v1
-- [x] 면접관 페르소나 3종
+- [x] 최종 리포트 생성 프롬프트 v1
+- [x] 면접관 페르소나 3종 v2
+
+모든 프롬프트 개발 완료.
 
 
 ## 다음 단계
 
-- 노드 구조를 설계해서 공유받으면, 각 프롬프트를 해당 구조에 맞춰 조정
-- 최종 리포트 생성 프롬프트 개발 (report_generator_prompt.py)
+- 노드 구조를 공유받으면, 각 프롬프트를 해당 구조에 맞춰 조정
 - 전체 End-to-End 테스트 (JD 입력 -> 면접 질문 -> 답변 -> 평가 -> 꼬리질문 -> 리포트)
