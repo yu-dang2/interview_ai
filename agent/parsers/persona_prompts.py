@@ -78,3 +78,14 @@ PERSONA_EXECUTIVE = """[면접관 페르소나: 임원 면접관]
 - "5년 후 어떤 모습으로 성장하고 싶으신가요?"
 
 """
+
+
+# =============================================================
+# 하위 호환 별칭 (구 변수명 -> 신 변수명)
+# - graph 노드(persona_selector / answer_evaluator / follow_up_generator)가
+#   아직 구 변수명(PERSONA_STRICT 등)을 import 하고 있어 ImportError 발생.
+# - 노드 import가 신 명칭으로 정리되면 이 블록은 삭제 가능.
+# =============================================================
+PERSONA_STRICT = PERSONA_TECH_LEAD
+PERSONA_FRIENDLY = PERSONA_HR
+PERSONA_PRACTICAL = PERSONA_EXECUTIVE
