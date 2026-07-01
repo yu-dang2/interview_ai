@@ -36,3 +36,6 @@ class InterviewState(MessagesState):
     follow_up_count: int    # 꼬리질문 횟수. 3회 초과 시 다음 주제로 강제 이동
     turn_count: int         # 전체 턴 수. MAX_TURNS 초과 시 종료
     is_finished: bool
+
+    # 최종 결과 (report_generator가 생성)
+    report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
