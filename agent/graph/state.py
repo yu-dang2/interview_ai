@@ -15,7 +15,7 @@ class InterviewState(MessagesState):
     # 지원님 UI에서 invoke() 시 전달
     jd_raw: str
     resume_raw: str
-    persona: str            # "깐깐한 기술 팀장" / "공감형 인사 담당자" / "실무형 시니어 개발자"
+    persona: str            # "기술 리드" / "인사 담당자" / "임원 면접관"
 
     # 예진님 파서 결과
     jd_parsed: dict         # {"job_title", "required_skills", "preferred_skills", "soft_skills", ...}
@@ -25,7 +25,7 @@ class InterviewState(MessagesState):
 
     # 현재 진행 상태
     current_question_index: int
-    eval_score: int         # 1~10점. topic_router가 THRESHOLD 기준으로 분기 판단
+    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
     eval_result: dict       # {"score", "feedback", "follow_up_needed", "follow_up_focus", ...}
 
     # 누적값 (면접 전체에서 쌓임)

@@ -8,7 +8,7 @@ LLM 불필요.
 """
 
 from agent.parsers.persona_prompts import PERSONA_TECH_LEAD, PERSONA_HR, PERSONA_EXECUTIVE
-from graph.state import InterviewState
+from agent.graph.state import InterviewState
 
 PERSONA_MAP = {
     "기술 리드": PERSONA_TECH_LEAD,

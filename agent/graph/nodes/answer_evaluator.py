@@ -9,10 +9,10 @@ eval_result의 score가 topic_router 분기 판단의 핵심 값.
 import json
 from langchain_core.messages import HumanMessage
 from agent.parsers.answer_evaluator_prompt import ANSWER_EVALUATOR_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.nodes.persona_selector import PERSONA_MAP
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import PERSONA_MAP
 from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
-from graph.utils import call_llm
+from agent.graph.utils import call_llm
 
 
 def answer_evaluator(state: InterviewState):

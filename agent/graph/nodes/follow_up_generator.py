@@ -10,10 +10,10 @@ eval_result의 follow_up_focus를 받아서 허점 파고들기.
 import json
 from langchain_core.messages import HumanMessage, AIMessage
 from agent.parsers.follow_up_prompt import FOLLOW_UP_GENERATOR_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.nodes.persona_selector import PERSONA_MAP
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import PERSONA_MAP
 from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
-from graph.utils import call_llm
+from agent.graph.utils import call_llm
 
 
 def follow_up_generator(state: InterviewState):

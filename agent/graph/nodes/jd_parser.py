@@ -6,7 +6,7 @@ jd_parser 노드
 """
 
 from agent.parsers.jd_parser import parse_jd_from_text
-from graph.state import InterviewState
+from agent.graph.state import InterviewState
 
 
 def jd_parser(state: InterviewState):

@@ -6,8 +6,8 @@ resume_parser 노드
 """
 
 from agent.parsers.resume_parser_prompt import RESUME_PARSER_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.utils import call_llm
+from agent.graph.state import InterviewState
+from agent.graph.utils import call_llm
 
 
 def resume_parser(state: InterviewState):

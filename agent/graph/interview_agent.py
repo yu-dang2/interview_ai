@@ -8,16 +8,16 @@ AI 면접관 에이전트 - 그래프 조립 및 실행
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 
-from graph.state import InterviewState
-from graph.nodes.persona_selector import persona_selector
-from graph.nodes.jd_parser import jd_parser
-from graph.nodes.resume_parser import resume_parser
-from graph.nodes.jd_resume_matcher import jd_resume_matcher
-from graph.nodes.question_generator import question_generator
-from graph.nodes.answer_evaluator import answer_evaluator
-from graph.nodes.follow_up_generator import follow_up_generator
-from graph.nodes.report_generator import report_generator
-from graph.edges.topic_router import topic_router
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import persona_selector
+from agent.graph.nodes.jd_parser import jd_parser
+from agent.graph.nodes.resume_parser import resume_parser
+from agent.graph.nodes.jd_resume_matcher import jd_resume_matcher
+from agent.graph.nodes.question_generator import question_generator
+from agent.graph.nodes.answer_evaluator import answer_evaluator
+from agent.graph.nodes.follow_up_generator import follow_up_generator
+from agent.graph.nodes.report_generator import report_generator
+from agent.graph.edges.topic_router import topic_router
 
 
 # ── 그래프 조립 ────────────────────────────────────────
@@ -63,7 +63,7 @@ if __name__ == "__main__":
         "match_result": {},
         "question_list": [],
         "current_question_index": 0,
-        "persona": "깐깐한 기술 팀장",
+        "persona": "기술 리드",
         "eval_score": 0,
         "eval_result": {},
         "eval_keywords": [],

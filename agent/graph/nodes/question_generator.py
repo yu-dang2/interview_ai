@@ -11,10 +11,10 @@ question_generator 노드
 import json
 from langchain_core.messages import AIMessage
 from agent.parsers.question_generator_prompt import QUESTION_GENERATOR_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.nodes.persona_selector import PERSONA_MAP
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import PERSONA_MAP
 from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
-from graph.utils import call_llm
+from agent.graph.utils import call_llm
 
 
 def question_generator(state: InterviewState):
