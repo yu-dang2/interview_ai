@@ -2,24 +2,37 @@
 report_generator 노드
 작성: 이현주
 
-TODO: 예진님 리포트 프롬프트 받으면 통합 예정.
-현재는 면접 요약만 제공.
+예진님 REPORT_GENERATOR_SYSTEM_PROMPT 사용하여 전체 면접 기록을 종합 리포트로 생성.
 """
 
-from langchain_core.messages import AIMessage
-from graph.state import InterviewState
+import json
+from langchain_core.messages import AIMessage, HumanMessage
+from agent.parsers.report_generator_prompt import REPORT_GENERATOR_SYSTEM_PROMPT
+from agent.graph.state import InterviewState
+from agent.graph.utils import call_llm
 
 
 def report_generator(state: InterviewState):
-    # TODO: 예진님 리포트 프롬프트 통합 예정
-    report = (
-        f"=== 면접 결과 리포트 ===\n"
-        f"총 면접 턴 수: {state.get('turn_count', 0)}\n"
-        f"확인된 강점: {', '.join(state.get('eval_keywords', []))}\n"
-        f"확인된 약점: {', '.join(state.get('weakness_areas', []))}\n"
-        f"\n[예진님 리포트 프롬프트 통합 후 상세 결과 제공 예정]"
-    )
+    question_list = state.get("question_list", [])
+
+    qa_history = []
+    for msg in state.get("messages", []):
+        if isinstance(msg, HumanMessage):
+            qa_history.append({"role": "user", "content": msg.content})
+        elif isinstance(msg, AIMessage):
+            qa_history.append({"role": "assistant", "content": msg.content})
+
+    user_content = json.dumps({
+        "question_list": question_list,
+        "conversation": qa_history,
+        "eval_keywords": state.get("eval_keywords", []),
+        "weakness_areas": state.get("weakness_areas", [])
+    }, ensure_ascii=False)
+
+    report_result = call_llm(REPORT_GENERATOR_SYSTEM_PROMPT, user_content)
+
     return {
-        "messages": [AIMessage(content=report)],
+        "messages": [AIMessage(content=json.dumps(report_result, ensure_ascii=False))],
+        "report_result": report_result,
         "is_finished": True
     }

@@ -7,7 +7,7 @@ State 스키마 정의
 
 from typing import Annotated
 from langgraph.graph import MessagesState
-from langchain_core.messages import add_messages
+from operator import add
 
 
 class InterviewState(MessagesState):
@@ -15,7 +15,7 @@ class InterviewState(MessagesState):
     # 지원님 UI에서 invoke() 시 전달
     jd_raw: str
     resume_raw: str
-    persona: str            # "깐깐한 기술 팀장" / "공감형 인사 담당자" / "실무형 시니어 개발자"
+    persona: str            # "기술 리드" / "인사 담당자" / "임원 면접관"
 
     # 예진님 파서 결과
     jd_parsed: dict         # {"job_title", "required_skills", "preferred_skills", "soft_skills", ...}
@@ -25,14 +25,17 @@ class InterviewState(MessagesState):
 
     # 현재 진행 상태
     current_question_index: int
-    eval_score: int         # 1~10점. topic_router가 THRESHOLD 기준으로 분기 판단
+    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
     eval_result: dict       # {"score", "feedback", "follow_up_needed", "follow_up_focus", ...}
 
     # 누적값 (면접 전체에서 쌓임)
-    eval_keywords: Annotated[list, add_messages]
-    weakness_areas: Annotated[list, add_messages]
+    eval_keywords: Annotated[list, add]
+    weakness_areas: Annotated[list, add]
 
     # 흐름 제어 (이현주 관리)
     follow_up_count: int    # 꼬리질문 횟수. 3회 초과 시 다음 주제로 강제 이동
     turn_count: int         # 전체 턴 수. MAX_TURNS 초과 시 종료
     is_finished: bool
+
+    # 최종 결과 (report_generator가 생성)
+    report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}

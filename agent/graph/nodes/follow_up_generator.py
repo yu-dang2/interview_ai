@@ -10,17 +10,17 @@ eval_result의 follow_up_focus를 받아서 허점 파고들기.
 import json
 from langchain_core.messages import HumanMessage, AIMessage
 from agent.parsers.follow_up_prompt import FOLLOW_UP_GENERATOR_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.nodes.persona_selector import PERSONA_MAP
-from agent.parsers.persona_prompts import PERSONA_STRICT
-from graph.utils import call_llm
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import PERSONA_MAP
+from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
+from agent.graph.utils import call_llm
 
 
 def follow_up_generator(state: InterviewState):
     count = state.get("follow_up_count", 0)
     eval_result = state.get("eval_result", {})
 
-    persona_prompt = PERSONA_MAP.get(state.get("persona"), PERSONA_STRICT)
+    persona_prompt = PERSONA_MAP.get(state.get("persona"), PERSONA_TECH_LEAD)
     system_prompt = persona_prompt + FOLLOW_UP_GENERATOR_SYSTEM_PROMPT
 
     # 최근 대화 맥락 + follow_up_focus 전달

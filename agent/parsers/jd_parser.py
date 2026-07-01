@@ -21,7 +21,7 @@ import os
 import json
 import base64
 from openai import OpenAI
-from jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
+from agent.parsers.jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
 
 
 def get_client():
