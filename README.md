@@ -1,5 +1,6 @@
 # interview_ai
 2026 한이음 드림업 공모전 : 랭체인 &amp; 랭그래프 기반 지능형 취업 뽀개기 AI 면접관
+<br>
 
 👩‍💻 담당 역할
 - Backend Development
@@ -8,6 +9,8 @@
 - Database 설계 및 연동
 - AI 서비스(STT/LLM) 연동
 - Docker 기반 배포
+<br>
+
 
 ✅ 수행 내용
 - FastAPI 백엔드 프로젝트 구조 설계
@@ -17,6 +20,7 @@
 - ERD 기반 데이터 모델 반영
 - STT(OpenAI GPT-4o-transcribe) 연동
 - Swagger API 문서 작성
+<br>
 
 🛠️ Tech Stack
 - Python
