@@ -7,7 +7,7 @@ State 스키마 정의
 
 from typing import Annotated
 from langgraph.graph import MessagesState
-from langchain_core.messages import add_messages
+from operator import add
 
 
 class InterviewState(MessagesState):
@@ -29,8 +29,8 @@ class InterviewState(MessagesState):
     eval_result: dict       # {"score", "feedback", "follow_up_needed", "follow_up_focus", ...}
 
     # 누적값 (면접 전체에서 쌓임)
-    eval_keywords: Annotated[list, add_messages]
-    weakness_areas: Annotated[list, add_messages]
+    eval_keywords: Annotated[list, add]
+    weakness_areas: Annotated[list, add]
 
     # 흐름 제어 (이현주 관리)
     follow_up_count: int    # 꼬리질문 횟수. 3회 초과 시 다음 주제로 강제 이동
