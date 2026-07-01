@@ -8,8 +8,8 @@ JD와 이력서 비교 → 강점/약점/면접 주제 산출.
 
 import json
 from agent.parsers.jd_resume_matcher_prompt import JD_RESUME_MATCHER_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.utils import call_llm
+from agent.graph.state import InterviewState
+from agent.graph.utils import call_llm
 
 
 def jd_resume_matcher(state: InterviewState):

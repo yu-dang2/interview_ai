@@ -9,10 +9,10 @@ eval_result의 score가 topic_router 분기 판단의 핵심 값.
 import json
 from langchain_core.messages import HumanMessage
 from agent.parsers.answer_evaluator_prompt import ANSWER_EVALUATOR_SYSTEM_PROMPT
-from graph.state import InterviewState
-from graph.nodes.persona_selector import PERSONA_MAP
-from agent.parsers.persona_prompts import PERSONA_STRICT
-from graph.utils import call_llm
+from agent.graph.state import InterviewState
+from agent.graph.nodes.persona_selector import PERSONA_MAP
+from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
+from agent.graph.utils import call_llm
 
 
 def answer_evaluator(state: InterviewState):
@@ -27,7 +27,7 @@ def answer_evaluator(state: InterviewState):
             user_answer = msg.content
             break
 
-    persona_prompt = PERSONA_MAP.get(state.get("persona"), PERSONA_STRICT)
+    persona_prompt = PERSONA_MAP.get(state.get("persona"), PERSONA_TECH_LEAD)
     system_prompt = persona_prompt + ANSWER_EVALUATOR_SYSTEM_PROMPT
     user_content = json.dumps({
         "question": current_q.get("question", ""),
@@ -37,8 +37,8 @@ def answer_evaluator(state: InterviewState):
 
     eval_result = call_llm(system_prompt, user_content)
     return {
-        "eval_score": eval_result.get("score", 0),
+        "eval_score": eval_result.get("eval_score", 0),
         "eval_result": eval_result,
-        "eval_keywords": eval_result.get("strengths", []),
+        "eval_keywords": eval_result.get("eval_keywords", []),
         "weakness_areas": eval_result.get("weaknesses", [])
     }
