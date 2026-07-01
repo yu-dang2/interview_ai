@@ -7,18 +7,18 @@ persona_selector 노드
 LLM 불필요.
 """
 
-from agent.parsers.persona_prompts import PERSONA_STRICT, PERSONA_FRIENDLY, PERSONA_PRACTICAL
+from agent.parsers.persona_prompts import PERSONA_TECH_LEAD, PERSONA_HR, PERSONA_EXECUTIVE
 from graph.state import InterviewState
 
 PERSONA_MAP = {
-    "깐깐한 기술 팀장": PERSONA_STRICT,
-    "공감형 인사 담당자": PERSONA_FRIENDLY,
-    "실무형 시니어 개발자": PERSONA_PRACTICAL,
+    "기술 리드": PERSONA_TECH_LEAD,
+    "인사 담당자": PERSONA_HR,
+    "임원 면접관": PERSONA_EXECUTIVE,
 }
 
 
 def persona_selector(state: InterviewState):
-    persona = state.get("persona", "깐깐한 기술 팀장")
+    persona = state.get("persona", "기술 리드")
     if persona not in PERSONA_MAP:
-        persona = "깐깐한 기술 팀장"
+        persona = "기술 리드"
     return {"persona": persona}
