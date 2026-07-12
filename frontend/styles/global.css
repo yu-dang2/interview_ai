@@ -1,0 +1,295 @@
+/* =============================================
+   intro — 전역 스타일
+   =============================================
+
+   구성
+   ① 폰트 & 리셋
+   ② Streamlit 기본 요소 숨기기
+   ③ 색상 변수 (CSS Custom Properties)
+   ④ 공통 컴포넌트 스타일
+   ============================================= */
+
+
+/* ① 폰트 & 리셋 */
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2') format('woff2');
+    font-weight: 100;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2') format('woff2');
+    font-weight: 200;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2') format('woff2');
+    font-weight: 300;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2') format('woff2');
+    font-weight: 800;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pretendard';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2') format('woff2');
+    font-weight: 900;
+    font-display: swap;
+}
+
+*, *::before, *::after {
+    font-family: 'Pretendard', -apple-system, sans-serif;
+    box-sizing: border-box;
+}
+
+
+/* ② Streamlit 기본 요소 숨기기 */
+#MainMenu,
+footer,
+[data-testid="stDecoration"],
+[data-testid="stSidebarNav"] { display: none !important; }
+
+header,
+[data-testid="stToolbar"] {
+    visibility: hidden !important;
+    height: 0 !important;
+}
+
+
+/* ③ 색상 변수 */
+:root {
+    --blue:      #3b6def;
+    --blue-dark: #2563eb;
+    --blue-soft: #eef3ff;
+
+    --green:     #16a34a;
+    --orange:    #d97706;
+    --red:       #dc2626;
+
+    --gray-900:  #111827;
+    --gray-700:  #374151;
+    --gray-500:  #6b7280;
+    --gray-300:  #d1d5db;
+    --gray-100:  #f3f4f6;
+
+    --border:    #e5e7eb;
+    --bg:        #f8fafc;
+}
+
+
+/* ④ 공통 컴포넌트 */
+
+/* 페이지 타이틀 */
+.page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin: 0 0 4px;
+}
+.page-subtitle {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin: 0 0 28px;
+}
+
+/* 섹션 제목 */
+.section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin: 0 0 12px;
+}
+
+/* 기본 카드 */
+.card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+/* 배지 */
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.badge-green  { background: #dcfce7; color: var(--green); }
+.badge-orange { background: #fef3c7; color: var(--orange); }
+.badge-red    { background: #fee2e2; color: var(--red); }
+.badge-blue   { background: var(--blue-soft); color: var(--blue); }
+
+
+/* =============================================
+   랜딩 페이지 (app.py)
+   ============================================= */
+
+/* --- 네비게이션 바 --- */
+.navbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    height: 64px;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+}
+.navbar-brand {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--blue);
+}
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.btn-ghost,
+.btn-ghost:visited,
+.btn-ghost:active {
+    padding: 6px 20px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--gray-700) !important;
+    background: white;
+    text-decoration: none !important;
+    display: inline-block;
+}
+.btn-filled,
+.btn-filled:visited,
+.btn-filled:active {
+    padding: 6px 20px;
+    background: var(--blue);
+    border-radius: 6px;
+    font-size: 13px;
+    color: white !important;
+    text-decoration: none !important;
+    display: inline-block;
+}
+.btn-filled:hover { background: var(--blue-dark); }
+
+/* --- 히어로 섹션 --- */
+.hero {
+    background: white;
+    padding: 80px 40px 48px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    margin-top: 64px;
+}
+.hero-blob {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+.hero-blob-1 {
+    width: 500px; height: 500px;
+    right: 80px; top: -180px;
+    background: radial-gradient(circle, #dbeafe 0%, #eef3ff 40%, transparent 70%);
+    opacity: 0.7;
+}
+.hero-blob-2 {
+    width: 380px; height: 380px;
+    right: 20px; bottom: 20px;
+    background: radial-gradient(circle, #eef3ff 0%, transparent 70%);
+    opacity: 0.5;
+}
+.hero-inner     { position: relative; z-index: 1; }
+.hero-badge     { display: inline-block; font-size: 11px; font-weight: 500; color: var(--blue); margin-bottom: 20px; }
+.hero-title     { font-size: 46px; font-weight: 800; color: var(--gray-900); line-height: 1.15; margin: 0 0 14px; }
+.hero-subtitle  { font-size: 28px; font-weight: 600; color: var(--blue); margin: 0 0 16px; }
+.hero-desc      { font-size: 15px; color: var(--gray-500); line-height: 1.7; margin: 0; }
+
+/* CTA 버튼 (st.button) */
+.cta-wrap .stButton > button {
+    height: 52px !important;
+    border-radius: 8px !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+}
+
+/* --- 통계 행 --- */
+.stats-row {
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 32px 0 40px;
+}
+.stat-item          { text-align: center; padding: 0 52px; }
+.stat-item + .stat-item { border-left: 1px solid var(--border); }
+.stat-num           { font-size: 22px; font-weight: 800; color: var(--blue); }
+.stat-label         { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+
+/* --- 기능 카드 섹션 --- */
+.features-section {
+    background: var(--bg);
+    padding: 56px 40px 64px;
+}
+.features-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--gray-900);
+    text-align: center;
+    margin: 0 0 36px;
+}
+.features-grid { display: flex; gap: 24px; }
+.feat-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    flex: 1;
+}
+.feat-icon-box {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+}
+/* 아이콘 박스 안 SVG 크기 고정 */
+.feat-icon-box svg {
+    width: 24px;
+    height: 24px;
+}
+.feat-title { font-size: 14px; font-weight: 600; color: var(--gray-900); margin-bottom: 12px; }
+.feat-item  { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--gray-500); }
+.feat-dot   { width: 6px; height: 6px; border-radius: 3px; flex-shrink: 0; }
