@@ -2,7 +2,7 @@
 JD 파서 — 채용 공고 입력 방식 3가지 지원
 1. 텍스트 직접 입력 (parse_jd_from_text)
 2. 이미지 업로드 (parse_jd_from_image)
-3. URL 크롤링 (parse_jd_from_url)
+3. URL 크롤링 (parse_jd_from_url)  ※ async
 
 사용법:
     from agent.parsers.jd_parser import parse_jd_from_text, parse_jd_from_image, parse_jd_from_url
@@ -13,13 +13,14 @@ JD 파서 — 채용 공고 입력 방식 3가지 지원
     # 방법 2: 이미지 (파일 경로 또는 base64)
     result = parse_jd_from_image("path/to/screenshot.png")
 
-    # 방법 3: URL (원티드, 잡코리아 등)
-    result = parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
+    # 방법 3: URL (원티드, 잡코리아 등) — async 함수라 await 필요
+    result = await parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
 """
 
 import os
 import json
 import base64
+import asyncio
 from openai import OpenAI
 from agent.parsers.jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
 
@@ -120,11 +121,11 @@ def parse_jd_from_image(image_path: str) -> dict:
 
 
 # =============================================================
-# 방법 3: URL → Playwright로 크롤링 → 텍스트 추출 → 파싱
+# 방법 3: URL → Playwright(async)로 크롤링 → 텍스트 추출 → 파싱
 # =============================================================
-def parse_jd_from_url(url: str) -> dict:
+async def parse_jd_from_url(url: str) -> dict:
     """
-    채용 공고 URL을 받아서 크롤링 후 JSON으로 파싱합니다.
+    채용 공고 URL을 받아서 크롤링 후 JSON으로 파싱합니다. (async)
     원티드, 잡코리아, 사람인, 프로그래머스 등을 지원합니다.
 
     ※ 사전 설치 필요:
@@ -137,74 +138,72 @@ def parse_jd_from_url(url: str) -> dict:
     Returns:
         파싱된 채용 공고 정보 (dict)
     """
-    # Playwright로 페이지 크롤링
-    jd_text = _crawl_jd_page(url)
+    # Playwright(async)로 페이지 크롤링
+    jd_text = await _crawl_jd_page(url)
     print(f"[크롤링 완료] 추출된 텍스트 길이: {len(jd_text)}자")
 
     # 추출된 텍스트 → JSON 파싱
     return parse_jd_from_text(jd_text)
 
 
-def _crawl_jd_page(url: str) -> str:
+async def _crawl_jd_page(url: str) -> str:
     """
-    Playwright를 사용해서 채용 공고 페이지의 텍스트를 크롤링합니다.
+    Playwright(async)를 사용해서 채용 공고 페이지의 텍스트를 크롤링합니다.
     JavaScript로 동적 로딩되는 콘텐츠(상세 정보 더 보기 등)도 처리합니다.
     """
-    from playwright.sync_api import sync_playwright
+    from playwright.async_api import async_playwright
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
 
         # 페이지 로드
-        page.goto(url, wait_until="networkidle", timeout=30000)
+        await page.goto(url, wait_until="networkidle", timeout=30000)
 
         # 사이트별 "더 보기" 버튼 클릭 처리
-        _click_more_buttons(page, url)
+        await _click_more_buttons(page, url)
 
         # 페이지에서 채용 공고 텍스트 추출
-        jd_text = _extract_jd_text(page, url)
+        jd_text = await _extract_jd_text(page, url)
 
-        browser.close()
+        await browser.close()
 
     return jd_text
 
 
-def _click_more_buttons(page, url: str):
+async def _click_more_buttons(page, url: str):
     """사이트별 '상세 정보 더 보기' 버튼을 클릭합니다."""
-    import time
-
     try:
         if "wanted.co.kr" in url:
             # 원티드: "상세 정보 더 보기" 버튼
             more_btn = page.locator("button:has-text('더 보기'), button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "jobkorea.co.kr" in url:
             # 잡코리아: "더보기" 또는 "전체보기" 버튼
             more_btn = page.locator(".devMoreView, .tplBtn, button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "saramin.co.kr" in url:
             # 사람인: "더보기" 버튼
             more_btn = page.locator(".btn_more_info, button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "programmers.co.kr" in url:
             # 프로그래머스: 보통 전체 표시
-            time.sleep(1)
+            await asyncio.sleep(1)
 
     except Exception as e:
         print(f"[경고] 더보기 버튼 클릭 실패 (무시하고 계속): {e}")
 
 
-def _extract_jd_text(page, url: str) -> str:
+async def _extract_jd_text(page, url: str) -> str:
     """사이트별 채용 공고 본문 영역에서 텍스트를 추출합니다."""
 
     selectors = {
@@ -218,11 +217,11 @@ def _extract_jd_text(page, url: str) -> str:
     for domain, selector in selectors.items():
         if domain in url:
             element = page.locator(selector)
-            if element.count() > 0:
-                return element.first.inner_text()
+            if await element.count() > 0:
+                return await element.first.inner_text()
 
     # 알 수 없는 사이트면 body 전체에서 추출 (최후의 수단)
-    return page.locator("body").inner_text()
+    return await page.locator("body").inner_text()
 
 
 # =============================================================
@@ -253,5 +252,5 @@ if __name__ == "__main__":
 
     elif mode == "url":
         url = sys.argv[2]
-        result = parse_jd_from_url(url)
+        result = asyncio.run(parse_jd_from_url(url))   # async 함수라 asyncio.run으로 실행
         print(json.dumps(result, ensure_ascii=False, indent=2))
