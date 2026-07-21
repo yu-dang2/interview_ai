@@ -7,3 +7,4 @@ plotly
 pydantic
 openai
 python-dotenv
+email-validator
