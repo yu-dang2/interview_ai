@@ -5,7 +5,7 @@ State 스키마 정의
 노드끼리 직접 데이터를 주고받을 수 없고 반드시 State를 통해서만 공유됨.
 """
 
-from typing import Annotated
+from typing import Annotated, TypedDict
 from langgraph.graph import MessagesState
 from operator import add
 
@@ -39,3 +39,15 @@ class InterviewState(MessagesState):
 
     # 최종 결과 (report_generator가 생성)
     report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
+
+
+class InterviewInput(TypedDict):
+    jd_raw: str
+    resume_raw: str
+    persona: str
+
+
+class InterviewOutput(TypedDict):
+    messages: list
+    is_finished: bool
+    report_result: dict
