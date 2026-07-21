@@ -5,7 +5,7 @@ State 스키마 정의
 노드끼리 직접 데이터를 주고받을 수 없고 반드시 State를 통해서만 공유됨.
 """
 
-from typing import Annotated, TypedDict
+from typing import Annotated, TypedDict, NotRequired
 from langgraph.graph import MessagesState
 from operator import add
 
@@ -21,6 +21,7 @@ class InterviewState(MessagesState):
     jd_parsed: dict         # {"job_title", "required_skills", "preferred_skills", "soft_skills", ...}
     resume_parsed: dict     # {"name", "skills", "experience", "projects", "soft_skills", ...}
     match_result: dict      # {"matching_skills", "missing_skills", "interview_topics", ...}
+    match_score: int        # JD-이력서 적합도 0~100 정수 (jd_resume_matcher 산출, 백엔드 노출)
     question_list: list     # [{"question", "intent", "good_answer_criteria", ...}]
 
     # 현재 진행 상태
@@ -40,14 +41,23 @@ class InterviewState(MessagesState):
     # 최종 결과 (report_generator가 생성)
     report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
 
+    # STT/TTS 인터페이스 (백엔드 오디오 API 연동용, 아직 그래프에 미연결)
+    audio_input: str         # STT 입력: 오디오 base64/URL (프론트/백엔드 제공)
+    transcribed_text: str    # STT 출력: 전사 텍스트 (stt_node가 채움)
+    audio_output: str        # TTS 출력: 합성 오디오 base64/URL (tts_node가 채움)
+
 
 class InterviewInput(TypedDict):
     jd_raw: str
     resume_raw: str
     persona: str
+    # 백엔드가 면접 종료(예: 종료 버튼)를 invoke 입력으로 주입할 수 있도록 선택 필드로 노출.
+    # update_state 경로로도 주입 가능하며, 미지정 시 기본 False로 동작한다.
+    is_finished: NotRequired[bool]
 
 
 class InterviewOutput(TypedDict):
     messages: list
     is_finished: bool
     report_result: dict
+    match_score: int
