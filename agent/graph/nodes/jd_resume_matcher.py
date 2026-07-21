@@ -12,10 +12,10 @@ from agent.graph.state import InterviewState
 from agent.graph.utils import call_llm
 
 
-def jd_resume_matcher(state: InterviewState):
+async def jd_resume_matcher(state: InterviewState):
     user_content = json.dumps({
         "jd": state["jd_parsed"],
         "resume": state["resume_parsed"]
     }, ensure_ascii=False)
-    match_result = call_llm(JD_RESUME_MATCHER_SYSTEM_PROMPT, user_content)
+    match_result = await call_llm(JD_RESUME_MATCHER_SYSTEM_PROMPT, user_content)
     return {"match_result": match_result}

@@ -15,7 +15,7 @@ from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
 from agent.graph.utils import call_llm
 
 
-def answer_evaluator(state: InterviewState):
+async def answer_evaluator(state: InterviewState):
     question_list = state.get("question_list", [])
     current_index = state.get("current_question_index", 0)
     current_q = question_list[current_index] if question_list else {}
@@ -35,7 +35,7 @@ def answer_evaluator(state: InterviewState):
         "answer": user_answer
     }, ensure_ascii=False)
 
-    eval_result = call_llm(system_prompt, user_content)
+    eval_result = await call_llm(system_prompt, user_content)
     return {
         "eval_score": eval_result.get("eval_score", 0),
         "eval_result": eval_result,

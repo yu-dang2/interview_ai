@@ -12,7 +12,7 @@ from agent.graph.state import InterviewState
 from agent.graph.utils import call_llm
 
 
-def report_generator(state: InterviewState):
+async def report_generator(state: InterviewState):
     question_list = state.get("question_list", [])
 
     qa_history = []
@@ -29,7 +29,7 @@ def report_generator(state: InterviewState):
         "weakness_areas": state.get("weakness_areas", [])
     }, ensure_ascii=False)
 
-    report_result = call_llm(REPORT_GENERATOR_SYSTEM_PROMPT, user_content)
+    report_result = await call_llm(REPORT_GENERATOR_SYSTEM_PROMPT, user_content)
 
     return {
         "messages": [AIMessage(content=json.dumps(report_result, ensure_ascii=False))],

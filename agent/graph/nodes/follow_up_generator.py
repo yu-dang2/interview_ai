@@ -16,7 +16,7 @@ from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
 from agent.graph.utils import call_llm
 
 
-def follow_up_generator(state: InterviewState):
+async def follow_up_generator(state: InterviewState):
     count = state.get("follow_up_count", 0)
     eval_result = state.get("eval_result", {})
 
@@ -36,7 +36,7 @@ def follow_up_generator(state: InterviewState):
         "follow_up_focus": eval_result.get("follow_up_focus", "")
     }, ensure_ascii=False)
 
-    result = call_llm(system_prompt, user_content)
+    result = await call_llm(system_prompt, user_content)
     return {
         "messages": [AIMessage(content=result.get("follow_up_question", ""))],
         "follow_up_count": count + 1
