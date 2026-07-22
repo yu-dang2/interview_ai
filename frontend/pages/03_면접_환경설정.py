@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
-from pathlib import Path
+from utils.paths import resource
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
 from utils import api
@@ -18,7 +18,7 @@ render_sidebar(active="면접 시작")
 
 
 def img_b64(path: str) -> str:
-    return base64.b64encode(Path(path).read_bytes()).decode()
+    return base64.b64encode(resource(path).read_bytes()).decode()
 
 
 PERSONAS = [

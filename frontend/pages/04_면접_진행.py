@@ -3,7 +3,7 @@ import time
 import base64
 import streamlit as st
 import streamlit.components.v1 as components
-from pathlib import Path
+from utils.paths import resource
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
 from utils import api
@@ -51,7 +51,7 @@ _img_map  = {
 }
 try:
     _avatar_b64 = base64.b64encode(
-        Path(_img_map.get(_persona, "assets/images/기술리드.png")).read_bytes()
+        resource(_img_map.get(_persona, "assets/images/기술리드.png")).read_bytes()
     ).decode()
     _avatar_src = f"data:image/png;base64,{_avatar_b64}"
 except Exception:
