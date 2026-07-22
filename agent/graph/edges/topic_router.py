@@ -17,7 +17,7 @@ answer_evaluator 실행 후 어디로 갈지 판단.
 from langgraph.graph import END
 from agent.graph.state import InterviewState
 
-MAX_TURNS = 5    # 예진님과 합의 후 수정
+MAX_TURNS = 10    # 예진님과 합의 후 수정
 THRESHOLD = 70    # 예진님 평가 점수 기준 (70점 미만 = 꼬리질문)
 
 
