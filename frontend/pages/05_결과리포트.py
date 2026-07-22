@@ -1,11 +1,10 @@
 import time
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
 from utils import api
-from utils.paths import resource
 
 try:
     import plotly.graph_objects as go

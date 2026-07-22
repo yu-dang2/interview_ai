@@ -3,11 +3,10 @@ import time
 import base64
 import streamlit as st
 import streamlit.components.v1 as components
-from pathlib import Path
+from utils.paths import resource
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
 from utils import api
-from utils.paths import resource
 
 st.set_page_config(
     page_title="면접 진행 | intro",

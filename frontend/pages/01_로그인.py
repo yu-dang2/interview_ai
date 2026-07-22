@@ -1,8 +1,7 @@
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 from utils.state import init_session, set as state_set
 from utils import api
-from utils.paths import resource
 
 st.set_page_config(
     page_title="로그인 | intro",

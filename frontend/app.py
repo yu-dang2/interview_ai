@@ -1,5 +1,4 @@
 import streamlit as st
-from pathlib import Path
 from utils.paths import resource
 
 st.set_page_config(
