@@ -11,7 +11,7 @@ JD 파서 — 채용 공고 입력 방식 3가지 + 에러 핸들링/안내 메�
 사용법:
     from agent.parsers.jd_parser import parse_jd_from_text, parse_jd_from_image, parse_jd_from_url
 
-    result = parse_jd_from_text("채용 공고 텍스트...")
+    result = await parse_jd_from_text("채용 공고 텍스트...")  # async
     print(result.status)   # "success" / "partial" / "failed"
     print(result.data)     # 파싱된 dict
 
@@ -23,13 +23,13 @@ import os
 import json
 import base64
 import asyncio
-from openai import OpenAI
+from openai import AsyncOpenAI
 from agent.parsers.jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
 
 
 def get_client():
     """OpenAI 클라이언트 생성"""
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # =============================================================
@@ -141,7 +141,7 @@ def _extract_json(text: str) -> dict:
     return json.loads(text.strip())
 
 
-def _call_openai(system_prompt: str, user_content) -> str:
+async def _call_openai(system_prompt: str, user_content) -> str:
     """
     OpenAI 호출. user_content가 문자열이면 텍스트, list면 이미지 포함 요청.
     (Vision 이미지 파트: {"type": "image_base64", "mime_type": ..., "data": ...})
@@ -167,7 +167,7 @@ def _call_openai(system_prompt: str, user_content) -> str:
         if system_prompt:
             messages.insert(0, {"role": "system", "content": system_prompt})
 
-    response = client.chat.completions.create(
+    response = await client.chat.completions.create(
         model="gpt-5-mini",   # gpt-4o → gpt-5-mini
         messages=messages,
         # ※ temperature 미지정: gpt-5 계열은 temperature=0 미지원(기본값 1만 허용)
@@ -178,7 +178,7 @@ def _call_openai(system_prompt: str, user_content) -> str:
 # =============================================================
 # 방법 1: 텍스트 직접 입력
 # =============================================================
-def parse_jd_from_text(jd_text: str) -> JDParseResult:
+async def parse_jd_from_text(jd_text: str) -> JDParseResult:
     """채용 공고 텍스트를 받아서 JSON으로 파싱한다."""
     try:
         if not jd_text or len(jd_text.strip()) < 20:
@@ -186,7 +186,7 @@ def parse_jd_from_text(jd_text: str) -> JDParseResult:
                 status="failed", message="입력된 텍스트가 너무 짧습니다.",
                 suggestions=["채용 공고의 주요업무, 자격요건, 우대사항이 포함된 전체 텍스트를 입력해주세요."],
             )
-        result_text = _call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text)
+        result_text = await _call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text)
         data = _extract_json(result_text)
         return _validate_parsed_jd(data, "text")
 
@@ -201,7 +201,7 @@ def parse_jd_from_text(jd_text: str) -> JDParseResult:
 # =============================================================
 # 방법 2: 이미지 업로드 → Vision으로 텍스트 변환 → 파싱
 # =============================================================
-def parse_jd_from_image(image_path: str) -> JDParseResult:
+async def parse_jd_from_image(image_path: str) -> JDParseResult:
     """채용 공고 이미지를 텍스트로 변환 후 JSON으로 파싱한다."""
     try:
         if not os.path.exists(image_path):
@@ -225,7 +225,7 @@ def parse_jd_from_image(image_path: str) -> JDParseResult:
             {"type": "image_base64", "mime_type": mime_type, "data": image_data},
             {"type": "text", "text": IMAGE_TO_TEXT_PROMPT},
         ]
-        extracted_text = _call_openai("", user_content)
+        extracted_text = await _call_openai("", user_content)
 
         if not extracted_text or len(extracted_text.strip()) < 20:
             return JDParseResult(status="failed", message="이미지에서 텍스트를 추출하지 못했습니다.",
@@ -234,7 +234,7 @@ def parse_jd_from_image(image_path: str) -> JDParseResult:
         print(f"[이미지→텍스트 완료] {len(extracted_text)}자 추출")
 
         # Step 2: 텍스트 → JSON
-        data = _extract_json(_call_openai(JD_PARSER_SYSTEM_PROMPT, extracted_text))
+        data = _extract_json(await _call_openai(JD_PARSER_SYSTEM_PROMPT, extracted_text))
         return _validate_parsed_jd(data, "image")
 
     except json.JSONDecodeError:
@@ -263,7 +263,7 @@ async def parse_jd_from_url(url: str) -> JDParseResult:
 
         print(f"[크롤링 완료] {len(jd_text)}자 추출")
 
-        data = _extract_json(_call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text))
+        data = _extract_json(await _call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text))
         return _validate_parsed_jd(data, "url")
 
     except ImportError:
@@ -400,10 +400,10 @@ if __name__ == "__main__":
     if mode == "text":
         print("채용 공고 텍스트를 입력하세요 (Windows: Ctrl+Z→Enter / Mac: Ctrl+D):")
         jd_text = sys.stdin.read()
-        _print_result(parse_jd_from_text(jd_text))
+        _print_result(asyncio.run(parse_jd_from_text(jd_text)))
 
     elif mode == "image":
-        _print_result(parse_jd_from_image(sys.argv[2]))
+        _print_result(asyncio.run(parse_jd_from_image(sys.argv[2])))
 
     elif mode == "url":
         result = asyncio.run(parse_jd_from_url(sys.argv[2]))   # async 함수
