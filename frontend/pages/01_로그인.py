@@ -1,5 +1,5 @@
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 from utils.state import init_session, set as state_set
 from utils import api
 
@@ -11,7 +11,7 @@ st.set_page_config(
 
 init_session()
 
-css = Path("styles/global.css").read_text(encoding="utf-8")
+css = resource("styles/global.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 st.markdown("""
