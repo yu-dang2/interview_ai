@@ -4,6 +4,7 @@
 # Python
 __pycache__/
 *.py[cod]
+venv/
 
 # Database
 *.db

@@ -1,27 +1,30 @@
 """
-JD 파서 — 채용 공고 입력 방식 3가지 지원
+JD 파서 — 채용 공고 입력 방식 3가지 + 에러 핸들링/안내 메시지
 1. 텍스트 직접 입력 (parse_jd_from_text)
 2. 이미지 업로드 (parse_jd_from_image)
-3. URL 크롤링 (parse_jd_from_url)
+3. URL 크롤링 (parse_jd_from_url)  ※ async
+
+- 파싱 실패/부분 성공 시 상태와 안내 메시지를 함께 반환 (JDParseResult)
+- 반환 타입: JDParseResult (result.data 로 파싱 결과 dict 접근)
+- LLM: OpenAI gpt-5-mini
 
 사용법:
     from agent.parsers.jd_parser import parse_jd_from_text, parse_jd_from_image, parse_jd_from_url
 
-    # 방법 1: 텍스트
     result = parse_jd_from_text("채용 공고 텍스트...")
+    print(result.status)   # "success" / "partial" / "failed"
+    print(result.data)     # 파싱된 dict
 
-    # 방법 2: 이미지 (파일 경로 또는 base64)
-    result = parse_jd_from_image("path/to/screenshot.png")
-
-    # 방법 3: URL (원티드, 잡코리아 등)
-    result = parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
+    # URL은 async 함수라 await 필요
+    result = await parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
 """
 
 import os
 import json
 import base64
+import asyncio
 from openai import OpenAI
-from jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
+from agent.parsers.jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
 
 
 def get_client():
@@ -30,183 +33,314 @@ def get_client():
 
 
 # =============================================================
+# 파싱 결과 컨테이너 (성공/부분성공/실패 + 안내 메시지)
+# =============================================================
+class JDParseResult:
+    """JD 파싱 결과. 상태·안내 메시지·추가 제안을 함께 담는다."""
+
+    def __init__(self, data: dict = None, status: str = "success", message: str = "", suggestions: list = None):
+        self.data = data or {}
+        self.status = status                    # "success" / "partial" / "failed"
+        self.message = message                  # 사용자에게 보여줄 안내
+        self.suggestions = suggestions or []    # 추가 행동 제안
+
+    def to_dict(self):
+        result = {"status": self.status, "data": self.data}
+        if self.message:
+            result["message"] = self.message
+        if self.suggestions:
+            result["suggestions"] = self.suggestions
+        return result
+
+    def __repr__(self):
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+
+
+def _validate_parsed_jd(data: dict, input_method: str) -> JDParseResult:
+    """파싱 결과를 검증하고, 부족한 부분이 있으면 안내 메시지를 생성한다."""
+    required_fields = ["job_title", "company", "required_skills", "main_tasks"]
+    missing_fields = []
+    empty_fields = []
+
+    for field in required_fields:
+        if field not in data:
+            missing_fields.append(field)
+        elif isinstance(data[field], list) and len(data[field]) == 0:
+            empty_fields.append(field)
+        elif isinstance(data[field], str) and (data[field] == "" or data[field] == "명시되지 않음"):
+            empty_fields.append(field)
+
+    # 완전 실패 (필수 필드 3개 이상 누락)
+    if len(missing_fields) >= 3:
+        return JDParseResult(
+            data=data, status="failed",
+            message="채용 공고를 파싱하지 못했습니다.",
+            suggestions=_get_fallback_suggestions(input_method),
+        )
+
+    # 부분 성공 (일부 항목만 비어 있음)
+    if empty_fields:
+        field_names_kr = {
+            "job_title": "직무명", "company": "회사명",
+            "required_skills": "자격요건(필수 기술)", "preferred_skills": "우대사항",
+            "main_tasks": "주요 업무", "experience_years": "경력 요건",
+            "interview_keywords": "면접 키워드",
+        }
+        empty_kr = [field_names_kr.get(f, f) for f in empty_fields]
+        suggestions = [
+            f"다음 항목을 텍스트로 직접 입력해주시면 더 정확한 면접 질문을 생성할 수 있습니다: {', '.join(empty_kr)}"
+        ]
+        if input_method == "image":
+            suggestions.append("이미지에서 해당 부분이 잘렸을 수 있습니다. 전체 채용 공고가 보이도록 다시 캡처해주세요.")
+        elif input_method == "url":
+            suggestions.append("'상세 정보 더 보기' 등 숨겨진 내용이 있을 수 있습니다. 해당 부분을 텍스트로 복사해서 보내주세요.")
+
+        return JDParseResult(
+            data=data, status="partial",
+            message=f"채용 공고를 파싱했지만, 일부 항목({', '.join(empty_kr)})을 찾지 못했습니다.",
+            suggestions=suggestions,
+        )
+
+    # 완전 성공
+    return JDParseResult(data=data, status="success", message="채용 공고가 성공적으로 파싱되었습니다.")
+
+
+def _get_fallback_suggestions(input_method: str) -> list:
+    """입력 방식에 따른 대체 방법 안내."""
+    if input_method == "url":
+        return [
+            "해당 사이트의 채용 공고를 자동으로 가져오지 못했습니다.",
+            "다음 방법 중 하나를 시도해주세요:",
+            "1. 채용 공고 페이지를 스크린샷으로 찍어서 이미지로 업로드",
+            "2. 채용 공고의 주요업무/자격요건/우대사항을 복사해서 텍스트로 붙여넣기",
+        ]
+    elif input_method == "image":
+        return [
+            "이미지에서 채용 공고 내용을 읽지 못했습니다.",
+            "다음 방법 중 하나를 시도해주세요:",
+            "1. 이미지를 더 선명하게 다시 캡처 (글자가 잘 보이도록)",
+            "2. 채용 공고 텍스트를 직접 입력",
+        ]
+    else:
+        return [
+            "입력하신 텍스트에서 채용 공고 정보를 추출하지 못했습니다.",
+            "다음 항목이 포함되어 있는지 확인해주세요:",
+            "• 주요업무 (어떤 일을 하는지)",
+            "• 자격요건 (필수 기술, 경력 요건)",
+            "• 우대사항 (있는 경우)",
+        ]
+
+
+def _extract_json(text: str) -> dict:
+    """LLM 응답에서 ```json 마크다운을 제거하고 JSON으로 파싱한다."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    return json.loads(text.strip())
+
+
+def _call_openai(system_prompt: str, user_content) -> str:
+    """
+    OpenAI 호출. user_content가 문자열이면 텍스트, list면 이미지 포함 요청.
+    (Vision 이미지 파트: {"type": "image_base64", "mime_type": ..., "data": ...})
+    """
+    client = get_client()
+
+    if isinstance(user_content, str):
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+    else:  # list — 이미지 + 텍스트 파트
+        parts = []
+        for item in user_content:
+            if item.get("type") == "text":
+                parts.append({"type": "text", "text": item["text"]})
+            elif item.get("type") == "image_base64":
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{item['mime_type']};base64,{item['data']}"},
+                })
+        messages = [{"role": "user", "content": parts}]
+        if system_prompt:
+            messages.insert(0, {"role": "system", "content": system_prompt})
+
+    response = client.chat.completions.create(
+        model="gpt-5-mini",   # gpt-4o → gpt-5-mini
+        messages=messages,
+        # ※ temperature 미지정: gpt-5 계열은 temperature=0 미지원(기본값 1만 허용)
+    )
+    return response.choices[0].message.content.strip()
+
+
+# =============================================================
 # 방법 1: 텍스트 직접 입력
 # =============================================================
-def parse_jd_from_text(jd_text: str) -> dict:
-    """
-    채용 공고 텍스트를 받아서 JSON으로 파싱합니다.
+def parse_jd_from_text(jd_text: str) -> JDParseResult:
+    """채용 공고 텍스트를 받아서 JSON으로 파싱한다."""
+    try:
+        if not jd_text or len(jd_text.strip()) < 20:
+            return JDParseResult(
+                status="failed", message="입력된 텍스트가 너무 짧습니다.",
+                suggestions=["채용 공고의 주요업무, 자격요건, 우대사항이 포함된 전체 텍스트를 입력해주세요."],
+            )
+        result_text = _call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text)
+        data = _extract_json(result_text)
+        return _validate_parsed_jd(data, "text")
 
-    Args:
-        jd_text: 채용 공고 텍스트 (주요업무 + 자격요건 + 우대사항 포함)
-
-    Returns:
-        파싱된 채용 공고 정보 (dict)
-    """
-    client = get_client()
-
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": JD_PARSER_SYSTEM_PROMPT},
-            {"role": "user", "content": jd_text}
-        ],
-        temperature=0
-    )
-
-    result_text = response.choices[0].message.content.strip()
-
-    # ```json 마크다운 제거
-    if result_text.startswith("```"):
-        result_text = result_text.split("\n", 1)[1]
-    if result_text.endswith("```"):
-        result_text = result_text.rsplit("```", 1)[0]
-
-    return json.loads(result_text)
+    except json.JSONDecodeError:
+        return JDParseResult(status="failed", message="파싱 결과를 JSON으로 변환하지 못했습니다.",
+                             suggestions=_get_fallback_suggestions("text"))
+    except Exception as e:
+        return JDParseResult(status="failed", message=f"파싱 중 오류: {str(e)}",
+                             suggestions=_get_fallback_suggestions("text"))
 
 
 # =============================================================
-# 방법 2: 이미지 업로드 → GPT-4o Vision으로 텍스트 변환 → 파싱
+# 방법 2: 이미지 업로드 → Vision으로 텍스트 변환 → 파싱
 # =============================================================
-def parse_jd_from_image(image_path: str) -> dict:
-    """
-    채용 공고 이미지를 받아서 텍스트로 변환 후 JSON으로 파싱합니다.
-    잡코리아, 사람인 등 이미지 기반 채용 공고에 사용합니다.
+def parse_jd_from_image(image_path: str) -> JDParseResult:
+    """채용 공고 이미지를 텍스트로 변환 후 JSON으로 파싱한다."""
+    try:
+        if not os.path.exists(image_path):
+            return JDParseResult(status="failed", message=f"이미지 파일을 찾을 수 없습니다: {image_path}",
+                                 suggestions=["파일 경로를 확인해주세요."])
 
-    Args:
-        image_path: 이미지 파일 경로 (.png, .jpg 등)
+        file_size = os.path.getsize(image_path) / (1024 * 1024)
+        if file_size > 20:
+            return JDParseResult(status="failed",
+                                 message=f"이미지가 너무 큽니다 ({file_size:.1f}MB). 20MB 이하로 줄여주세요.")
 
-    Returns:
-        파싱된 채용 공고 정보 (dict)
-    """
-    client = get_client()
+        with open(image_path, "rb") as f:
+            image_data = base64.b64encode(f.read()).decode("utf-8")
 
-    # 이미지를 base64로 인코딩
-    with open(image_path, "rb") as f:
-        image_data = base64.b64encode(f.read()).decode("utf-8")
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+        mime_type = mime_map.get(ext, "image/png")
 
-    # 확장자로 MIME 타입 결정
-    ext = os.path.splitext(image_path)[1].lower()
-    mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
-    mime_type = mime_map.get(ext, "image/png")
+        # Step 1: 이미지 → 텍스트
+        user_content = [
+            {"type": "image_base64", "mime_type": mime_type, "data": image_data},
+            {"type": "text", "text": IMAGE_TO_TEXT_PROMPT},
+        ]
+        extracted_text = _call_openai("", user_content)
 
-    # Step 1: 이미지 → 텍스트 변환
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{image_data}"
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": IMAGE_TO_TEXT_PROMPT
-                    }
-                ]
-            }
-        ],
-        temperature=0
-    )
+        if not extracted_text or len(extracted_text.strip()) < 20:
+            return JDParseResult(status="failed", message="이미지에서 텍스트를 추출하지 못했습니다.",
+                                 suggestions=_get_fallback_suggestions("image"))
 
-    extracted_text = response.choices[0].message.content.strip()
-    print(f"[이미지→텍스트 변환 완료] 추출된 텍스트 길이: {len(extracted_text)}자")
+        print(f"[이미지→텍스트 완료] {len(extracted_text)}자 추출")
 
-    # Step 2: 추출된 텍스트 → JSON 파싱
-    return parse_jd_from_text(extracted_text)
+        # Step 2: 텍스트 → JSON
+        data = _extract_json(_call_openai(JD_PARSER_SYSTEM_PROMPT, extracted_text))
+        return _validate_parsed_jd(data, "image")
+
+    except json.JSONDecodeError:
+        return JDParseResult(status="failed", message="이미지에서 추출한 텍스트를 파싱하지 못했습니다.",
+                             suggestions=_get_fallback_suggestions("image"))
+    except Exception as e:
+        return JDParseResult(status="failed", message=f"이미지 파싱 중 오류: {str(e)}",
+                             suggestions=_get_fallback_suggestions("image"))
 
 
 # =============================================================
-# 방법 3: URL → Playwright로 크롤링 → 텍스트 추출 → 파싱
+# 방법 3: URL → Playwright(async)로 크롤링 → 파싱
 # =============================================================
-def parse_jd_from_url(url: str) -> dict:
+async def parse_jd_from_url(url: str) -> JDParseResult:
     """
-    채용 공고 URL을 받아서 크롤링 후 JSON으로 파싱합니다.
-    원티드, 잡코리아, 사람인, 프로그래머스 등을 지원합니다.
+    채용 공고 URL을 크롤링 후 JSON으로 파싱한다. (async)
 
-    ※ 사전 설치 필요:
-        pip install playwright
-        playwright install chromium
-
-    Args:
-        url: 채용 공고 URL
-
-    Returns:
-        파싱된 채용 공고 정보 (dict)
+    ※ 사전 설치: pip install playwright && playwright install chromium
     """
-    # Playwright로 페이지 크롤링
-    jd_text = _crawl_jd_page(url)
-    print(f"[크롤링 완료] 추출된 텍스트 길이: {len(jd_text)}자")
+    try:
+        jd_text = await _crawl_jd_page(url)
 
-    # 추출된 텍스트 → JSON 파싱
-    return parse_jd_from_text(jd_text)
+        if not jd_text or len(jd_text.strip()) < 20:
+            return JDParseResult(status="failed", message="해당 URL에서 채용 공고 내용을 가져오지 못했습니다.",
+                                 suggestions=_get_fallback_suggestions("url"))
+
+        print(f"[크롤링 완료] {len(jd_text)}자 추출")
+
+        data = _extract_json(_call_openai(JD_PARSER_SYSTEM_PROMPT, jd_text))
+        return _validate_parsed_jd(data, "url")
+
+    except ImportError:
+        return JDParseResult(
+            status="failed", message="URL 크롤링에 필요한 패키지(playwright)가 설치되지 않았습니다.",
+            suggestions=[
+                "다음 명령어로 설치해주세요:",
+                "  pip install playwright",
+                "  playwright install chromium",
+                "",
+                "또는 다른 방법을 사용해주세요:",
+                "1. 채용 공고를 스크린샷으로 찍어서 이미지로 업로드",
+                "2. 채용 공고 텍스트를 복사해서 직접 붙여넣기",
+            ],
+        )
+    except json.JSONDecodeError:
+        return JDParseResult(status="failed", message="크롤링한 텍스트를 파싱하지 못했습니다.",
+                             suggestions=_get_fallback_suggestions("url"))
+    except Exception as e:
+        error_msg = str(e)
+        if "Timeout" in error_msg or "timeout" in error_msg:
+            msg = "페이지 로딩 시간이 초과되었습니다."
+        elif "ERR_NAME_NOT_RESOLVED" in error_msg:
+            msg = "해당 URL에 접속할 수 없습니다. URL을 확인해주세요."
+        else:
+            msg = f"크롤링 중 오류: {error_msg}"
+        return JDParseResult(status="failed", message=msg, suggestions=_get_fallback_suggestions("url"))
 
 
-def _crawl_jd_page(url: str) -> str:
-    """
-    Playwright를 사용해서 채용 공고 페이지의 텍스트를 크롤링합니다.
-    JavaScript로 동적 로딩되는 콘텐츠(상세 정보 더 보기 등)도 처리합니다.
-    """
-    from playwright.sync_api import sync_playwright
+async def _crawl_jd_page(url: str) -> str:
+    """Playwright(async)로 채용 공고 페이지 텍스트를 크롤링한다."""
+    from playwright.async_api import async_playwright
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
 
-        # 페이지 로드
-        page.goto(url, wait_until="networkidle", timeout=30000)
+        await page.goto(url, wait_until="networkidle", timeout=30000)
 
-        # 사이트별 "더 보기" 버튼 클릭 처리
-        _click_more_buttons(page, url)
+        await _click_more_buttons(page, url)
+        jd_text = await _extract_jd_text(page, url)
 
-        # 페이지에서 채용 공고 텍스트 추출
-        jd_text = _extract_jd_text(page, url)
-
-        browser.close()
+        await browser.close()
 
     return jd_text
 
 
-def _click_more_buttons(page, url: str):
-    """사이트별 '상세 정보 더 보기' 버튼을 클릭합니다."""
-    import time
-
+async def _click_more_buttons(page, url: str):
+    """사이트별 '상세 정보 더 보기' 버튼을 클릭한다."""
     try:
         if "wanted.co.kr" in url:
-            # 원티드: "상세 정보 더 보기" 버튼
             more_btn = page.locator("button:has-text('더 보기'), button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "jobkorea.co.kr" in url:
-            # 잡코리아: "더보기" 또는 "전체보기" 버튼
             more_btn = page.locator(".devMoreView, .tplBtn, button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "saramin.co.kr" in url:
-            # 사람인: "더보기" 버튼
             more_btn = page.locator(".btn_more_info, button:has-text('더보기')")
-            if more_btn.count() > 0:
-                more_btn.first.click()
-                time.sleep(1)
+            if await more_btn.count() > 0:
+                await more_btn.first.click()
+                await asyncio.sleep(1)
 
         elif "programmers.co.kr" in url:
-            # 프로그래머스: 보통 전체 표시
-            time.sleep(1)
+            await asyncio.sleep(1)
 
     except Exception as e:
         print(f"[경고] 더보기 버튼 클릭 실패 (무시하고 계속): {e}")
 
 
-def _extract_jd_text(page, url: str) -> str:
-    """사이트별 채용 공고 본문 영역에서 텍스트를 추출합니다."""
-
+async def _extract_jd_text(page, url: str) -> str:
+    """사이트별 채용 공고 본문에서 텍스트를 추출한다."""
     selectors = {
         "wanted.co.kr": "section.JobDescription_JobDescription",
         "jobkorea.co.kr": ".tbRow, .artReadDetail",
@@ -214,26 +348,49 @@ def _extract_jd_text(page, url: str) -> str:
         "programmers.co.kr": ".job-content",
     }
 
-    # 사이트에 맞는 셀렉터 찾기
     for domain, selector in selectors.items():
         if domain in url:
             element = page.locator(selector)
-            if element.count() > 0:
-                return element.first.inner_text()
+            if await element.count() > 0:
+                return await element.first.inner_text()
 
-    # 알 수 없는 사이트면 body 전체에서 추출 (최후의 수단)
-    return page.locator("body").inner_text()
+    return await page.locator("body").inner_text()
 
 
 # =============================================================
-# 테스트
+# CLI 테스트
 # =============================================================
+def _print_result(result: JDParseResult):
+    print()
+    print("=" * 50)
+    if result.status == "success":
+        print("<파싱 성공>")
+    elif result.status == "partial":
+        print("<부분 파싱 (일부 항목 누락)>")
+    else:
+        print("<파싱 실패>")
+    print("=" * 50)
+
+    if result.message:
+        print(f"\n[안내] {result.message}")
+
+    if result.suggestions:
+        print()
+        for s in result.suggestions:
+            print(f"  {s}")
+
+    if result.data:
+        print(f"\n[파싱 결과]")
+        print(json.dumps(result.data, ensure_ascii=False, indent=2))
+    print()
+
+
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
         print("사용법:")
-        print("  python jd_parser.py text    → 텍스트 입력 테스트")
+        print("  python jd_parser.py text          → 텍스트 입력 테스트")
         print("  python jd_parser.py image <경로>  → 이미지 파싱 테스트")
         print("  python jd_parser.py url <URL>     → URL 크롤링 테스트")
         sys.exit(1)
@@ -241,17 +398,13 @@ if __name__ == "__main__":
     mode = sys.argv[1]
 
     if mode == "text":
-        print("채용 공고 텍스트를 입력하세요 (Ctrl+D로 종료):")
+        print("채용 공고 텍스트를 입력하세요 (Windows: Ctrl+Z→Enter / Mac: Ctrl+D):")
         jd_text = sys.stdin.read()
-        result = parse_jd_from_text(jd_text)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        _print_result(parse_jd_from_text(jd_text))
 
     elif mode == "image":
-        image_path = sys.argv[2]
-        result = parse_jd_from_image(image_path)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        _print_result(parse_jd_from_image(sys.argv[2]))
 
     elif mode == "url":
-        url = sys.argv[2]
-        result = parse_jd_from_url(url)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        result = asyncio.run(parse_jd_from_url(sys.argv[2]))   # async 함수
+        _print_result(result)

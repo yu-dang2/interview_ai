@@ -15,7 +15,7 @@ import json
 import base64
 import requests
 
-from jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
+from agent.parsers.jd_parser_prompt import JD_PARSER_SYSTEM_PROMPT, IMAGE_TO_TEXT_PROMPT
 
 
 # =============================================================

@@ -1,17 +1,12 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-import os
-from dotenv import load_dotenv
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-load_dotenv()
+from backend.core.config import DATABASE_URL
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lang_king.db")
+# check_same_thread는 SQLite 전용 옵션이라 MySQL 등 다른 방언에 넘기면 엔진 생성이 실패한다.
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}  # SQLite 전용 옵션
-)
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
