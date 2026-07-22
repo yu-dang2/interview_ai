@@ -206,14 +206,35 @@ def read_file_text(uploaded_file) -> str:
             return "\n".join(p.text for p in doc.paragraphs)
         except ImportError:
             return f"[DOCX 파싱 불가 — python-docx 설치 필요]\n파일명: {uploaded_file.name}"
+    if name.endswith(".hwpx"):
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            from io import BytesIO
+            texts = []
+            with zipfile.ZipFile(BytesIO(uploaded_file.read())) as z:
+                section_files = sorted(
+                    n for n in z.namelist()
+                    if n.startswith("Contents/section") and n.endswith(".xml")
+                )
+                for section in section_files:
+                    root = ET.fromstring(z.read(section))
+                    for el in root.iter():
+                        tag = el.tag.rsplit("}", 1)[-1]  # 네임스페이스 제거
+                        if tag == "t" and el.text:
+                            texts.append(el.text)
+            return "\n".join(texts)
+        except Exception:
+            return f"[HWPX 파싱 불가]\n파일명: {uploaded_file.name}"
     return uploaded_file.read().decode("utf-8", errors="ignore")
 
 
 with up1:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">직무 기술서 (JD)</p>',
                 unsafe_allow_html=True)
-    jd_file = st.file_uploader("jd", type=["pdf","docx","txt"], key="jd_upload",
-                                help="PDF, DOCX, TXT 지원 (최대 20MB)")
+    jd_file = st.file_uploader("jd", type=["pdf","docx","hwpx"], key="jd_upload",
+                                help="PDF, DOCX, HWPX 지원 (최대 20MB)")
+    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
     if jd_file:
         state_set("jd_text", read_file_text(jd_file))
         try:
@@ -225,8 +246,9 @@ with up1:
 with up2:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">이력서</p>',
                 unsafe_allow_html=True)
-    resume_file = st.file_uploader("resume", type=["pdf","docx"], key="resume_upload",
-                                    help="PDF, DOCX 파일 지원 (최대 20MB)")
+    resume_file = st.file_uploader("resume", type=["pdf","docx","hwpx"], key="resume_upload",
+                                    help="PDF, DOCX, HWPX 파일 지원 (최대 20MB)")
+    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
     if resume_file:
         state_set("resume_text", read_file_text(resume_file))
         try:
