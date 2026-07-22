@@ -1,9 +1,15 @@
 """
 면접 관련 Pydantic 스키마
+
+점수는 전부 0~100 스케일이다. agent 쪽 프롬프트(answer_evaluator, report_generator)와
+topic_router 의 THRESHOLD=70 이 모두 이 스케일을 전제한다.
 """
 
-from pydantic import BaseModel
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field
+
+Score = Annotated[int, Field(ge=0, le=100)]
 
 
 # ── 세션 생성 ──────────────────────────────────────────
@@ -11,6 +17,7 @@ from typing import Literal
 class SessionCreateRequest(BaseModel):
     resume_id: int
     jd_id: int
+    # agent/graph/nodes/persona_selector.py 의 PERSONA_MAP 키와 1:1로 맞춰져 있다.
     persona: Literal["기술 리드", "인사 담당자", "임원 면접관"]
 
 
@@ -26,12 +33,12 @@ class ChatRequest(BaseModel):
 
 
 class RealtimeScore(BaseModel):
-    total: int
-    logic: int
-    communication: int
-    expertise: int
-    attitude: int
-    problem_solving: int
+    total: Score
+    logic: Score
+    communication: Score
+    expertise: Score
+    attitude: Score
+    problem_solving: Score
 
 
 class RealtimeFeedbackItem(BaseModel):
@@ -49,11 +56,11 @@ class ChatResponse(BaseModel):
 # ── 결과 리포트 ────────────────────────────────────────
 
 class RadarChart(BaseModel):
-    logic: int
-    communication: int
-    expertise: int
-    attitude: int
-    problem_solving: int
+    logic: Score
+    communication: Score
+    expertise: Score
+    attitude: Score
+    problem_solving: Score
 
 
 class ResultSummary(BaseModel):
@@ -64,9 +71,10 @@ class ResultSummary(BaseModel):
 
 class ResultResponse(BaseModel):
     session_id: str
-    resume_score: int
-    interview_score: int
-    total_score: int
+    resume_score: Score
+    interview_score: Score
+    total_score: Score
+    grade: str | None = None       # report_generator 가 내주는 등급 (A+, B+ ...)
     radar_chart: RadarChart
     summary: ResultSummary
 
@@ -77,11 +85,11 @@ class FeedbackItem(BaseModel):
     question_number: int
     question: str
     my_answer: str
-    score: int
+    score: Score
     improved_answer: str
 
 
 class FeedbackResponse(BaseModel):
     total_questions: int
-    average_score: int
+    average_score: Score
     feedbacks: list[FeedbackItem]
