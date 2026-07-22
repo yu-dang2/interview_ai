@@ -10,6 +10,6 @@ from agent.graph.state import InterviewState
 
 
 async def jd_parser(state: InterviewState):
-    result = parse_jd_from_text(state["jd_raw"])
+    result = await parse_jd_from_text(state["jd_raw"])
     jd_parsed = result.data if hasattr(result, "data") else result
     return {"jd_parsed": jd_parsed}
