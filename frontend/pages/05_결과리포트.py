@@ -1,6 +1,6 @@
 import time
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
@@ -28,7 +28,7 @@ render_sidebar(active="결과 리포트")
 # ── SVG 아이콘 로드 ────────────────────────────────────────────────────────
 def _svg(name: str) -> str:
     try:
-        return Path(f"assets/icons/{name}").read_text()
+        return resource(f"assets/icons/{name}").read_text()
     except Exception:
         return ""
 
