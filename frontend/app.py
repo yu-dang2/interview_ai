@@ -1,5 +1,5 @@
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 
 st.set_page_config(
     page_title="intro",
@@ -8,7 +8,7 @@ st.set_page_config(
 )
 
 # ── 스타일 ───────────────────────────────────────────────────────────
-css = Path("styles/global.css").read_text(encoding="utf-8")
+css = resource("styles/global.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 st.markdown("""
@@ -47,10 +47,10 @@ st.markdown("""
 
 # ── 아이콘 SVG 로드 ──────────────────────────────────────────────────
 ICONS = {
-    "file":    Path("assets/icons/Group 15.svg").read_text(encoding="utf-8"),
-    "mic":     Path("assets/icons/Mic.svg").read_text(encoding="utf-8"),
-    "chart":   Path("assets/icons/Group 19.svg").read_text(encoding="utf-8"),
-    "refresh": Path("assets/icons/Refresh_2.svg").read_text(encoding="utf-8"),
+    "file":    resource("assets/icons/Group 15.svg").read_text(encoding="utf-8"),
+    "mic":     resource("assets/icons/Mic.svg").read_text(encoding="utf-8"),
+    "chart":   resource("assets/icons/Group 19.svg").read_text(encoding="utf-8"),
+    "refresh": resource("assets/icons/Refresh_2.svg").read_text(encoding="utf-8"),
 }
 
 
