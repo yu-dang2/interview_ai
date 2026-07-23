@@ -68,10 +68,13 @@ def start_interview(resume_id: int, jd_id: int, persona: str) -> dict:
     return res.json()
 
 
-def send_answer(session_id: str, answer: str) -> dict:
+def send_answer(session_id: str, answer: str, input_type: str | None = None) -> dict:
+    payload = {"answer": answer}
+    if input_type == "voice":
+        payload["input_type"] = "voice"
     res = requests.post(
         f"{BASE_URL}/interview/sessions/{session_id}/chat",
-        json={"answer": answer},
+        json=payload,
         headers=_headers(),
         timeout=30,
     )
