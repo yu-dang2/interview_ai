@@ -78,7 +78,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── 성함 ────────────────────────────────────────────────────────────────
-# 버튼 클릭(rerun) 시 session_state에 이미 typed 값이 보존되므로 먼저 저장
+
 if st.session_state.get("setup_name"):
     state_set("user_name", st.session_state["setup_name"])
 
@@ -95,7 +95,7 @@ st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
 st.markdown('<p style="font-size:14px;font-weight:600;color:#1f1f1f;margin:0 0 20px;">면접관 스타일 선택</p>',
             unsafe_allow_html=True)
 
-# 페르소나 카드 — 하나의 flex 컨테이너로 gap 보장
+# 페르소나 카드 
 cards_html = '<div style="display:flex;gap:28px;">'
 for p in PERSONAS:
     is_active  = selected == p["key"]
@@ -120,7 +120,6 @@ for p in PERSONAS:
 cards_html += '</div>'
 st.markdown(cards_html, unsafe_allow_html=True)
 
-# 히든 버튼 행 — JS가 전체 행을 숨기고 카드 클릭에 연결
 btn_cols = st.columns(3)
 for i, p in enumerate(PERSONAS):
     with btn_cols[i]:
@@ -128,7 +127,6 @@ for i, p in enumerate(PERSONAS):
             state_set("interviewer_style", p["key"])
             st.rerun()
 
-# JS: 카드 클릭 → 해당 히든 버튼 click()
 components.html("""
 <script>
 (function () {
@@ -139,7 +137,6 @@ components.html("""
         var cards = doc.querySelectorAll('[data-persona-card]');
         if (!cards.length) { setTimeout(attach, 300); return; }
 
-        // 히든 버튼 행 전체 숨기기
         var hiddenRow = null;
         doc.querySelectorAll('button').forEach(function (btn) {
             if (PERSONA_KEYS.indexOf(btn.innerText.trim()) !== -1 && !hiddenRow) {
@@ -148,7 +145,6 @@ components.html("""
         });
         if (hiddenRow) hiddenRow.style.display = 'none';
 
-        // 카드 클릭 → 히든 버튼 click()
         cards.forEach(function (card) {
             var key = card.getAttribute('data-persona-card');
             card.onclick = function () {
@@ -303,7 +299,17 @@ components.html("""
 </script>
 """, height=0)
 
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+
+# ── 음성 안내 기본값 ────────────────────────────────────────────────────
+voice_guide_default = st.checkbox(
+    "면접 중 음성 안내 기본으로 켜기",
+    value=get("voice_guide_default") if get("voice_guide_default") is not None else True,
+    key="voice_guide_default_checkbox",
+)
+state_set("voice_guide_default", voice_guide_default)
+
+st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
 
 # ── 시작 버튼 ────────────────────────────────────────────────────────────
 _, center, _ = st.columns([4.3, 2, 4.3])
