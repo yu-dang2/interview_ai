@@ -38,13 +38,12 @@ class InterviewState(MessagesState):
     turn_count: int         # 전체 턴 수. MAX_TURNS 초과 시 종료
     is_finished: bool
 
+    # 답변 입력 방식 (STT/TTS는 그래프 밖 백엔드 API에서 처리 — 그래프는 텍스트만 주고받음)
+    input_type: str          # "text" | "voice". 백엔드가 답변 전송 시 주입, 미지정 시 "text".
+                             # "voice"면 answer_evaluator가 음성 말버릇을 감점하지 않도록 안내를 덧붙임.
+
     # 최종 결과 (report_generator가 생성)
     report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
-
-    # STT/TTS 인터페이스 (백엔드 오디오 API 연동용, 아직 그래프에 미연결)
-    audio_input: str         # STT 입력: 오디오 base64/URL (프론트/백엔드 제공)
-    transcribed_text: str    # STT 출력: 전사 텍스트 (stt_node가 채움)
-    audio_output: str        # TTS 출력: 합성 오디오 base64/URL (tts_node가 채움)
 
 
 class InterviewInput(TypedDict):
@@ -54,6 +53,9 @@ class InterviewInput(TypedDict):
     # 백엔드가 면접 종료(예: 종료 버튼)를 invoke 입력으로 주입할 수 있도록 선택 필드로 노출.
     # update_state 경로로도 주입 가능하며, 미지정 시 기본 False로 동작한다.
     is_finished: NotRequired[bool]
+    # 답변 입력 방식. 백엔드가 답변 전송 시 invoke 입력 또는 update_state로 주입.
+    # is_finished와 동일한 패턴이며, 미지정 시 answer_evaluator가 "text"로 동작한다.
+    input_type: NotRequired[str]
 
 
 class InterviewOutput(TypedDict):
