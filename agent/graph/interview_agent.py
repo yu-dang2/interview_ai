@@ -77,7 +77,14 @@ def build_graph(checkpointer=None, interrupt_before=None):
     )
 
     # 순환 흐름: 답변 평가 → topic_router 분기 → 꼬리질문 or 다음질문 or 리포트
-    builder.add_conditional_edges("answer_evaluator", topic_router)
+    # path map을 명시하는 이유: 생략하면 LangGraph가 분기 대상을 알 수 없어
+    # get_graph()/mermaid 출력에 answer_evaluator → END 한 줄만 그려지고
+    # 실제 순환 경로가 통째로 빠진다. (런타임 동작은 동일)
+    builder.add_conditional_edges(
+        "answer_evaluator",
+        topic_router,
+        ["report_generator", "follow_up_generator", "question_generator"],
+    )
     builder.add_edge("follow_up_generator", "answer_evaluator")
     builder.add_edge("report_generator", END)
 
