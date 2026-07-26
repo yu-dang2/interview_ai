@@ -17,7 +17,7 @@ from agent.parsers.persona_prompts import PERSONA_TECH_LEAD
 from agent.graph.utils import call_llm
 
 
-def question_generator(state: InterviewState):
+async def question_generator(state: InterviewState):
     current_index = state.get("current_question_index", 0)
     question_list = state.get("question_list", [])
 
@@ -29,7 +29,7 @@ def question_generator(state: InterviewState):
             "match_result": state["match_result"],
             "resume": state["resume_parsed"]
         }, ensure_ascii=False)
-        result = call_llm(system_prompt, user_content)
+        result = await call_llm(system_prompt, user_content)
         question_list = result.get("questions", [])
         current_index = 0
     else:

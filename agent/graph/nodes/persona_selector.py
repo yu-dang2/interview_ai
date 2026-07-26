@@ -17,7 +17,7 @@ PERSONA_MAP = {
 }
 
 
-def persona_selector(state: InterviewState):
+async def persona_selector(state: InterviewState):
     persona = state.get("persona", "기술 리드")
     if persona not in PERSONA_MAP:
         persona = "기술 리드"

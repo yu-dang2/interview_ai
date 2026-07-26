@@ -12,17 +12,14 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from openai import OpenAI
-from dotenv import load_dotenv
 
+from backend.core.config import require_openai_key
 from backend.schemas.voice import TranscribeResponse
-
-# .env 로드
-load_dotenv()
 
 router = APIRouter(prefix="/voice", tags=["Voice"])
 
-# OpenAI 클라이언트
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# .env 로드와 키 검증은 backend.core.config 가 담당한다.
+client = OpenAI(api_key=require_openai_key())
 
 
 @router.post("/transcribe", response_model=TranscribeResponse)
@@ -37,12 +34,6 @@ async def transcribe(audio: UploadFile = File(...)):
     - m4a
     - mp4
     """
-
-    if client.api_key is None:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY가 설정되어 있지 않습니다."
-        )
 
     try:
         # 업로드 파일 임시 저장
