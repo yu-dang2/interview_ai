@@ -14,7 +14,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.core.config import CLOSING_MESSAGE
-from backend.models.models import JD, InterviewMessage, InterviewResult, InterviewSession, Resume
+from backend.models.models import (
+    JD,
+    InterviewMessage,
+    InterviewResult,
+    InterviewSession,
+    Resume,
+    User,
+)
 from backend.schemas.interview import (
     ChatResponse,
     FeedbackResponse,
@@ -26,14 +33,20 @@ from backend.services import graph_runner, report_mapper
 
 
 class InterviewService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user: User):
         self.db = db
+        self.user = user
 
     # ── 내부 헬퍼 ──────────────────────────────────────
 
     def _get_session(self, session_id: str) -> InterviewSession:
+        """내 세션만 반환. 없거나 남의 것이면 404.
+
+        답변 전송·종료·결과 조회가 모두 이 헬퍼를 거치므로, 소유권 검사를 여기 한 곳에
+        두면 전체 경로에 적용된다.
+        """
         session = self.db.get(InterviewSession, session_id)
-        if session is None:
+        if session is None or session.users_user_id != self.user.user_id:
             raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
         return session
 
@@ -73,12 +86,13 @@ class InterviewService:
     # ── 세션 생성 ──────────────────────────────────────
 
     async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+        # 남의 JD·이력서로 세션을 만들 수 없도록 소유자까지 확인한다.
         jd = self.db.get(JD, req.jd_id)
-        if jd is None:
+        if jd is None or jd.users_user_id != self.user.user_id:
             raise HTTPException(status_code=404, detail=f"JD를 찾을 수 없습니다: {req.jd_id}")
 
         resume = self.db.get(Resume, req.resume_id)
-        if resume is None:
+        if resume is None or resume.users_user_id != self.user.user_id:
             raise HTTPException(
                 status_code=404, detail=f"이력서를 찾을 수 없습니다: {req.resume_id}"
             )
@@ -104,6 +118,8 @@ class InterviewService:
             "follow_up_count": 0,
             "turn_count": 0,
             "is_finished": False,
+            # 답변마다 resume() 이 덮어쓴다. 첫 질문 생성 시점에는 답변이 없으므로 "text".
+            "input_type": "text",
             "report_result": {},
         }
 
@@ -116,6 +132,7 @@ class InterviewService:
                 status="active",
                 persona=req.persona,
                 jd_content=jd.content,
+                users_user_id=self.user.user_id,
                 jds_jd_id=jd.jd_id,
                 resumes_resume_id=resume.resume_id,
             )
@@ -127,14 +144,16 @@ class InterviewService:
 
     # ── 답변 처리 ──────────────────────────────────────
 
-    async def process_answer(self, session_id: str, answer: str) -> ChatResponse:
+    async def process_answer(
+        self, session_id: str, answer: str, input_type: str = "text"
+    ) -> ChatResponse:
         session = self._get_session(session_id)
 
         _, finished = await graph_runner.snapshot(session_id)
         if finished:
             raise HTTPException(status_code=409, detail="이미 종료된 면접입니다.")
 
-        values = await graph_runner.resume(session_id, answer)
+        values = await graph_runner.resume(session_id, answer, input_type)
         _, finished = await graph_runner.snapshot(session_id)
 
         eval_result = values.get("eval_result") or {}

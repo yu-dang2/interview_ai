@@ -6,7 +6,7 @@ LangGraph 그래프 소유 모듈
 
 호출 흐름:
     start(session_id, init_state)      → 첫 질문까지 실행하고 answer_evaluator 앞에서 멈춤
-    resume(session_id, answer)         → 답변을 넣고 재개, 다음 질문/꼬리질문/리포트까지
+    resume(session_id, answer, input_type) → 답변을 넣고 재개, 다음 질문/꼬리질문/리포트까지
     snapshot(session_id)               → (state values, 종료 여부)
 
 주의(async): agent 그래프의 노드/LLM 호출(call_llm)이 전부 async 이므로 여기서도
@@ -58,10 +58,15 @@ async def start(session_id: str, init_state: dict) -> dict:
     return (await graph.aget_state(config)).values
 
 
-async def resume(session_id: str, answer: str) -> dict:
+async def resume(session_id: str, answer: str, input_type: str = "text") -> dict:
     """사용자 답변을 넣고 그래프를 재개한다."""
     config = config_for(session_id)
-    await graph.aupdate_state(config, {"messages": [HumanMessage(content=answer)]})
+    # input_type 은 리듀서 없는 LastValue 채널이라 한 번 "voice" 를 쓰면 계속 남는다.
+    # 음성일 때만 조건부로 쓰지 말고 매 턴 덮어쓸 것.
+    await graph.aupdate_state(
+        config,
+        {"messages": [HumanMessage(content=answer)], "input_type": input_type},
+    )
     await graph.ainvoke(None, config)
     return (await graph.aget_state(config)).values
 

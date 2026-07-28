@@ -76,6 +76,17 @@ async def read_document_upload(file: UploadFile) -> str:
         text = _EXTRACTORS[ext](raw)
     except HTTPException:
         raise
+    except ImportError as e:
+        # 지연 import 실패 = 서버에 파싱 라이브러리 미설치. 파일 문제가 아니므로 415가 아닌 500.
+        # (반드시 아래 포괄 except보다 위에 있어야 한다)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"서버에 {ext} 파싱 라이브러리가 설치되어 있지 않습니다"
+                f"({getattr(e, 'name', '') or e}). "
+                "'pip install -r requirements.txt'로 의존성을 설치해주세요."
+            ),
+        )
     except Exception:
         # 손상된 파일/잘못된 구조 등은 500이 아니라 415로 응답한다.
         raise HTTPException(
