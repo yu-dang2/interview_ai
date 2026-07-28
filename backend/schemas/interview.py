@@ -30,6 +30,8 @@ class SessionCreateResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     answer: str
+    # "voice" 면 answer_evaluator 가 STT 말버릇을 감점하지 않도록 프롬프트를 덧붙인다.
+    input_type: Literal["text", "voice"] = "text"
 
 
 class RealtimeScore(BaseModel):

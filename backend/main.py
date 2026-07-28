@@ -1,3 +1,11 @@
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from fastapi import FastAPI, Request
+# ... 기존 import들 계속
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -55,3 +63,21 @@ def handle_openai_error(request: Request, exc: OpenAIError):
 @app.get("/", tags=["Health"])
 def root():
     return {"status": "서버 정상 작동 중", "version": "1.0.0"}
+
+@app.get("/test-llm")
+async def test_llm():
+    import time
+    from agent.graph.utils import get_client
+
+    client = get_client()
+    start = time.time()
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": "안녕하세요라고만 답하세요."}],
+        )
+        elapsed = time.time() - start
+        return {"result": "성공", "elapsed": elapsed, "content": response.choices[0].message.content}
+    except Exception as e:
+        elapsed = time.time() - start
+        return {"result": "실패", "elapsed": elapsed, "error": f"{type(e).__name__}: {e}"}

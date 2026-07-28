@@ -7,6 +7,7 @@ backend.database, backend.routers.voice 등은 각자 load_dotenv()를 부르지
 """
 
 import os
+import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,6 +18,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # ── DB ─────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lang_king.db")
+
+# ── 인증 ───────────────────────────────────────────────
+# SECRET_KEY 를 .env 에 지정하지 않으면 기동할 때마다 새 키가 생성된다.
+# 개발 중에는 편하지만 서버를 재시작하면 발급해둔 토큰이 전부 무효가 되므로,
+# 여러 명이 붙는 통합 테스트나 배포 환경에서는 .env 에 고정값을 넣을 것.
+SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
