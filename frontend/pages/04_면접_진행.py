@@ -302,15 +302,15 @@ body{{
   padding:0 20px 6px;
 }}
 #controls-row{{
-  min-height:76px;display:flex;align-items:center;padding:0 20px;
+  display:flex;align-items:center;padding:16px 20px;
 }}
 #ta-wrap{{flex:1;margin-right:12px;}}
 #cta{{
-  display:block;width:100%;height:44px;
+  display:block;width:100%;height:44px;min-height:44px;max-height:120px;
   border:1px solid #e5e7eb;border-radius:14px;
   background:#f9fafb;font-size:14px;color:#1f1f1f;
-  padding:0 21px;resize:none;outline:none;
-  font-family:inherit;line-height:44px;overflow:hidden;
+  padding:11px 21px;resize:none;outline:none;
+  font-family:inherit;line-height:20px;overflow-y:auto;
 }}
 #cta::placeholder{{color:#9ca3af;}}
 #cta:focus{{border-color:#e5e7eb;background:#f9fafb;box-shadow:none;}}
@@ -386,6 +386,25 @@ body{{
   var sbtn = document.getElementById('sbtn');
   var cbtn = document.getElementById('cbtn');
 
+  // ── 입력창 자동 높이 ─────
+  var controlsRowEl = document.getElementById('controls-row');
+  var hintRowEl = document.getElementById('hint-row');
+  var noteRowEl = document.getElementById('note-row');
+  function recomputeBarHeight() {{
+    requestAnimationFrame(function() {{
+      var h = controlsRowEl.offsetHeight;
+      if (hintRowEl.style.display !== 'none') h += hintRowEl.offsetHeight;
+      if (noteRowEl.style.display !== 'none') h += noteRowEl.offsetHeight;
+      barHeight = h;
+      applyFixed();
+    }});
+  }}
+  function autosize() {{
+    cta.style.height = 'auto';
+    cta.style.height = cta.scrollHeight + 'px';
+    recomputeBarHeight();
+  }}
+
   function getStTa() {{ return doc.querySelector('[data-testid="stChatInputTextArea"]'); }}
   function syncSt(val) {{
     var t = getStTa();
@@ -411,6 +430,7 @@ body{{
   cta.addEventListener('input', function() {{
     lastInputType = 'text';
     syncSt(cta.value);
+    autosize();
   }});
 
   // ── 전송 ─────────────────────────────────────────────────────────
@@ -421,6 +441,7 @@ body{{
       var btn = doc.querySelector('[data-testid="stChatInputSubmitButton"]');
       if (btn) {{ btn.click(); cta.value = ''; }}
       lastInputType = 'text';
+      autosize();
     }}, 50);
   }}
   cta.addEventListener('keydown', function(e) {{
@@ -559,6 +580,7 @@ body{{
       cta.value = t;
       lastInputType = 'voice';
       syncSt(t);
+      autosize();
     }};
     var hintRow  = document.getElementById('hint-row');
     var noteRow  = document.getElementById('note-row');
@@ -586,8 +608,7 @@ body{{
       mbtn.innerHTML = MIC_OUTLINE;
       hintRow.style.display = 'none';
       noteRow.style.display = 'none';
-      barHeight = 76;
-      applyFixed();
+      recomputeBarHeight();
     }};
     mbtn.addEventListener('click', function() {{
       if (rec) {{ recog.stop(); }}
@@ -598,8 +619,7 @@ body{{
         mbtn.innerHTML = MIC_FILLED;
         hintRow.style.display = 'block';
         noteRow.style.display = 'block';
-        barHeight = 122;
-        applyFixed();
+        recomputeBarHeight();
       }}
     }});
   }} else {{
