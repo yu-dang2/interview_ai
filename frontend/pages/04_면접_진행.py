@@ -567,64 +567,110 @@ body{{
     }}
   }});
 
-  // ── 마이크 (SpeechRecognition) ───────────────────────────────────
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SR) {{
-    var recog = new SR();
-    recog.lang = 'ko-KR';
-    recog.continuous = false;
-    recog.interimResults = false;
-    var rec = false;
-    recog.onresult = function(e) {{
-      var t = e.results[0][0].transcript;
-      cta.value = t;
-      lastInputType = 'voice';
-      syncSt(t);
-      autosize();
-    }};
-    var hintRow  = document.getElementById('hint-row');
-    var noteRow  = document.getElementById('note-row');
-    var MIC_OUTLINE =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
-      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>' +
-      '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
-      '<line x1="12" y1="19" x2="12" y2="22"/>' +
-      '<line x1="8" y1="22" x2="16" y2="22"/>' +
-      '</svg>';
-  
-    var MIC_FILLED =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" ' +
-      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" fill="white"/>' +
-      '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
-      '<line x1="12" y1="19" x2="12" y2="22"/>' +
-      '<line x1="8" y1="22" x2="16" y2="22"/>' +
-      '</svg>';
-    recog.onend = recog.onerror = function() {{
-      rec = false;
-      mbtn.style.background  = '#f3f4f6';
-      mbtn.style.borderColor = '#e5e7eb';
-      mbtn.innerHTML = MIC_OUTLINE;
-      hintRow.style.display = 'none';
-      noteRow.style.display = 'none';
-      recomputeBarHeight();
-    }};
+  // ── 마이크 (녹음 → 백엔드 STT: gpt-4o-transcribe) ──────────────────
+  var hintRow  = document.getElementById('hint-row');
+  var noteRow  = document.getElementById('note-row');
+  var MIC_OUTLINE =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>' +
+    '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
+    '<line x1="12" y1="19" x2="12" y2="22"/>' +
+    '<line x1="8" y1="22" x2="16" y2="22"/>' +
+    '</svg>';
+  var MIC_FILLED =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" fill="white"/>' +
+    '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
+    '<line x1="12" y1="19" x2="12" y2="22"/>' +
+    '<line x1="8" y1="22" x2="16" y2="22"/>' +
+    '</svg>';
+
+  var mediaRecorder = null;
+  var audioChunks   = [];
+  var micStream     = null;
+  var recording     = false;
+
+  function setMicIdle() {{
+    recording = false;
+    mbtn.style.background  = '#f3f4f6';
+    mbtn.style.borderColor = '#e5e7eb';
+    mbtn.innerHTML = MIC_OUTLINE;
+    hintRow.style.display = 'none';
+    noteRow.style.display = 'none';
+    recomputeBarHeight();
+  }}
+
+  function setMicRecording() {{
+    recording = true;
+    mbtn.style.background  = '#3b6def';
+    mbtn.style.borderColor = '#3b6def';
+    mbtn.innerHTML = MIC_FILLED;
+    hintRow.textContent = '🎤 녹음 중... 다시 누르면 텍스트로 변환됩니다';
+    hintRow.style.display = 'block';
+    noteRow.style.display = 'block';
+    recomputeBarHeight();
+  }}
+
+  function setMicProcessing() {{
+    hintRow.textContent = '⏳ 음성을 텍스트로 변환하는 중...';
+    recomputeBarHeight();
+  }}
+
+  function startRecording() {{
+    navigator.mediaDevices.getUserMedia({{ audio: true }}).then(function(stream) {{
+      micStream = stream;
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = function(e) {{
+        if (e.data.size > 0) audioChunks.push(e.data);
+      }};
+      mediaRecorder.onstop = function() {{
+        micStream.getTracks().forEach(function(t) {{ t.stop(); }});
+        setMicProcessing();
+        var blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
+        var formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+        fetch('{api.BASE_URL}/voice/transcribe', {{ method: 'POST', body: formData }})
+          .then(function(res) {{
+            if (!res.ok) throw new Error('transcribe failed: ' + res.status);
+            return res.json();
+          }})
+          .then(function(data) {{
+            var t = data.text || '';
+            cta.value = t;
+            lastInputType = 'voice';
+            syncSt(t);
+            autosize();
+            setMicIdle();
+          }})
+          .catch(function(err) {{
+            alert('음성 변환에 실패했습니다. 다시 시도해주세요.');
+            setMicIdle();
+          }});
+      }};
+      mediaRecorder.start();
+      setMicRecording();
+    }}).catch(function(err) {{
+      alert('마이크 권한이 필요합니다.');
+    }});
+  }}
+
+  function stopRecording() {{
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {{
+      mediaRecorder.stop();
+    }}
+  }}
+
+  if (navigator.mediaDevices && window.MediaRecorder) {{
     mbtn.addEventListener('click', function() {{
-      if (rec) {{ recog.stop(); }}
-      else {{
-        recog.start(); rec = true;
-        mbtn.style.background  = '#3b6def';
-        mbtn.style.borderColor = '#3b6def';
-        mbtn.innerHTML = MIC_FILLED;
-        hintRow.style.display = 'block';
-        noteRow.style.display = 'block';
-        recomputeBarHeight();
-      }}
+      if (recording) {{ stopRecording(); }}
+      else {{ startRecording(); }}
     }});
   }} else {{
     mbtn.style.opacity = '0.4';
-    mbtn.title = '음성 인식 미지원';
+    mbtn.title = '음성 녹음 미지원';
   }}
 }})();
 </script>
