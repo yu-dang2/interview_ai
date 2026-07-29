@@ -1,6 +1,8 @@
 """
 음성 입력 라우터
 
+호출할 때마다 OpenAI STT 비용이 나가므로 인증을 요구한다.
+
 엔드포인트:
     POST /voice/transcribe - 음성 파일 → 텍스트 변환 (STT)
 
@@ -10,10 +12,12 @@ OpenAI GPT-4o-transcribe 사용
 import os
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from openai import OpenAI
 
 from backend.core.config import require_openai_key
+from backend.core.deps import current_user
+from backend.models.models import User
 from backend.schemas.voice import TranscribeResponse
 
 router = APIRouter(prefix="/voice", tags=["Voice"])
@@ -23,7 +27,10 @@ client = OpenAI(api_key=require_openai_key())
 
 
 @router.post("/transcribe", response_model=TranscribeResponse)
-async def transcribe(audio: UploadFile = File(...)):
+async def transcribe(
+    audio: UploadFile = File(...),
+    user: User = Depends(current_user),
+):
     """
     음성 파일 → 텍스트(STT)
 
