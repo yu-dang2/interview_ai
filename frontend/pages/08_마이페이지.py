@@ -269,7 +269,7 @@ with col_ver:
 
 
 # ── 면접 히스토리 ──────────────────────────────────────────────────────────
-COLS = "175px 196px 165px 156px 174px 174px 1fr"
+COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(90px,1fr)"
 
 def _play_btn(video_url: str) -> str:
     return (
@@ -284,7 +284,7 @@ def _play_btn(video_url: str) -> str:
     )
 
 _HDR_STYLE = (
-    'font-size:11px;font-weight:600;color:#6b7280;'
+    'font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;'
     'font-family:Pretendard,-apple-system,sans-serif;'
 )
 
@@ -325,7 +325,7 @@ for i, h in enumerate(HISTORY):
         f'</div>'
         f'<a href="/결과리포트" target="_self" style="font-size:11px;font-weight:600;'
         f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
+        f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
         f'</div>'
     )
 
@@ -334,7 +334,9 @@ st.markdown(
     'padding:15px 19px;margin-top:20px;">'
     '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;'
     'font-family:Pretendard,-apple-system,sans-serif;">면접 히스토리</p>'
-    + header_html + rows_html +
+    '<div style="overflow-x:auto;">'
+    f'<div>{header_html}{rows_html}</div>'
+    '</div>'
     '</div>',
     unsafe_allow_html=True,
 )
