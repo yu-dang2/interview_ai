@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
@@ -111,10 +112,10 @@ for p in PERSONAS:
       <img src="data:image/png;base64,{p['img']}"
            style="width:72px;height:72px;border-radius:50%;
                   object-fit:cover;flex-shrink:0;">
-      <div>
+      <div style="min-width:0;">
         <div style="font-size:15px;font-weight:700;color:{name_color};
-                    margin-bottom:4px;">{p['key']}</div>
-        <div style="font-size:12px;color:#9ca3af;">{p['desc']}</div>
+                    margin-bottom:4px;white-space:nowrap;">{p['key']}</div>
+        <div style="font-size:12px;color:#9ca3af;white-space:nowrap;">{p['desc']}</div>
       </div>
     </div>"""
 cards_html += '</div>'
@@ -225,6 +226,17 @@ def read_file_text(uploaded_file) -> str:
     return uploaded_file.read().decode("utf-8", errors="ignore")
 
 
+def _upload_error_message(e: Exception) -> str:
+    if isinstance(e, requests.exceptions.ConnectionError):
+        return "서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요."
+    if isinstance(e, requests.exceptions.Timeout):
+        return "업로드 요청이 시간 초과되었습니다. 다시 시도해주세요."
+    if isinstance(e, requests.exceptions.HTTPError):
+        status = e.response.status_code if e.response is not None else "?"
+        return f"업로드에 실패했습니다. (서버 오류: {status})"
+    return f"업로드 중 알 수 없는 오류가 발생했습니다: {e}"
+
+
 with up1:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">직무 기술서 (JD)</p>',
                 unsafe_allow_html=True)
@@ -235,9 +247,10 @@ with up1:
         state_set("jd_text", read_file_text(jd_file))
         try:
             state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
-        except Exception:
+            st.caption(f"✅ {jd_file.name} 업로드 완료")
+        except Exception as e:
             state_set("jd_id", 0)
-        st.caption(f"✅ {jd_file.name} 업로드 완료")
+            st.error(_upload_error_message(e))
 
 with up2:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">이력서</p>',
@@ -249,9 +262,10 @@ with up2:
         state_set("resume_text", read_file_text(resume_file))
         try:
             state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
-        except Exception:
+            st.caption(f"✅ {resume_file.name} 업로드 완료")
+        except Exception as e:
             state_set("resume_id", 0)
-        st.caption(f"✅ {resume_file.name} 업로드 완료")
+            st.error(_upload_error_message(e))
 
 components.html("""
 <script>
