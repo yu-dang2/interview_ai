@@ -51,12 +51,22 @@ st.markdown("""
     padding-left: 24% !important;
 }
 
-/* 시작 버튼 */
+/* 시작 버튼 — 텍스트가 줄바꿈되지 않도록 내용 너비로 고정하고 중앙 정렬 */
 [data-testid="stBaseButton-primary"] {
     font-size: 17px !important;
     padding: 12px 50px !important;
+    white-space: nowrap !important;
+    width: auto !important;
+}
+.st-key-btn_start {
+    display: flex !important;
+    justify-content: center !important;
 }
 
+/* 업로드 버튼 텍스트도 줄바꿈 방지 */
+[data-testid="stFileUploaderDropzone"] button p {
+    white-space: nowrap !important;
+}
 
 /* 카드 호버 */
 [data-persona-card]:hover {
@@ -105,17 +115,17 @@ for p in PERSONAS:
     name_color = "#3b6def"             if is_active else "#1f1f1f"
     cards_html += f"""
     <div data-persona-card="{p['key']}"
-         style="flex:1;border:{border};background:{bg};border-radius:12px;
+         style="flex:1;min-width:0;border:{border};background:{bg};border-radius:12px;
                 padding:20px;display:flex;align-items:center;gap:16px;
-                cursor:pointer;height:80px;box-sizing:content-box;
+                cursor:pointer;min-height:80px;box-sizing:content-box;
                 transition:transform 0.15s,box-shadow 0.15s;">
       <img src="data:image/png;base64,{p['img']}"
            style="width:72px;height:72px;border-radius:50%;
                   object-fit:cover;flex-shrink:0;">
       <div style="min-width:0;">
         <div style="font-size:15px;font-weight:700;color:{name_color};
-                    margin-bottom:4px;white-space:nowrap;">{p['key']}</div>
-        <div style="font-size:12px;color:#9ca3af;white-space:nowrap;">{p['desc']}</div>
+                    margin-bottom:4px;word-break:keep-all;">{p['key']}</div>
+        <div style="font-size:12px;color:#9ca3af;word-break:keep-all;">{p['desc']}</div>
       </div>
     </div>"""
 cards_html += '</div>'
@@ -328,8 +338,7 @@ st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
 # ── 시작 버튼 ────────────────────────────────────────────────────────────
 _, center, _ = st.columns([4.3, 2, 4.3])
 with center:
-    if st.button("면접 시작하기 →", type="primary",
-                 use_container_width=True, key="btn_start"):
+    if st.button("면접 시작하기 →", type="primary", key="btn_start"):
         if not (get("user_name") or name):
             st.error("성함을 입력해주세요.")
         else:
