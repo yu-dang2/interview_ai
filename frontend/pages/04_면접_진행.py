@@ -3,6 +3,7 @@ import time
 import base64
 import json
 import html as htmlmod
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from utils.paths import resource
@@ -32,8 +33,19 @@ if "iv_messages" not in st.session_state:
             state_set("session_id", resp["session_id"])
             first_q = resp["first_question"]
             state_set("first_question", first_q)
-        except Exception:
-            first_q = "이력서에서 Python 기반 API 개발 경험이 있으시군요. FastAPI 비동기 처리가 필요했던 이유와 구현 방식을 구체적으로 설명해 주세요."
+        except requests.exceptions.ConnectionError:
+            st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+            st.stop()
+        except requests.exceptions.Timeout:
+            st.error("면접 준비 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
+            st.stop()
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            st.error(f"면접 준비에 실패했습니다. (서버 오류: {status})")
+            st.stop()
+        except Exception as e:
+            st.error(f"면접 준비 중 알 수 없는 오류가 발생했습니다: {e}")
+            st.stop()
 
     st.session_state.iv_messages = [
         {"role": "ai", "tag": None, "text": first_q or "안녕하세요, 면접을 시작하겠습니다."},
@@ -645,16 +657,16 @@ for i, msg in enumerate(st.session_state.iv_messages):
         )
 
 # ── 채팅 입력 ─────────────────────────────────────────────────────────────
-MOCK_NEXT = {"role": "ai", "tag": "꼬리 질문",
-             "text": "좋은 답변이네요. 조금 더 구체적인 수치나 사례를 들어 설명해 주실 수 있나요?"}
-
 if prompt := st.chat_input("답변을 입력하세요..."):
     st.session_state.iv_messages.append({"role": "user", "tag": None, "text": prompt})
 
     answer_input_type = st.session_state.get("input_type_hidden", "text")
 
     session_id = get("session_id")
-    if session_id:
+    if not session_id:
+        st.session_state.iv_messages.pop()
+        st.error("면접 세션이 없습니다. 처음부터 다시 시작해주세요.")
+    else:
         try:
             resp = api.send_answer(session_id, prompt, input_type=answer_input_type)
             if resp.get("question_type") == "end":
@@ -667,12 +679,20 @@ if prompt := st.chat_input("답변을 입력하세요..."):
                     "tag":  tag,
                     "text": resp["next_question"],
                 })
-        except Exception:
-            st.session_state.iv_messages.append(MOCK_NEXT)
-    else:
-        st.session_state.iv_messages.append(MOCK_NEXT)
-
-    st.rerun()
+                st.rerun()
+        except requests.exceptions.ConnectionError:
+            st.session_state.iv_messages.pop()
+            st.error("서버에 연결할 수 없습니다. 답변이 전송되지 않았습니다.")
+        except requests.exceptions.Timeout:
+            st.session_state.iv_messages.pop()
+            st.error("응답 생성이 시간 초과되었습니다. 다시 시도해주세요.")
+        except requests.exceptions.HTTPError as e:
+            st.session_state.iv_messages.pop()
+            status = e.response.status_code if e.response is not None else "?"
+            st.error(f"답변 전송에 실패했습니다. (서버 오류: {status})")
+        except Exception as e:
+            st.session_state.iv_messages.pop()
+            st.error(f"알 수 없는 오류가 발생했습니다: {e}")
 
 # ── 숨김 종료 버튼 ──────────
 if st.button("종료", key="btn_end_interview"):
