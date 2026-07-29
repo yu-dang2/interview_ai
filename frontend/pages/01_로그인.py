@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 from utils.paths import resource
 from utils.state import init_session, set as state_set
@@ -190,8 +191,16 @@ with form_col:
                 state_set("is_logged_in", True)
                 state_set("user_email", email)
                 st.switch_page("pages/03_면접_환경설정.py")
-            except Exception:
-                st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 401:
+                    st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
+                else:
+                    status = e.response.status_code if e.response is not None else "?"
+                    st.error(f"로그인에 실패했습니다. (서버 오류: {status})")
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+            except Exception as e:
+                st.error(f"알 수 없는 오류가 발생했습니다: {e}")
 
     st.markdown("""
     <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
