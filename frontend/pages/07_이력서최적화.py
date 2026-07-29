@@ -37,20 +37,42 @@ if "resume_applied" not in st.session_state:
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 36px 40px 80px 40px !important; }
+[data-testid="stMainBlockContainer"] {
+    padding: 36px 40px 80px 40px !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 
 [data-testid="stBaseButton-primary"] {
     font-size: 13px !important;
     padding: 12px 50px !important;
+    width: auto !important;
 }
 [data-testid="stBaseButton-secondary"] {
     font-size: 14px !important;
     padding: 12px 50px !important;
     height: auto !important;
+    width: auto !important;
     border-radius: 10px !important;
     font-family: 'Pretendard', -apple-system, sans-serif !important;
     font-weight: 500 !important;
+}
+[data-testid="stBaseButton-primary"] p,
+[data-testid="stBaseButton-secondary"] p {
+    white-space: nowrap !important;
+}
+
+.st-key-bottom_row,
+.st-key-bottom_row > div,
+.st-key-bottom_row [data-testid="stVerticalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+.st-key-bottom_row [data-testid="stElementContainer"] {
+    width: auto !important;
 }
 </style>""", unsafe_allow_html=True)
 
@@ -153,12 +175,9 @@ components.html("""
 """, height=0)
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
-skip_col, _, dl_col = st.columns([2, 6, 3])
-
-with skip_col:
+with st.container(key="bottom_row"):
     if st.button("건너뛰기", key="skip_btn"):
         st.switch_page("pages/08_마이페이지.py")
 
-with dl_col:
     if st.button("최적화 이력서 다운로드", key="dl_btn", type="primary"):
         st.toast("이력서 다운로드는 백엔드 연동 후 활성화됩니다.", icon="ℹ️")
