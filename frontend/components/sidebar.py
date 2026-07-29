@@ -41,7 +41,8 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 }
 [data-testid="stVerticalBlock"]  { gap:0 !important; }
 [data-testid="stHorizontalBlock"] { gap:0 !important; }
-[data-testid="stBaseButton-primary"] {
+[data-testid="stBaseButton-primary"],
+[data-testid="stBaseButton-secondary"] {
     font-size: 14px !important;
     font-weight: 600 !important;
     font-family: 'Pretendard', -apple-system, sans-serif !important;
@@ -64,14 +65,14 @@ def render_sidebar(active: str):
         is_active = label == active
         if is_active:
             nav_html += (
-                '<div style="position:relative;">'
+                f'<a href="{url}" target="_self" style="text-decoration:none;display:block;position:relative;">'
                 '<div style="position:absolute;right:0;top:0;'
                 'width:3px;height:44px;background:#3b6def;'
                 'border-radius:2px 0 0 2px;"></div>'
                 '<div style="background:#eef3ff;height:44px;'
                 'display:flex;align-items:center;padding:0 24px;">'
                 f'<span style="font-size:13px;font-weight:700;color:#3b6def;">{label}</span>'
-                '</div></div>'
+                '</div></a>'
             )
         else:
             nav_html += (
