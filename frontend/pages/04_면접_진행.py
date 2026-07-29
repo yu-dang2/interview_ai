@@ -65,6 +65,7 @@ if "voice_guide_on" not in st.session_state:
 
 webcam_on = st.session_state.webcam_on
 voice_guide_on = st.session_state.voice_guide_on
+_access_token = st.session_state.get("access_token", "")
 
 _persona  = get("interviewer_style") or "기술 리드"
 _img_map  = {
@@ -473,20 +474,42 @@ body{{
     if (pd) pd.style.display = webcamOn ? '' : 'none';
   }});
 
-  // ── AI 질문 음성 안내 ────────────────────────────────────
-  function speakText(text, msgIdx) {{
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+  // ── AI 질문 음성 안내 (백엔드 TTS: gpt-4o-mini-tts) ────────
+  var _accessToken = {json.dumps(_access_token)};
+  var _ttsAudio = null;
+  function stopSpeaking() {{
+    if (_ttsAudio) {{ _ttsAudio.pause(); _ttsAudio = null; }}
     doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
       r.classList.remove('playing');
     }});
+  }}
+  function speakText(text, msgIdx) {{
+    stopSpeaking();
     var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ko-KR';
-    u.onstart = function() {{ if (row) row.classList.add('playing'); }};
-    u.onend   = function() {{ if (row) row.classList.remove('playing'); }};
-    u.onerror = function() {{ if (row) row.classList.remove('playing'); }};
-    window.speechSynthesis.speak(u);
+    fetch('{api.BASE_URL}/voice/speak', {{
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + _accessToken
+      }},
+      body: JSON.stringify({{ text: text }})
+    }})
+      .then(function(res) {{
+        if (!res.ok) throw new Error('speak failed: ' + res.status);
+        return res.blob();
+      }})
+      .then(function(blob) {{
+        var url = URL.createObjectURL(blob);
+        var audio = new Audio(url);
+        _ttsAudio = audio;
+        audio.onplay  = function() {{ if (row) row.classList.add('playing'); }};
+        audio.onended = function() {{ if (row) row.classList.remove('playing'); URL.revokeObjectURL(url); }};
+        audio.onerror = function() {{ if (row) row.classList.remove('playing'); URL.revokeObjectURL(url); }};
+        audio.play();
+      }})
+      .catch(function(err) {{
+        if (row) row.classList.remove('playing');
+      }});
   }}
   doc.addEventListener('click', function(e) {{
     var el = e.target && e.target.closest && e.target.closest('.iv-playback-replay');
@@ -510,7 +533,7 @@ body{{
         b.style.display = voiceGuideOn ? '' : 'none';
       }});
       if (!voiceGuideOn) {{
-        window.speechSynthesis.cancel();
+        stopSpeaking();
         doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
           r.classList.remove('playing');
         }});
@@ -607,14 +630,14 @@ body{{
     mbtn.style.background  = '#3b6def';
     mbtn.style.borderColor = '#3b6def';
     mbtn.innerHTML = MIC_FILLED;
-    hintRow.textContent = '🎤 녹음 중... 다시 누르면 텍스트로 변환됩니다';
+    hintRow.textContent = '녹음 중... 다시 누르면 텍스트로 변환됩니다';
     hintRow.style.display = 'block';
     noteRow.style.display = 'block';
     recomputeBarHeight();
   }}
 
   function setMicProcessing() {{
-    hintRow.textContent = '⏳ 음성을 텍스트로 변환하는 중...';
+    hintRow.textContent = '음성을 텍스트로 변환하는 중...';
     recomputeBarHeight();
   }}
 
@@ -632,7 +655,11 @@ body{{
         var blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
         var formData = new FormData();
         formData.append('audio', blob, 'recording.webm');
-        fetch('{api.BASE_URL}/voice/transcribe', {{ method: 'POST', body: formData }})
+        fetch('{api.BASE_URL}/voice/transcribe', {{
+          method: 'POST',
+          headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
+          body: formData
+        }})
           .then(function(res) {{
             if (!res.ok) throw new Error('transcribe failed: ' + res.status);
             return res.json();
