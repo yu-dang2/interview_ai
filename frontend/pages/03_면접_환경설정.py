@@ -155,30 +155,25 @@ for p in PERSONAS:
 cards_html += '</div>'
 st.markdown(cards_html, unsafe_allow_html=True)
 
-btn_cols = st.columns(3)
-for i, p in enumerate(PERSONAS):
-    with btn_cols[i]:
-        if st.button(p["key"], key=f"ps_{p['key']}", use_container_width=True):
-            state_set("interviewer_style", p["key"])
-            st.rerun()
+st.markdown(
+    "<style>.st-key-persona_hidden_row { display:none !important; }</style>",
+    unsafe_allow_html=True,
+)
+with st.container(key="persona_hidden_row"):
+    btn_cols = st.columns(3)
+    for i, p in enumerate(PERSONAS):
+        with btn_cols[i]:
+            if st.button(p["key"], key=f"ps_{p['key']}", use_container_width=True):
+                state_set("interviewer_style", p["key"])
+                st.rerun()
 
 components.html("""
 <script>
 (function () {
-    var PERSONA_KEYS = ['기술 리드', '인사 담당자', '임원 면접관'];
-
     function attach() {
         var doc = window.parent.document;
         var cards = doc.querySelectorAll('[data-persona-card]');
         if (!cards.length) { setTimeout(attach, 300); return; }
-
-        var hiddenRow = null;
-        doc.querySelectorAll('button').forEach(function (btn) {
-            if (PERSONA_KEYS.indexOf(btn.innerText.trim()) !== -1 && !hiddenRow) {
-                hiddenRow = btn.closest('[data-testid="stHorizontalBlock"]');
-            }
-        });
-        if (hiddenRow) hiddenRow.style.display = 'none';
 
         cards.forEach(function (card) {
             var key = card.getAttribute('data-persona-card');

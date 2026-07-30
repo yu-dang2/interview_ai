@@ -74,6 +74,7 @@ st.markdown("""<style>
 .st-key-bottom_row [data-testid="stElementContainer"] {
     width: auto !important;
 }
+.st-key-apply_hidden_row { display: none !important; }
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 ──────────────────────────────────────────────────────────────────
@@ -131,12 +132,13 @@ for i, s in enumerate(SUGGESTIONS):
 st.markdown(rows_html + '<div style="height:28px"></div>', unsafe_allow_html=True)
 
 # ── Hidden Streamlit 버튼 (JS가 클릭 트리거) ─────────────────────────────
-hidden_cols = st.columns(len(SUGGESTIONS))
-for i, col in enumerate(hidden_cols):
-    with col:
-        if st.button(f"§apply_{i}§", key=f"apply_{i}"):
-            st.session_state.resume_applied[i] = not st.session_state.resume_applied[i]
-            st.rerun()
+with st.container(key="apply_hidden_row"):
+    hidden_cols = st.columns(len(SUGGESTIONS))
+    for i, col in enumerate(hidden_cols):
+        with col:
+            if st.button(f"§apply_{i}§", key=f"apply_{i}"):
+                st.session_state.resume_applied[i] = not st.session_state.resume_applied[i]
+                st.rerun()
 
 # JS: HTML 적용 버튼 → hidden Streamlit 버튼 연결
 components.html("""
@@ -146,14 +148,6 @@ components.html("""
         var doc = window.parent.document;
         var applyBtns = doc.querySelectorAll('[data-apply]');
         if (!applyBtns.length) { setTimeout(attach, 300); return; }
-
-        // hidden 버튼 행 숨기기
-        doc.querySelectorAll('button').forEach(function (btn) {
-            if (btn.innerText.trim().startsWith('§apply_')) {
-                var row = btn.closest('[data-testid="stHorizontalBlock"]');
-                if (row) row.style.display = 'none';
-            }
-        });
 
         // 적용 버튼
         applyBtns.forEach(function (btn) {
