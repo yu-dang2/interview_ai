@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 NAV_ITEMS = [
     ("면접 시작",     "/%EB%A9%B4%EC%A0%91_%ED%99%98%EA%B2%BD%EC%84%A4%EC%A0%95"),
@@ -87,7 +88,8 @@ def render_sidebar(active: str):
         logout_html = (
             '<div>'
             '<div style="height:1px;background:#dedede;"></div>'
-            '<a href="/" target="_self" style="text-decoration:none;display:block;">'
+            '<a href="#" id="logout-link" '
+            'style="text-decoration:none;display:block;cursor:pointer;">'
             '<div style="height:44px;display:flex;align-items:center;gap:10px;'
             'padding:0 24px;background:#fff7f7;">'
             + LOGOUT_ICON +
@@ -97,6 +99,38 @@ def render_sidebar(active: str):
         )
 
     st.markdown(_SIDEBAR_CSS, unsafe_allow_html=True)
+
+    if active == "마이페이지":
+        st.markdown(
+            "<style>.st-key-logout_proxy_btn { position:absolute; width:0; height:0; "
+            "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+            unsafe_allow_html=True,
+        )
+        if st.button("로그아웃", key="logout_proxy_btn"):
+            st.session_state["access_token"] = ""
+            st.session_state["is_logged_in"] = False
+            st.session_state["user_name"] = ""
+            st.session_state["user_email"] = ""
+            st.session_state["user_id"] = 0
+            st.session_state["_logout_pending"] = True
+            st.switch_page("app.py")
+
+        # 인라인 onclick은 Streamlit의 unsafe_allow_html 새니타이저가 제거하므로
+        # JS에서 .onclick 프로퍼티로 나중에 붙인다.
+        components.html("""
+        <script>
+        (function () {
+            function attach() {
+                var doc = window.parent.document;
+                var link = doc.getElementById('logout-link');
+                var btn  = doc.querySelector('.st-key-logout_proxy_btn button');
+                if (!link || !btn) { setTimeout(attach, 200); return; }
+                link.onclick = function () { btn.click(); return false; };
+            }
+            attach();
+        }());
+        </script>
+        """, height=0)
 
     html = (
         '<div class="intro-sidebar-root">'
