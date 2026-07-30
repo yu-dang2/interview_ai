@@ -474,42 +474,21 @@ body{{
     if (pd) pd.style.display = webcamOn ? '' : 'none';
   }});
 
-  // ── AI 질문 음성 안내 (백엔드 TTS: gpt-4o-mini-tts) ────────
+  // ── AI 질문 음성 안내 ────────────────────────────────────
   var _accessToken = {json.dumps(_access_token)};
-  var _ttsAudio = null;
-  function stopSpeaking() {{
-    if (_ttsAudio) {{ _ttsAudio.pause(); _ttsAudio = null; }}
+  function speakText(text, msgIdx) {{
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
     doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
       r.classList.remove('playing');
     }});
-  }}
-  function speakText(text, msgIdx) {{
-    stopSpeaking();
     var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
-    fetch('{api.BASE_URL}/voice/speak', {{
-      method: 'POST',
-      headers: {{
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + _accessToken
-      }},
-      body: JSON.stringify({{ text: text }})
-    }})
-      .then(function(res) {{
-        if (!res.ok) throw new Error('speak failed: ' + res.status);
-        return res.blob();
-      }})
-      .then(function(blob) {{
-        var url = URL.createObjectURL(blob);
-        var audio = new Audio(url);
-        _ttsAudio = audio;
-        audio.onplay  = function() {{ if (row) row.classList.add('playing'); }};
-        audio.onended = function() {{ if (row) row.classList.remove('playing'); URL.revokeObjectURL(url); }};
-        audio.onerror = function() {{ if (row) row.classList.remove('playing'); URL.revokeObjectURL(url); }};
-        audio.play();
-      }})
-      .catch(function(err) {{
-        if (row) row.classList.remove('playing');
-      }});
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR';
+    u.onstart = function() {{ if (row) row.classList.add('playing'); }};
+    u.onend   = function() {{ if (row) row.classList.remove('playing'); }};
+    u.onerror = function() {{ if (row) row.classList.remove('playing'); }};
+    window.speechSynthesis.speak(u);
   }}
   doc.addEventListener('click', function(e) {{
     var el = e.target && e.target.closest && e.target.closest('.iv-playback-replay');
@@ -533,7 +512,7 @@ body{{
         b.style.display = voiceGuideOn ? '' : 'none';
       }});
       if (!voiceGuideOn) {{
-        stopSpeaking();
+        window.speechSynthesis.cancel();
         doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
           r.classList.remove('playing');
         }});
