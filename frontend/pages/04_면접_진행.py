@@ -522,9 +522,14 @@ body{{
 
   var _lastAiIdx  = {_last_ai_idx if _last_ai_idx is not None else -1};
   var _lastAiText = {json.dumps(_last_ai_text)};
-  if (voiceGuideOn && window.parent.__ivLastSpoken !== _lastAiIdx) {{
-    window.parent.__ivLastSpoken = _lastAiIdx;
-    if (_lastAiText) speakText(_lastAiText, _lastAiIdx);
+  // __ivLastSpoken은 탭(window.parent)에 붙어있어 새 면접을 시작해도 안 사라지므로
+  // session_id를 키에 포함시켜 이전 면접의 "idx=0 읽음" 기록과 구분한다.
+  var _spokenKey = {json.dumps(str(get("session_id")))} + ':' + _lastAiIdx;
+  if (voiceGuideOn && window.parent.__ivLastSpoken !== _spokenKey) {{
+    window.parent.__ivLastSpoken = _spokenKey;
+    if (_lastAiText) {{
+      setTimeout(function() {{ speakText(_lastAiText, _lastAiIdx); }}, 300);
+    }}
   }}
 
   // ── 면접 종료 ─────────────────────────
