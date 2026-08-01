@@ -19,6 +19,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # ── DB ─────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lang_king.db")
 
+# 진행 중인 면접의 그래프 상태(LangGraph 체크포인트)를 담는 파일.
+# 앱 데이터(DATABASE_URL)와 저장소가 다른 이유: LangGraph 공식 체크포인터에 MySQL 이 없다
+# (memory/sqlite/postgres 뿐). 면접이 끝나면 결과는 interview_results 에 남으므로
+# 이 파일은 버려도 되는 임시 데이터다.
+CHECKPOINT_DB_PATH = os.getenv("CHECKPOINT_DB_PATH", "./interview_checkpoints.db")
+
 # ── 인증 ───────────────────────────────────────────────
 # SECRET_KEY 를 .env 에 지정하지 않으면 기동할 때마다 새 키가 생성된다.
 # 개발 중에는 편하지만 서버를 재시작하면 발급해둔 토큰이 전부 무효가 되므로,

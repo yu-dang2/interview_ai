@@ -5,6 +5,9 @@ venv/
 
 # Database
 *.db
+# SQLite WAL 모드 부산물 (LangGraph 체크포인트 등)
+*.db-wal
+*.db-shm
 
 # Byte-compiled / optimized / DLL files
 *.py[codz]
