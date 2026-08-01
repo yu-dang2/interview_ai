@@ -13,7 +13,7 @@ from openai import OpenAIError
 
 import backend.models  # noqa: F401  (create_all 전에 모델을 Base에 등록)
 from backend.database import Base, engine
-from backend.routers import auth, interview, jd, resume, voice
+from backend.routers import auth, interview, jd, mypage, resume, voice
 from backend.services import graph_runner
 
 # 테이블 자동 생성
@@ -53,6 +53,7 @@ app.include_router(resume.router)
 app.include_router(jd.router)
 app.include_router(interview.router)
 app.include_router(voice.router)
+app.include_router(mypage.router)
 
 
 # ── LLM 예외 처리 ──────────────────────────────────────
