@@ -17,6 +17,7 @@ from backend.core.config import CLOSING_MESSAGE
 from backend.models.models import (
     JD,
     InterviewMessage,
+    InterviewQuestionFeedback,
     InterviewResult,
     InterviewSession,
     Resume,
@@ -30,6 +31,11 @@ from backend.schemas.interview import (
     SessionCreateResponse,
 )
 from backend.services import graph_runner, report_mapper
+
+_NO_REPORT = HTTPException(
+    status_code=409,
+    detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
+)
 
 
 class InterviewService:
@@ -50,28 +56,23 @@ class InterviewService:
             raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
         return session
 
-    async def _get_report(self, session_id: str) -> tuple[dict, dict]:
-        """(report_result, match_result) 반환. 리포트가 아직 없으면 409."""
+    def _get_result_row(self, session_id: str) -> InterviewResult | None:
+        """저장된 결과 행. 면접이 끝났다면 여기에 완전한 리포트가 들어 있다."""
+        return (
+            self.db.query(InterviewResult)
+            .filter(InterviewResult.interview_sessions_session_id == session_id)
+            .first()
+        )
+
+    async def _checkpoint_report(self, session_id: str) -> tuple[dict, dict]:
+        """
+        체크포인트에서 (report_result, match_result) 를 읽는 폴백.
+
+        정상 흐름이라면 면접 종료 시 _save_result 가 DB 에 남기므로 여기까지 오지 않는다.
+        체크포인트 파일은 언제든 지울 수 있는 임시 데이터라 이쪽을 우선하면 안 된다.
+        """
         values, _ = await graph_runner.snapshot(session_id)
-        report = values.get("report_result") or {}
-
-        if not report:
-            # 체크포인트가 날아갔더라도 DB에 저장해둔 리포트로 응답할 수 있다.
-            row = (
-                self.db.query(InterviewResult)
-                .filter(InterviewResult.interview_sessions_session_id == session_id)
-                .first()
-            )
-            if row and row.feedback:
-                report = json.loads(row.feedback)
-
-        if not report:
-            raise HTTPException(
-                status_code=409,
-                detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
-            )
-
-        return report, values.get("match_result") or {}
+        return values.get("report_result") or {}, values.get("match_result") or {}
 
     def _log_message(self, session_id: str, role: str, content: str, eval_score: int = 0) -> None:
         self.db.add(
@@ -189,16 +190,28 @@ class InterviewService:
         )
 
     def _save_result(self, session_id: str, values: dict) -> None:
+        """
+        리포트를 컬럼으로 펴서 저장한다.
+
+        match_result 를 함께 읽는 게 중요하다. resume_score 는 여기서만 계산할 수 있고,
+        저장하지 않으면 체크포인트가 사라진 뒤 0 으로 떨어진다.
+        """
         report = values.get("report_result") or {}
-        self.db.add(
-            InterviewResult(
-                total_score=report_mapper.clamp(report.get("total_score", 0)),
-                feedback=json.dumps(report, ensure_ascii=False),
-                eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
-                weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
-                interview_sessions_session_id=session_id,
-            )
+        match_result = values.get("match_result") or {}
+
+        result = InterviewResult(
+            **report_mapper.to_result_columns(report, match_result),
+            eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
+            weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
+            # 컬럼 매핑이 틀렸을 때 재계산할 수 있도록 원본을 남긴다.
+            raw_report=json.dumps(report, ensure_ascii=False),
+            interview_sessions_session_id=session_id,
         )
+        result.question_feedbacks = [
+            InterviewQuestionFeedback(**row)
+            for row in report_mapper.to_question_feedback_rows(report)
+        ]
+        self.db.add(result)
 
     # ── 종료 / 조회 ────────────────────────────────────
 
@@ -214,10 +227,25 @@ class InterviewService:
 
     async def get_result(self, session_id: str) -> ResultResponse:
         self._get_session(session_id)
-        report, match_result = await self._get_report(session_id)
+
+        # DB 우선. 체크포인트를 지워도 완료된 면접의 점수는 그대로 나와야 한다.
+        row = self._get_result_row(session_id)
+        if row is not None:
+            return report_mapper.to_result_from_row(session_id, row)
+
+        report, match_result = await self._checkpoint_report(session_id)
+        if not report:
+            raise _NO_REPORT
         return report_mapper.to_result(session_id, report, match_result)
 
     async def get_feedback(self, session_id: str) -> FeedbackResponse:
         self._get_session(session_id)
-        report, _ = await self._get_report(session_id)
+
+        row = self._get_result_row(session_id)
+        if row is not None:
+            return report_mapper.to_feedback_from_rows(row.question_feedbacks)
+
+        report, _ = await self._checkpoint_report(session_id)
+        if not report:
+            raise _NO_REPORT
         return report_mapper.to_feedback(report)
