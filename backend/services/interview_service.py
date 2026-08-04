@@ -11,6 +11,7 @@ import json
 import uuid
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.core.config import CLOSING_MESSAGE
@@ -20,6 +21,7 @@ from backend.models.models import (
     InterviewQuestionFeedback,
     InterviewResult,
     InterviewSession,
+    InterviewVideo,
     Resume,
     User,
 )
@@ -29,6 +31,9 @@ from backend.schemas.interview import (
     ResultResponse,
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionListItem,
+    SessionListResponse,
+    SessionListSummary,
 )
 from backend.services import graph_runner, report_mapper
 
@@ -212,6 +217,90 @@ class InterviewService:
             for row in report_mapper.to_question_feedback_rows(report)
         ]
         self.db.add(result)
+
+    # ── 기록 목록 (마이페이지) ─────────────────────────
+
+    def list_sessions(self, limit: int = 20) -> SessionListResponse:
+        """
+        내 면접 기록을 최신순으로. 결과·영상 유무를 한 번에 붙여 내보낸다.
+
+        영상은 세션당 여러 개일 수 있어서 outerjoin 하면 세션 행이 중복된다.
+        그래서 세션↔결과만 조인(1:1)하고, 영상은 별도 한 방 조회로 붙인다.
+        """
+        base = self.db.query(InterviewSession).filter(
+            InterviewSession.users_user_id == self.user.user_id
+        )
+        total = base.count()
+
+        rows = (
+            base.outerjoin(
+                InterviewResult,
+                InterviewResult.interview_sessions_session_id == InterviewSession.session_id,
+            )
+            .with_entities(InterviewSession, InterviewResult)
+            .order_by(InterviewSession.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # 세션별 최신 영상 id. 목록에 나온 세션만 조회한다.
+        session_ids = [session.session_id for session, _ in rows]
+        video_map = {}
+        if session_ids:
+            video_map = dict(
+                self.db.query(
+                    InterviewVideo.interview_sessions_session_id,
+                    func.max(InterviewVideo.video_id),
+                )
+                .filter(InterviewVideo.interview_sessions_session_id.in_(session_ids))
+                .group_by(InterviewVideo.interview_sessions_session_id)
+                .all()
+            )
+
+        sessions = []
+        for session, result in rows:
+            video_id = video_map.get(session.session_id)
+            sessions.append(
+                SessionListItem(
+                    session_id=session.session_id,
+                    created_at=session.created_at,
+                    persona=session.persona,
+                    status=session.status,
+                    resume_score=result.resume_score if result else None,
+                    interview_score=result.interview_score if result else None,
+                    total_score=result.total_score if result else None,
+                    grade=result.grade if result else None,
+                    has_video=video_id is not None,
+                    video_url=f"/mypage/videos/{video_id}/file" if video_id else None,
+                )
+            )
+
+        return SessionListResponse(total=total, summary=self._summary(), sessions=sessions)
+
+    def _summary(self) -> SessionListSummary:
+        """상단 통계 카드용 집계. 목록이 잘려도 맞도록 전체 결과를 대상으로 한다."""
+        results = (
+            self.db.query(InterviewResult)
+            .join(
+                InterviewSession,
+                InterviewResult.interview_sessions_session_id == InterviewSession.session_id,
+            )
+            .filter(InterviewSession.users_user_id == self.user.user_id)
+        )
+
+        count, avg_interview = results.with_entities(
+            func.count(InterviewResult.result_id),
+            func.avg(InterviewResult.interview_score),
+        ).one()
+
+        # "현재 이력서 점수" 는 가장 최근 면접에서 산출된 값이다.
+        latest = results.order_by(InterviewResult.created_at.desc()).first()
+
+        return SessionListSummary(
+            total_interviews=count or 0,
+            average_interview_score=round(float(avg_interview), 1) if avg_interview else None,
+            latest_resume_score=latest.resume_score if latest else None,
+        )
 
     # ── 종료 / 조회 ────────────────────────────────────
 

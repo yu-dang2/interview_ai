@@ -6,6 +6,7 @@
 
 엔드포인트:
     POST /interview/sessions           - 면접 세션 생성 (면접 시작)
+    GET  /interview/sessions           - 내 면접 기록 목록 (마이페이지)
     POST /interview/sessions/{id}/chat - 텍스트 답변 전송
     POST /interview/sessions/{id}/end  - 면접 종료
     GET  /interview/sessions/{id}/result   - 결과 리포트 조회
@@ -18,7 +19,7 @@
     GET  /interview/{id}/video-metrics
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session
 from backend.core.deps import current_user
 from backend.database import get_db
@@ -26,6 +27,7 @@ from backend.models.models import User
 from backend.schemas.interview import (
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionListResponse,
     ChatRequest,
     ChatResponse,
     ResultResponse,
@@ -48,6 +50,22 @@ async def create_session(
     """면접 세션 생성 및 첫 질문 반환"""
     service = InterviewService(db, user)
     return await service.create_session(req)
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+def list_sessions(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """
+    내 면접 기록 목록 (최신순).
+
+    마이페이지 표에 필요한 점수·영상 유무를 한 번에 내보내고, 상단 통계 카드용
+    집계는 summary 로 따로 준다. summary 는 limit 과 무관하게 전체를 대상으로 한다.
+    """
+    service = InterviewService(db, user)
+    return service.list_sessions(limit)
 
 
 @router.post("/sessions/{session_id}/chat", response_model=ChatResponse)

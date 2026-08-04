@@ -5,6 +5,7 @@
 topic_router 의 THRESHOLD=70 이 모두 이 스케일을 전제한다.
 """
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -95,3 +96,41 @@ class FeedbackResponse(BaseModel):
     total_questions: int
     average_score: Score
     feedbacks: list[FeedbackItem]
+
+
+# ── 면접 기록 목록 (마이페이지) ────────────────────────
+
+class SessionListItem(BaseModel):
+    session_id: str
+    created_at: datetime
+    persona: str | None = None
+    status: str
+
+    # 아직 끝나지 않았거나 중단된 면접은 결과가 없어 전부 None 이다.
+    resume_score: Score | None = None
+    interview_score: Score | None = None
+    total_score: Score | None = None
+    grade: str | None = None
+
+    has_video: bool = False
+    # 영상 재생용 경로. 인증이 필요해 <video src> 에 바로 넣을 수 없다.
+    video_url: str | None = None
+
+
+class SessionListSummary(BaseModel):
+    """
+    마이페이지 상단 통계 카드용. 목록이 limit 으로 잘려도 값이 맞도록
+    전체 결과를 대상으로 따로 집계한다.
+
+    리포트를 JSON 한 컬럼에 넣던 시절에는 이 집계가 불가능했다.
+    """
+
+    total_interviews: int                      # 결과가 남은(완료된) 면접 수
+    average_interview_score: float | None = None
+    latest_resume_score: Score | None = None
+
+
+class SessionListResponse(BaseModel):
+    total: int                                 # 세션 전체 개수 (limit 과 무관)
+    summary: SessionListSummary
+    sessions: list[SessionListItem]
