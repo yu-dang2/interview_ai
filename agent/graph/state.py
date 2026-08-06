@@ -45,6 +45,9 @@ class InterviewState(MessagesState):
     # 최종 결과 (report_generator가 생성)
     report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
 
+    # 이력서 자동 최적화 (resume_optimizer가 종료 직전 생성, 화면·DB 기준 키로 정규화)
+    resume_optimization: dict   # {"matched_keywords": [...], "suggestions": [{"id","section","original","improved","reason"}]}
+
 
 class InterviewInput(TypedDict):
     jd_raw: str
@@ -63,3 +66,4 @@ class InterviewOutput(TypedDict):
     is_finished: bool
     report_result: dict
     match_score: int
+    resume_optimization: dict
