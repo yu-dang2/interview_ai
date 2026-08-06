@@ -37,21 +37,44 @@ if "resume_applied" not in st.session_state:
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 36px 40px 80px 40px !important; }
+[data-testid="stMainBlockContainer"] {
+    padding: 36px 40px 80px 40px !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 
 [data-testid="stBaseButton-primary"] {
     font-size: 13px !important;
     padding: 12px 50px !important;
+    width: auto !important;
 }
 [data-testid="stBaseButton-secondary"] {
     font-size: 14px !important;
     padding: 12px 50px !important;
     height: auto !important;
+    width: auto !important;
     border-radius: 10px !important;
     font-family: 'Pretendard', -apple-system, sans-serif !important;
     font-weight: 500 !important;
 }
+[data-testid="stBaseButton-primary"] p,
+[data-testid="stBaseButton-secondary"] p {
+    white-space: nowrap !important;
+}
+
+.st-key-bottom_row,
+.st-key-bottom_row > div,
+.st-key-bottom_row [data-testid="stVerticalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+.st-key-bottom_row [data-testid="stElementContainer"] {
+    width: auto !important;
+}
+.st-key-apply_hidden_row { display: none !important; }
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 ──────────────────────────────────────────────────────────────────
@@ -109,12 +132,13 @@ for i, s in enumerate(SUGGESTIONS):
 st.markdown(rows_html + '<div style="height:28px"></div>', unsafe_allow_html=True)
 
 # ── Hidden Streamlit 버튼 (JS가 클릭 트리거) ─────────────────────────────
-hidden_cols = st.columns(len(SUGGESTIONS))
-for i, col in enumerate(hidden_cols):
-    with col:
-        if st.button(f"§apply_{i}§", key=f"apply_{i}"):
-            st.session_state.resume_applied[i] = not st.session_state.resume_applied[i]
-            st.rerun()
+with st.container(key="apply_hidden_row"):
+    hidden_cols = st.columns(len(SUGGESTIONS))
+    for i, col in enumerate(hidden_cols):
+        with col:
+            if st.button(f"§apply_{i}§", key=f"apply_{i}"):
+                st.session_state.resume_applied[i] = not st.session_state.resume_applied[i]
+                st.rerun()
 
 # JS: HTML 적용 버튼 → hidden Streamlit 버튼 연결
 components.html("""
@@ -124,14 +148,6 @@ components.html("""
         var doc = window.parent.document;
         var applyBtns = doc.querySelectorAll('[data-apply]');
         if (!applyBtns.length) { setTimeout(attach, 300); return; }
-
-        // hidden 버튼 행 숨기기
-        doc.querySelectorAll('button').forEach(function (btn) {
-            if (btn.innerText.trim().startsWith('§apply_')) {
-                var row = btn.closest('[data-testid="stHorizontalBlock"]');
-                if (row) row.style.display = 'none';
-            }
-        });
 
         // 적용 버튼
         applyBtns.forEach(function (btn) {
@@ -153,12 +169,9 @@ components.html("""
 """, height=0)
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
-skip_col, _, dl_col = st.columns([2, 6, 3])
-
-with skip_col:
+with st.container(key="bottom_row"):
     if st.button("건너뛰기", key="skip_btn"):
         st.switch_page("pages/08_마이페이지.py")
 
-with dl_col:
     if st.button("최적화 이력서 다운로드", key="dl_btn", type="primary"):
         st.toast("이력서 다운로드는 백엔드 연동 후 활성화됩니다.", icon="ℹ️")

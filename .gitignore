@@ -1,9 +1,16 @@
 # Python
 __pycache__/
 *.py[cod]
+venv/
+
+# 업로드된 면접 영상 (VIDEO_STORAGE_DIR, 배포 시 S3로 이전)
+uploads/
 
 # Database
 *.db
+# SQLite WAL 모드 부산물 (LangGraph 체크포인트 등)
+*.db-wal
+*.db-shm
 
 # Byte-compiled / optimized / DLL files
 *.py[codz]

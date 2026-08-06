@@ -48,9 +48,36 @@ components.html("""
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 36px 40px 60px 40px !important; }
+[data-testid="stMainBlockContainer"] {
+    padding: 36px 40px 60px 40px !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
+
+.st-key-pagination,
+.st-key-pagination > div,
+.st-key-pagination [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-pagination [data-testid="stVerticalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 20px !important;
+}
+.st-key-pagination [data-testid="stElementContainer"] {
+    width: auto !important;
+}
+[data-page-number] {
+    font-size: 14px !important;
+    color: #a6a6a6 !important;
+    position: relative !important;
+    top: -2px !important;
+}
+[data-testid="stBaseButton-secondary"] {
+    width: auto !important;
+}
 
 @media print {
     [data-testid="stSidebar"],
@@ -122,7 +149,8 @@ ITEMS_PER_PAGE = 3
 if "fb_page" not in st.session_state:
     st.session_state.fb_page = 0
 
-today        = datetime.now().strftime("%-m월 %-d일")
+_now         = datetime.now()
+today        = f"{_now.month}월 {_now.day}일"
 avg_score    = round(sum(qa["score"] for qa in ALL_QA) / len(ALL_QA))
 total_pages  = (len(ALL_QA) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
 page_idx     = st.session_state.fb_page
@@ -171,21 +199,14 @@ for i, qa in enumerate(current_qa):
 st.markdown(cards_html + '<div style="height:16px"></div>', unsafe_allow_html=True)
 
 # ── 페이지네이션 ──────────────────────────────────────────────────────────
-_, prev_col, page_col, next_col, _ = st.columns([4, 1, 2, 1, 4])
-
-with prev_col:
-    if st.button("＜", disabled=(page_idx == 0), use_container_width=True):
+with st.container(key="pagination"):
+    if st.button("＜", disabled=(page_idx == 0)):
         st.session_state.fb_page -= 1
         st.rerun()
-
-with page_col:
     st.markdown(
-        f'<div style="text-align:center;font-size:14px;color:#a6a6a6;padding-top:9px;">'
-        f'{page_idx + 1} / {total_pages}</div>',
+        f'<span data-page-number>{page_idx + 1} / {total_pages}</span>',
         unsafe_allow_html=True,
     )
-
-with next_col:
-    if st.button("＞", disabled=(page_idx >= total_pages - 1), use_container_width=True):
+    if st.button("＞", disabled=(page_idx >= total_pages - 1)):
         st.session_state.fb_page += 1
         st.rerun()

@@ -1,9 +1,12 @@
 import math
 import time
 import base64
+import json
+import html as htmlmod
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
-from pathlib import Path
+from utils.paths import resource
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
 from utils import api
@@ -30,18 +33,39 @@ if "iv_messages" not in st.session_state:
             state_set("session_id", resp["session_id"])
             first_q = resp["first_question"]
             state_set("first_question", first_q)
-        except Exception:
-            first_q = "이력서에서 Python 기반 API 개발 경험이 있으시군요. FastAPI 비동기 처리가 필요했던 이유와 구현 방식을 구체적으로 설명해 주세요."
+        except requests.exceptions.ConnectionError:
+            st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+            st.stop()
+        except requests.exceptions.Timeout:
+            st.error("면접 준비 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
+            st.stop()
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            st.error(f"면접 준비에 실패했습니다. (서버 오류: {status})")
+            st.stop()
+        except Exception as e:
+            st.error(f"면접 준비 중 알 수 없는 오류가 발생했습니다: {e}")
+            st.stop()
 
     st.session_state.iv_messages = [
         {"role": "ai", "tag": None, "text": first_q or "안녕하세요, 면접을 시작하겠습니다."},
     ]
+
+_ai_indices  = [i for i, m in enumerate(st.session_state.iv_messages) if m["role"] == "ai"]
+_last_ai_idx = _ai_indices[-1] if _ai_indices else None
+_last_ai_text = st.session_state.iv_messages[_last_ai_idx]["text"] if _last_ai_idx is not None else ""
+
 if "iv_start" not in st.session_state:
     st.session_state.iv_start = time.time()
 if "webcam_on" not in st.session_state:
     st.session_state.webcam_on = False
+if "voice_guide_on" not in st.session_state:
+    _vg_default = get("voice_guide_default")
+    st.session_state.voice_guide_on = True if _vg_default is None else _vg_default
 
 webcam_on = st.session_state.webcam_on
+voice_guide_on = st.session_state.voice_guide_on
+_access_token = st.session_state.get("access_token", "")
 
 _persona  = get("interviewer_style") or "기술 리드"
 _img_map  = {
@@ -51,7 +75,7 @@ _img_map  = {
 }
 try:
     _avatar_b64 = base64.b64encode(
-        Path(_img_map.get(_persona, "assets/images/기술리드.png")).read_bytes()
+        resource(_img_map.get(_persona, "assets/images/기술리드.png")).read_bytes()
     ).decode()
     _avatar_src = f"data:image/png;base64,{_avatar_b64}"
 except Exception:
@@ -63,7 +87,7 @@ render_sidebar(active="면접 시작")
 FEEDBACK_W = 288
 right_px   = FEEDBACK_W
 
-# ── 타이머 초기값 (JS가 실시간 카운트다운 담당) ─────────────────────────────
+# ── 타이머 초기값 ────────────────────────────
 elapsed   = int(time.time() - st.session_state.iv_start)
 remaining = max(0, 30 * 60 - elapsed)
 timer_str = f"{remaining // 60:02d}:{remaining % 60:02d}"
@@ -117,7 +141,6 @@ st.markdown(f"""<style>
 [data-testid="stMainBlockContainer"] {{ padding: 20px {right_px + 24}px 140px 240px !important; }}
 [data-testid="stVerticalBlock"] {{ gap: 0 !important; }}
 
-/* Streamlit 기본 입력바 완전히 숨김 — 커스텀 iframe으로 대체 */
 [data-testid="stBottom"] {{
     position: fixed !important;
     left: -9999px !important;
@@ -125,19 +148,17 @@ st.markdown(f"""<style>
     opacity: 0 !important;
     z-index: -999 !important;
 }}
-/* 숨김 버튼들 */
-.st-key-webcam_toggle {{
-    position: absolute !important;
-    width: 0 !important; height: 0 !important;
-    overflow: hidden !important; clip: rect(0,0,0,0) !important;
-    margin: 0 !important; padding: 0 !important;
-}}
 .st-key-btn_end_interview {{
     position: fixed !important;
     left: -9999px !important; top: 0 !important;
     opacity: 0 !important;
 }}
-/* Streamlit 헤더가 클릭을 가로채지 않도록 */
+.st-key-input_type_hidden {{
+    position: absolute !important;
+    width: 0 !important; height: 0 !important;
+    overflow: hidden !important; clip: rect(0,0,0,0) !important;
+    margin: 0 !important; padding: 0 !important;
+}}
 [data-testid="stHeader"] {{ pointer-events: none !important; }}
 
 .iv-ai-row {{ display:flex; align-items:flex-start; gap:12px; margin-bottom:28px; }}
@@ -156,12 +177,32 @@ st.markdown(f"""<style>
     padding:14px 16px; font-size:13px; color:#1f1f1f; line-height:1.65;
     max-width:540px; white-space:pre-wrap;
 }}
+
+.iv-playback-divider {{ height:1px; background:#e0e0e6; margin:10px 0 8px; }}
+.iv-playback-row {{ display:flex; justify-content:flex-end; align-items:center; }}
+.iv-playback-row.playing {{ justify-content:space-between; }}
+.iv-playback-status {{ display:none; font-size:12px; font-weight:600; color:#3b6def; }}
+.iv-playback-row.playing .iv-playback-status {{ display:inline; }}
+.iv-playback-replay {{
+    font-size:12px; color:#8c8c8c; text-decoration:underline; cursor:pointer;
+}}
 </style>""", unsafe_allow_html=True)
 
-# ── 헤더 우측 (타이머 + 종료) ────────────────────────────────────────────
+# ── 헤더 우측 ─────────────────────────────────
+_vg_track_bg  = '#3b6def' if voice_guide_on else '#d1d5db'
+_vg_knob_left = '18px'    if voice_guide_on else '2px'
+
 st.markdown(
     f'<div style="position:fixed;top:0;right:0;height:60px;'
     f'display:flex;align-items:center;gap:10px;padding:0 20px;z-index:99999;">'
+    f'<div id="voice-guide-toggle" style="display:flex;align-items:center;gap:8px;'
+    f'background:#eff6ff;border-radius:16px;height:32px;padding:0 12px;cursor:pointer;">'
+    f'<span style="font-size:13px;font-weight:600;color:#3b6def;">음성 안내</span>'
+    f'<div id="vg-track" style="width:36px;height:20px;border-radius:10px;background:{_vg_track_bg};'
+    f'position:relative;transition:background 0.15s;">'
+    f'<div id="vg-knob" style="width:16px;height:16px;border-radius:50%;background:white;'
+    f'position:absolute;top:2px;left:{_vg_knob_left};transition:left 0.15s;"></div>'
+    f'</div></div>'
     f'<div style="display:flex;align-items:center;gap:6px;background:#fff5f5;'
     f'border-radius:8px;height:34px;padding:0 14px;">'
     f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626"'
@@ -177,7 +218,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── 피드백 패널 (웹캠 ON이면 상단에 영상 포함) ───────────────────────────
+# ── 피드백 패널 ───────────────────────────
 person_svg = (
     '<svg width="100%" height="100%" viewBox="0 0 288 210" preserveAspectRatio="xMidYMid slice"'
     ' xmlns="http://www.w3.org/2000/svg">'
@@ -187,14 +228,13 @@ person_svg = (
     '</svg>'
 )
 
-webcam_html = ""
-if webcam_on:
-    webcam_html = (
-        '<div style="width:100%;height:210px;overflow:hidden;">'
-        + person_svg
-        + '</div>'
-        '<div style="height:1px;background:#e5e8ec;margin-bottom:16px;"></div>'
-    )
+_webcam_display = "" if webcam_on else "display:none;"
+webcam_html = (
+    f'<div id="webcam-preview-block" style="width:100%;height:210px;overflow:hidden;{_webcam_display}">'
+    + person_svg
+    + '</div>'
+    f'<div id="webcam-preview-divider" style="height:1px;background:#e5e8ec;margin-bottom:16px;{_webcam_display}"></div>'
+)
 
 st.markdown(
     '<div style="position:fixed;top:60px;right:0;width:288px;'
@@ -223,16 +263,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 웹캠 토글 — 화면 밖 숨김, JS가 input을 직접 클릭
-new_webcam = st.toggle("webcam", value=webcam_on, key="webcam_toggle", label_visibility="collapsed")
-if new_webcam != webcam_on:
-    st.session_state.webcam_on = new_webcam
-    st.rerun()
+st.text_input("input_type", value="text", key="input_type_hidden", label_visibility="collapsed")
 
-# ── 커스텀 입력바 (iframe 자신을 position:fixed로 재배치) ─────────────────
-_cam_bg = '#eff6ff' if webcam_on else '#f3f4f6'
+# ── 커스텀 입력바 ─────────────────
+_cam_bg = '#3b6def' if webcam_on else '#f3f4f6'
 _cam_bd = '#3b6def' if webcam_on else '#e5e7eb'
-_cam_ic = '#3b6def' if webcam_on else '#6b7280'
+
+if webcam_on:
+    _cam_icon_svg = (
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">'
+        '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="white"/>'
+        '<circle cx="12" cy="13" r="4" fill="#3b6def"/>'
+        '</svg>'
+    )
+else:
+    _cam_icon_svg = (
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280"'
+        ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>'
+        '<circle cx="12" cy="13" r="4"/>'
+        '</svg>'
+    )
 
 components.html(f"""<!DOCTYPE html><html><head>
 <style>
@@ -240,16 +291,27 @@ components.html(f"""<!DOCTYPE html><html><head>
    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}}
 body{{
   background:white;border-top:1px solid #f3f4f6;
-  height:76px;display:flex;align-items:center;
-  padding:0 20px;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  overflow:hidden;
+}}
+#hint-row{{
+  display:none;text-align:center;font-size:12px;font-weight:600;
+  color:#3b6def;padding:8px 20px 0;
+}}
+#note-row{{
+  display:none;text-align:center;font-size:11px;color:#9ca3af;
+  padding:0 20px 6px;
+}}
+#controls-row{{
+  display:flex;align-items:center;padding:16px 20px;
 }}
 #ta-wrap{{flex:1;margin-right:12px;}}
 #cta{{
-  display:block;width:100%;height:44px;
+  display:block;width:100%;height:44px;min-height:44px;max-height:120px;
   border:1px solid #e5e7eb;border-radius:14px;
   background:#f9fafb;font-size:14px;color:#1f1f1f;
-  padding:0 21px;resize:none;outline:none;
-  font-family:inherit;line-height:44px;overflow:hidden;
+  padding:11px 21px;resize:none;outline:none;
+  font-family:inherit;line-height:20px;overflow-y:auto;
 }}
 #cta::placeholder{{color:#9ca3af;}}
 #cta:focus{{border-color:#e5e7eb;background:#f9fafb;box-shadow:none;}}
@@ -259,12 +321,19 @@ body{{
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;flex-shrink:0;user-select:none;
 }}
-#sbtn{{background:#3b6def;border-color:#3b6def;margin-left:8px;}}
-#mbtn{{margin-left:4px;}}
+#sbtn{{background:#3b6def;border-color:#3b6def;}}
+#mbtn{{margin-left:8px;}}
 #cbtn{{background:{_cam_bg};border-color:{_cam_bd};margin-left:8px;}}
 </style></head><body>
+<div id="hint-row">음성 인식 중... 말씀하신 내용이 아래에 입력됩니다</div>
+<div id="controls-row">
 <div id="ta-wrap">
   <textarea id="cta" placeholder="답변을 입력하세요..." rows="1"></textarea>
+</div>
+<div class="ibtn" id="sbtn">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+    <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/>
+  </svg>
 </div>
 <div class="ibtn" id="mbtn">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -274,18 +343,11 @@ body{{
     <line x1="8" y1="22" x2="16" y2="22"/>
   </svg>
 </div>
-<div class="ibtn" id="sbtn">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13"/>
-    <polygon points="22 2 15 22 11 13 2 9 22 2" fill="white" stroke="none"/>
-  </svg>
-</div>
 <div class="ibtn" id="cbtn">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{_cam_ic}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-    <circle cx="12" cy="13" r="4"/>
-  </svg>
+  {_cam_icon_svg}
 </div>
+</div>
+<div id="note-row">전사된 텍스트는 전송 전에 직접 수정할 수 있습니다</div>
 <script>
 (function(){{
   // ── 실시간 타이머 ────────────────────────────────────────────────
@@ -300,21 +362,20 @@ body{{
   _tick();
   setInterval(_tick, 1000);
 
-  // ── iframe 자신을 fixed bottom bar로 재배치 ─────────────────────
   var fr = window.frameElement;
+  var barHeight = 76;
   function applyFixed() {{
     if (!fr) return;
     fr.style.position = 'fixed';
     fr.style.bottom   = '0';
     fr.style.left     = '220px';
     fr.style.width    = 'calc(100vw - 220px - {right_px}px)';
-    fr.style.height   = '76px';
+    fr.style.height   = barHeight + 'px';
     fr.style.zIndex   = '500';
     fr.style.border   = 'none';
     fr.style.display  = 'block';
   }}
   applyFixed();
-  // Streamlit이 iframe style을 덮어쓰면 즉시 복구
   if (fr) {{
     new MutationObserver(applyFixed)
       .observe(fr, {{attributes:true, attributeFilter:['style']}});
@@ -326,7 +387,25 @@ body{{
   var sbtn = document.getElementById('sbtn');
   var cbtn = document.getElementById('cbtn');
 
-  // ── Streamlit hidden textarea 동기화 ─────────────────────────────
+  // ── 입력창 자동 높이 ─────
+  var controlsRowEl = document.getElementById('controls-row');
+  var hintRowEl = document.getElementById('hint-row');
+  var noteRowEl = document.getElementById('note-row');
+  function recomputeBarHeight() {{
+    requestAnimationFrame(function() {{
+      var h = controlsRowEl.offsetHeight;
+      if (hintRowEl.style.display !== 'none') h += hintRowEl.offsetHeight;
+      if (noteRowEl.style.display !== 'none') h += noteRowEl.offsetHeight;
+      barHeight = h;
+      applyFixed();
+    }});
+  }}
+  function autosize() {{
+    cta.style.height = 'auto';
+    cta.style.height = cta.scrollHeight + 'px';
+    recomputeBarHeight();
+  }}
+
   function getStTa() {{ return doc.querySelector('[data-testid="stChatInputTextArea"]'); }}
   function syncSt(val) {{
     var t = getStTa();
@@ -338,14 +417,32 @@ body{{
     t.dispatchEvent(new Event('input', {{bubbles:true}}));
   }}
 
-  cta.addEventListener('input', function() {{ syncSt(cta.value); }});
+  var lastInputType = 'text';
+  function syncInputType(val) {{
+    var el = doc.querySelector('.st-key-input_type_hidden input');
+    if (!el) return;
+    var setter = Object.getOwnPropertyDescriptor(
+      window.parent.HTMLInputElement.prototype, 'value'
+    ).set;
+    setter.call(el, val);
+    el.dispatchEvent(new Event('input', {{bubbles:true}}));
+  }}
+
+  cta.addEventListener('input', function() {{
+    lastInputType = 'text';
+    syncSt(cta.value);
+    autosize();
+  }});
 
   // ── 전송 ─────────────────────────────────────────────────────────
   function send() {{
+    syncInputType(lastInputType);
     syncSt(cta.value);
     setTimeout(function() {{
       var btn = doc.querySelector('[data-testid="stChatInputSubmitButton"]');
       if (btn) {{ btn.click(); cta.value = ''; }}
+      lastInputType = 'text';
+      autosize();
     }}, 50);
   }}
   cta.addEventListener('keydown', function(e) {{
@@ -353,15 +450,90 @@ body{{
   }});
   sbtn.addEventListener('click', send);
 
-  // ── 카메라 토글 ──────────────────────────────────────────────────
+  // ── 카메라 토글 ──────
+  var webcamOn = {str(webcam_on).lower()};
+  var CAM_OUTLINE =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>' +
+    '<circle cx="12" cy="13" r="4"/>' +
+    '</svg>';
+  var CAM_FILLED =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">' +
+    '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="white"/>' +
+    '<circle cx="12" cy="13" r="4" fill="#3b6def"/>' +
+    '</svg>';
   cbtn.addEventListener('click', function() {{
-    var inp = doc.querySelector('.st-key-webcam_toggle input');
-    if (inp) inp.click();
+    webcamOn = !webcamOn;
+    cbtn.innerHTML = webcamOn ? CAM_FILLED : CAM_OUTLINE;
+    cbtn.style.background  = webcamOn ? '#3b6def' : '#f3f4f6';
+    cbtn.style.borderColor = webcamOn ? '#3b6def' : '#e5e7eb';
+    var pv = doc.getElementById('webcam-preview-block');
+    var pd = doc.getElementById('webcam-preview-divider');
+    if (pv) pv.style.display = webcamOn ? '' : 'none';
+    if (pd) pd.style.display = webcamOn ? '' : 'none';
   }});
 
-  // ── 면접 종료 — 오버레이 + 숨김 버튼 클릭 ─────────────────────────
+  // ── AI 질문 음성 안내 ────────────────────────────────────
+  var _accessToken = {json.dumps(_access_token)};
+  function speakText(text, msgIdx) {{
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
+      r.classList.remove('playing');
+    }});
+    var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR';
+    u.onstart = function() {{ if (row) row.classList.add('playing'); }};
+    u.onend   = function() {{ if (row) row.classList.remove('playing'); }};
+    u.onerror = function() {{ if (row) row.classList.remove('playing'); }};
+    window.speechSynthesis.speak(u);
+  }}
+  doc.addEventListener('click', function(e) {{
+    var el = e.target && e.target.closest && e.target.closest('.iv-playback-replay');
+    if (el) {{
+      var row = el.closest('.iv-playback-row');
+      var idx = row ? row.getAttribute('data-msg-idx') : null;
+      speakText(el.getAttribute('data-tts'), idx);
+    }}
+  }});
+
+  // ── 음성 안내 토글 ────
+  var voiceGuideOn = {str(voice_guide_on).lower()};
+  var vgTrack = doc.getElementById('vg-track');
+  var vgKnob  = doc.getElementById('vg-knob');
+  doc.addEventListener('click', function(e) {{
+    if (e.target && e.target.closest && e.target.closest('#voice-guide-toggle')) {{
+      voiceGuideOn = !voiceGuideOn;
+      if (vgTrack) vgTrack.style.background = voiceGuideOn ? '#3b6def' : '#d1d5db';
+      if (vgKnob)  vgKnob.style.left        = voiceGuideOn ? '18px' : '2px';
+      doc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
+        b.style.display = voiceGuideOn ? '' : 'none';
+      }});
+      if (!voiceGuideOn) {{
+        window.speechSynthesis.cancel();
+        doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
+          r.classList.remove('playing');
+        }});
+      }}
+    }}
+  }});
+
+  var _lastAiIdx  = {_last_ai_idx if _last_ai_idx is not None else -1};
+  var _lastAiText = {json.dumps(_last_ai_text)};
+  // __ivLastSpoken은 탭(window.parent)에 붙어있어 새 면접을 시작해도 안 사라지므로
+  // session_id를 키에 포함시켜 이전 면접의 "idx=0 읽음" 기록과 구분한다.
+  var _spokenKey = {json.dumps(str(get("session_id")))} + ':' + _lastAiIdx;
+  if (voiceGuideOn && window.parent.__ivLastSpoken !== _spokenKey) {{
+    window.parent.__ivLastSpoken = _spokenKey;
+    if (_lastAiText) {{
+      setTimeout(function() {{ speakText(_lastAiText, _lastAiIdx); }}, 300);
+    }}
+  }}
+
+  // ── 면접 종료 ─────────────────────────
   function showLoadingAndEnd() {{
-    // 로딩 오버레이 생성
     if (!doc.getElementById('_iv_ov')) {{
       var sty = doc.createElement('style');
       sty.id = '_iv_sty';
@@ -390,7 +562,7 @@ body{{
       doc.body.appendChild(ov);
     }}
     setTimeout(function() {{
-      var wc = {'1' if webcam_on else '0'};
+      var wc = webcamOn ? '1' : '0';
       var s = doc.createElement('script');
       s.textContent = "window.location.href = window.location.origin + '/결과리포트?webcam_on=" + wc + "';";
       doc.head.appendChild(s);
@@ -402,38 +574,114 @@ body{{
     }}
   }});
 
-  // ── 마이크 (SpeechRecognition) ───────────────────────────────────
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SR) {{
-    var recog = new SR();
-    recog.lang = 'ko-KR';
-    recog.continuous = false;
-    recog.interimResults = false;
-    var rec = false;
-    recog.onresult = function(e) {{
-      var t = e.results[0][0].transcript;
-      cta.value = t;
-      syncSt(t);
-    }};
-    var micSvg = mbtn.querySelector('svg');
-    recog.onend = recog.onerror = function() {{
-      rec = false;
-      mbtn.style.background  = '#f3f4f6';
-      mbtn.style.borderColor = '#e5e7eb';
-      if (micSvg) micSvg.style.stroke = '#6b7280';
-    }};
+  // ── 마이크 (녹음 → 백엔드 STT: gpt-4o-transcribe) ──────────────────
+  var hintRow  = document.getElementById('hint-row');
+  var noteRow  = document.getElementById('note-row');
+  var MIC_OUTLINE =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>' +
+    '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
+    '<line x1="12" y1="19" x2="12" y2="22"/>' +
+    '<line x1="8" y1="22" x2="16" y2="22"/>' +
+    '</svg>';
+  var MIC_FILLED =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" fill="white"/>' +
+    '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/>' +
+    '<line x1="12" y1="19" x2="12" y2="22"/>' +
+    '<line x1="8" y1="22" x2="16" y2="22"/>' +
+    '</svg>';
+
+  var mediaRecorder = null;
+  var audioChunks   = [];
+  var micStream     = null;
+  var recording     = false;
+
+  function setMicIdle() {{
+    recording = false;
+    mbtn.style.background  = '#f3f4f6';
+    mbtn.style.borderColor = '#e5e7eb';
+    mbtn.innerHTML = MIC_OUTLINE;
+    hintRow.style.display = 'none';
+    noteRow.style.display = 'none';
+    recomputeBarHeight();
+  }}
+
+  function setMicRecording() {{
+    recording = true;
+    mbtn.style.background  = '#3b6def';
+    mbtn.style.borderColor = '#3b6def';
+    mbtn.innerHTML = MIC_FILLED;
+    hintRow.textContent = '녹음 중... 다시 누르면 텍스트로 변환됩니다';
+    hintRow.style.display = 'block';
+    noteRow.style.display = 'block';
+    recomputeBarHeight();
+  }}
+
+  function setMicProcessing() {{
+    hintRow.textContent = '음성을 텍스트로 변환하는 중...';
+    recomputeBarHeight();
+  }}
+
+  function startRecording() {{
+    navigator.mediaDevices.getUserMedia({{ audio: true }}).then(function(stream) {{
+      micStream = stream;
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = function(e) {{
+        if (e.data.size > 0) audioChunks.push(e.data);
+      }};
+      mediaRecorder.onstop = function() {{
+        micStream.getTracks().forEach(function(t) {{ t.stop(); }});
+        setMicProcessing();
+        var blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
+        var formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+        fetch('{api.BASE_URL}/voice/transcribe', {{
+          method: 'POST',
+          headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
+          body: formData
+        }})
+          .then(function(res) {{
+            if (!res.ok) throw new Error('transcribe failed: ' + res.status);
+            return res.json();
+          }})
+          .then(function(data) {{
+            var t = data.text || '';
+            cta.value = t;
+            lastInputType = 'voice';
+            syncSt(t);
+            autosize();
+            setMicIdle();
+          }})
+          .catch(function(err) {{
+            alert('음성 변환에 실패했습니다. 다시 시도해주세요.');
+            setMicIdle();
+          }});
+      }};
+      mediaRecorder.start();
+      setMicRecording();
+    }}).catch(function(err) {{
+      alert('마이크 권한이 필요합니다.');
+    }});
+  }}
+
+  function stopRecording() {{
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {{
+      mediaRecorder.stop();
+    }}
+  }}
+
+  if (navigator.mediaDevices && window.MediaRecorder) {{
     mbtn.addEventListener('click', function() {{
-      if (rec) {{ recog.stop(); }}
-      else {{
-        recog.start(); rec = true;
-        mbtn.style.background  = '#fee2e2';
-        mbtn.style.borderColor = '#dc2626';
-        if (micSvg) micSvg.style.stroke = '#dc2626';
-      }}
+      if (recording) {{ stopRecording(); }}
+      else {{ startRecording(); }}
     }});
   }} else {{
     mbtn.style.opacity = '0.4';
-    mbtn.title = '음성 인식 미지원';
+    mbtn.title = '음성 녹음 미지원';
   }}
 }})();
 </script>
@@ -445,7 +693,7 @@ TAG_COLORS = {
     "압박":      "#991b1b",
 }
 
-for msg in st.session_state.iv_messages:
+for i, msg in enumerate(st.session_state.iv_messages):
     if msg["role"] == "ai":
         tag   = msg.get("tag")
         text  = msg["text"]
@@ -459,10 +707,21 @@ for msg in st.session_state.iv_messages:
             f'<img src="{_avatar_src}" style="width:100%;height:100%;object-fit:cover;">'
             if _avatar_src else ""
         )
+
+        tts_text = htmlmod.escape(text)
+        playback_html = (
+            f'<div class="iv-playback-block" style="{"" if voice_guide_on else "display:none;"}">'
+            '<div class="iv-playback-divider"></div>'
+            f'<div class="iv-playback-row" data-msg-idx="{i}">'
+            '<span class="iv-playback-status">▶  재생 중</span>'
+            f'<span class="iv-playback-replay" data-tts="{tts_text}">다시 듣기</span>'
+            '</div>'
+            '</div>'
+        )
         st.markdown(
             f'<div class="iv-ai-row">'
             f'<div class="iv-ai-avatar">{_avatar_img}</div>'
-            f'<div class="iv-ai-bubble">{body}</div>'
+            f'<div class="iv-ai-bubble">{body}{playback_html}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -475,16 +734,18 @@ for msg in st.session_state.iv_messages:
         )
 
 # ── 채팅 입력 ─────────────────────────────────────────────────────────────
-MOCK_NEXT = {"role": "ai", "tag": "꼬리 질문",
-             "text": "좋은 답변이네요. 조금 더 구체적인 수치나 사례를 들어 설명해 주실 수 있나요?"}
-
 if prompt := st.chat_input("답변을 입력하세요..."):
     st.session_state.iv_messages.append({"role": "user", "tag": None, "text": prompt})
 
+    answer_input_type = st.session_state.get("input_type_hidden", "text")
+
     session_id = get("session_id")
-    if session_id:
+    if not session_id:
+        st.session_state.iv_messages.pop()
+        st.error("면접 세션이 없습니다. 처음부터 다시 시작해주세요.")
+    else:
         try:
-            resp = api.send_answer(session_id, prompt)
+            resp = api.send_answer(session_id, prompt, input_type=answer_input_type)
             if resp.get("question_type") == "end":
                 state_set("interview_done", True)
                 st.switch_page("pages/05_결과리포트.py")
@@ -495,13 +756,21 @@ if prompt := st.chat_input("답변을 입력하세요..."):
                     "tag":  tag,
                     "text": resp["next_question"],
                 })
-        except Exception:
-            st.session_state.iv_messages.append(MOCK_NEXT)
-    else:
-        st.session_state.iv_messages.append(MOCK_NEXT)
+                st.rerun()
+        except requests.exceptions.ConnectionError:
+            st.session_state.iv_messages.pop()
+            st.error("서버에 연결할 수 없습니다. 답변이 전송되지 않았습니다.")
+        except requests.exceptions.Timeout:
+            st.session_state.iv_messages.pop()
+            st.error("응답 생성이 시간 초과되었습니다. 다시 시도해주세요.")
+        except requests.exceptions.HTTPError as e:
+            st.session_state.iv_messages.pop()
+            status = e.response.status_code if e.response is not None else "?"
+            st.error(f"답변 전송에 실패했습니다. (서버 오류: {status})")
+        except Exception as e:
+            st.session_state.iv_messages.pop()
+            st.error(f"알 수 없는 오류가 발생했습니다: {e}")
 
-    st.rerun()
-
-# ── 숨김 종료 버튼 (JS 오버레이 2.5초 후 클릭 → 결과 리포트로 이동) ──────────
+# ── 숨김 종료 버튼 ──────────
 if st.button("종료", key="btn_end_interview"):
     st.switch_page("pages/05_결과리포트.py")

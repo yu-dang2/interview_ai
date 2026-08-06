@@ -1,5 +1,6 @@
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
+from utils.state import restore_access_token_nonblocking
 
 st.set_page_config(
     page_title="intro",
@@ -7,8 +8,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+logged_in = bool(restore_access_token_nonblocking())
+
 # ── 스타일 ───────────────────────────────────────────────────────────
-css = Path("styles/global.css").read_text(encoding="utf-8")
+css = resource("styles/global.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 st.markdown("""
@@ -35,11 +38,12 @@ st.markdown("""
 [data-testid="stMainBlockContainer"] { overflow: visible !important; }
 
 /* CTA 버튼 */
-.cta-wrap .stButton > button {
+.st-key-cta_start_btn button {
     height: 52px !important;
     border-radius: 8px !important;
+}
+.st-key-cta_start_btn button p {
     font-size: 15px !important;
-    font-weight: 700 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -47,10 +51,10 @@ st.markdown("""
 
 # ── 아이콘 SVG 로드 ──────────────────────────────────────────────────
 ICONS = {
-    "file":    Path("assets/icons/Group 15.svg").read_text(encoding="utf-8"),
-    "mic":     Path("assets/icons/Mic.svg").read_text(encoding="utf-8"),
-    "chart":   Path("assets/icons/Group 19.svg").read_text(encoding="utf-8"),
-    "refresh": Path("assets/icons/Refresh_2.svg").read_text(encoding="utf-8"),
+    "file":    resource("assets/icons/Group 15.svg").read_text(encoding="utf-8"),
+    "mic":     resource("assets/icons/Mic.svg").read_text(encoding="utf-8"),
+    "chart":   resource("assets/icons/Group 19.svg").read_text(encoding="utf-8"),
+    "refresh": resource("assets/icons/Refresh_2.svg").read_text(encoding="utf-8"),
 }
 
 
@@ -87,15 +91,17 @@ FEATURES = [
 
 
 # ── 1. 네비게이션 바 ─────────────────────────────────────────────────
-st.markdown("""
-<nav class="navbar">
-    <span class="navbar-brand">intro</span>
-    <div class="navbar-right">
-        <a class="btn-ghost"  href="/%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85" target="_self">회원가입</a>
-        <a class="btn-filled" href="/%EB%A1%9C%EA%B7%B8%EC%9D%B8"           target="_self">로그인</a>
-    </div>
-</nav>
-""", unsafe_allow_html=True)
+_nav_right = "" if logged_in else (
+    '<a class="btn-ghost"  href="/%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85" target="_self">회원가입</a>'
+    '<a class="btn-filled" href="/%EB%A1%9C%EA%B7%B8%EC%9D%B8"           target="_self">로그인</a>'
+)
+st.markdown(
+    f'<nav class="navbar">'
+    f'<span class="navbar-brand">intro</span>'
+    f'<div class="navbar-right">{_nav_right}</div>'
+    f'</nav>',
+    unsafe_allow_html=True,
+)
 
 
 # ── 2. 히어로 ────────────────────────────────────────────────────────
@@ -119,10 +125,11 @@ st.markdown("""
 # ── 3. CTA 버튼 ──────────────────────────────────────────────────────
 _, center, _ = st.columns([2, 1, 2])
 with center:
-    st.markdown('<div class="cta-wrap">', unsafe_allow_html=True)
-    if st.button("면접 시작하기", type="primary", use_container_width=True):
-        st.switch_page("pages/01_로그인.py")
-    st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("면접 시작하기", type="primary", use_container_width=True, key="cta_start_btn"):
+        if logged_in:
+            st.switch_page("pages/03_면접_환경설정.py")
+        else:
+            st.switch_page("pages/01_로그인.py")
 
 
 # ── 4. 통계 ──────────────────────────────────────────────────────────
@@ -148,7 +155,7 @@ def make_feat_card(f: dict) -> str:
     return (
         f'<div class="feat-card">'
         f'  <div class="feat-icon-box" style="background:{f["icon_bg"]};">'
-        f'    {ICONS[f["icon"]]}'   
+        f'    {ICONS[f["icon"]]}'
         f'  </div>'
         f'  <div class="feat-title">{f["title"]}</div>'
         f'  {items_html}'
@@ -164,4 +171,3 @@ st.markdown(
     f'</div>',
     unsafe_allow_html=True,
 )
-

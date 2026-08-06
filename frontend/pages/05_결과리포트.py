@@ -1,6 +1,6 @@
 import time
 import streamlit as st
-from pathlib import Path
+from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set
@@ -28,7 +28,7 @@ render_sidebar(active="결과 리포트")
 # ── SVG 아이콘 로드 ────────────────────────────────────────────────────────
 def _svg(name: str) -> str:
     try:
-        return Path(f"assets/icons/{name}").read_text()
+        return resource(f"assets/icons/{name}").read_text()
     except Exception:
         return ""
 
@@ -85,12 +85,17 @@ else:
     persona_str  = get("interviewer_style") or "기술 리드"
 
 interview_score = round(sum(MY_SCORES) / len(MY_SCORES)) if MY_SCORES else 78
-today = datetime.now().strftime("%-m월 %-d일")
+_now = datetime.now()
+today = f"{_now.month}월 {_now.day}일"
 meta_str = f"{today} &nbsp;|&nbsp; {persona_str} 면접관"
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 36px 40px 60px 40px !important; }
+[data-testid="stMainBlockContainer"] {
+    padding: 36px 40px 60px 40px !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stPlotlyChart"] { padding: 0 !important; margin: 0 10px 0 0 !important; border-left: 1px solid #dedede !important; border-right: 1px solid #dedede !important; overflow: hidden !important; }
 [data-testid="stPlotlyChart"] > div { padding: 0 !important; overflow: hidden !important; }
@@ -99,6 +104,30 @@ st.markdown("""<style>
   100% { background-position:  600px 0; }
 }
 .sk { background: linear-gradient(90deg,#f0f2f5 25%,#e4e7ec 50%,#f0f2f5 75%); background-size:1200px 100%; animation: shimmer 1.4s infinite; border-radius:6px; }
+
+[data-score-label], [data-panel-header], [data-comp-label], [data-comp-score] {
+    white-space: nowrap !important;
+}
+[data-testid="stBaseButton-primary"],
+[data-testid="stBaseButton-secondary"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+}
+[data-testid="stBaseButton-primary"] p,
+[data-testid="stBaseButton-secondary"] p {
+    white-space: nowrap !important;
+    text-align: center !important;
+    overflow: visible !important;
+}
+.st-key-bottom_actions {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 12px !important;
+}
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 ──────────────────────────────────────────────────────────────────
@@ -115,20 +144,20 @@ def _score_section(color, pill_bg, pill_border, label, icon, sublabel, score, fi
     return (
         f'<div style="flex:1;padding:14px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;">'
         f'<div style="background:{pill_bg};border:1px solid {pill_border};border-radius:10px;height:20px;display:flex;align-items:center;justify-content:center;">'
-        f'<span style="font-size:9px;font-weight:700;color:{color};">{label}</span>'
+        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};">{label}</span>'
         f'</div>'
         f'<div style="display:flex;align-items:center;justify-content:space-between;">'
-        f'<div style="display:flex;align-items:center;gap:6px;">{icon}<span style="font-size:11px;color:#6b7280;">{sublabel}</span></div>'
-        f'<span style="font-size:26px;font-weight:700;color:{color};line-height:1;">{score}점</span>'
+        f'<div style="display:flex;align-items:center;gap:6px;">{icon}<span data-score-label style="font-size:11px;color:#6b7280;">{sublabel}</span></div>'
+        f'<span data-score-label style="font-size:26px;font-weight:700;color:{color};line-height:1;">{score}점</span>'
         f'</div>'
         f'<div style="background:#e5e7eb;height:6px;border-radius:3px;">'
         f'<div style="background:{color};height:6px;border-radius:3px;width:{fill_pct}%;"></div>'
         f'</div>'
         f'<div style="display:flex;align-items:center;gap:6px;">'
         f'<div style="background:{pill_bg};border:1px solid {color};border-radius:9px;padding:0 8px;height:18px;display:flex;align-items:center;">'
-        f'<span style="font-size:9px;font-weight:700;color:{color};line-height:1;position:relative;top:0.5px;">{badge}</span>'
+        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};line-height:1;position:relative;top:0.5px;">{badge}</span>'
         f'</div>'
-        f'<span style="font-size:10px;color:#6b7280;">{sub}</span>'
+        f'<span data-score-label style="font-size:10px;color:#6b7280;">{sub}</span>'
         f'</div>'
         f'</div>'
     )
@@ -153,7 +182,7 @@ col_l, col_r = st.columns([485, 635])
 with col_l:
     st.markdown(
         '<div style="background:white;border:1px solid #dedede;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
-        '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
+        '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
         '</div>',
         unsafe_allow_html=True
     )
@@ -193,7 +222,7 @@ with col_r:
     if summary_text:
         st.markdown(
             '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
             f'<div style="font-size:13px;color:#374151;line-height:1.8;white-space:pre-wrap;">{summary_text}</div>'
             '</div>',
             unsafe_allow_html=True
@@ -201,19 +230,19 @@ with col_r:
     else:
         st.markdown(
             '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
             '<div style="margin-bottom:16px;">'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">강점</div>'
+            '<div data-panel-header style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">강점</div>'
             '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">논리적 사고와 태도가 우수합니다. LangGraph 기반 상태 관리 개념을 명확히 이해하고 있습니다.</div>'
             '</div>'
             '<div style="background:#dedede;height:1px;margin-bottom:16px;"></div>'
             '<div style="margin-bottom:16px;">'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">개선점</div>'
+            '<div data-panel-header style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">개선점</div>'
             '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">답변 구체성이 부족합니다. 실제 수치와 프로젝트 성과를 포함한 답변을 연습하세요.</div>'
             '</div>'
             '<div style="background:#dedede;height:1px;margin-bottom:16px;"></div>'
             '<div>'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">추천 학습</div>'
+            '<div data-panel-header style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">추천 학습</div>'
             '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">Pydantic 심화 학습 및 RAG 파이프라인 구현 경험을 추가하면 직무 전문성이 향상됩니다.</div>'
             '</div>'
             '</div>',
@@ -226,11 +255,11 @@ for label, score, avg, comment in COMPETENCIES:
     s = min(max(score, 0), 100)
     a = min(max(avg, 0), 100)
     comp_rows += (
-        '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;height:65px;display:flex;align-items:center;margin-bottom:7px;">'
+        '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
         '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
-        f'<div style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
-        f'<span style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
-        f'<span style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
+        f'<div data-comp-label style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
+        f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
+        f'<span data-comp-score style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
         '</div>'
         '<div style="flex:1;padding:0 16px;position:relative;">'
         f'<div style="font-size:10px;color:#3b6ef0;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
@@ -239,8 +268,8 @@ for label, score, avg, comment in COMPETENCIES:
         f'<div style="position:absolute;left:{a}%;top:-4px;width:2px;height:13px;background:rgba(191,196,204,0.8);transform:translateX(-50%);border-radius:1px;"></div>'
         '</div>'
         '</div>'
-        '<div style="width:1px;height:48px;background:#e5e8eb;flex-shrink:0;"></div>'
-        f'<div style="flex:1;padding:0 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
+        '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e8eb;flex-shrink:0;"></div>'
+        f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
         '</div>'
     )
 
@@ -290,7 +319,7 @@ if st.session_state.get("webcam_on", False):
         st.markdown(
             '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
             '<div style="padding:16px 19px 0;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
             '</div>'
             f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
             '</div><div style="height:32px"></div>',
@@ -298,12 +327,8 @@ if st.session_state.get("webcam_on", False):
         )
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
-_, btn1, _gap, btn2, _ = st.columns([3, 2, 0.3, 2, 3])
-with btn1:
-    if st.button("피드백 보고서 보기", type="primary", use_container_width=True):
-        st.switch_page("pages/06_피드백보고서.py")
-with btn2:
-    if st.button("다시 면접하기", use_container_width=True):
+with st.container(key="bottom_actions"):
+    if st.button("다시 면접하기"):
         state_set("session_id",     None)
         state_set("first_question", None)
         state_set("result",         None)
@@ -311,3 +336,5 @@ with btn2:
         if "iv_messages" in st.session_state:
             del st.session_state["iv_messages"]
         st.switch_page("pages/03_면접_환경설정.py")
+    if st.button("피드백 보고서 보기", type="primary"):
+        st.switch_page("pages/06_피드백보고서.py")

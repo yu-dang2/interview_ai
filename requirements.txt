@@ -6,6 +6,7 @@ langchain==1.3.12
 langchain-core==1.4.9
 langchain-openai==1.3.4
 langgraph==1.2.9
+langgraph-checkpoint-sqlite==3.1.1   # 면접 진행 상태 영속화 (서버 재시작 후 이어하기)
 openai==2.45.0
 
 # 백엔드
@@ -13,8 +14,18 @@ fastapi==0.139.0
 uvicorn==0.51.0
 SQLAlchemy==2.0.51
 PyMySQL==1.2.0
+cryptography==49.0.0       # MySQL 8 기본 인증(caching_sha2_password)에 PyMySQL이 요구
 pydantic==2.13.4
 email-validator==2.3.0
+python-multipart==0.0.32   # UploadFile 사용에 필수
+bcrypt==4.2.1              # 비밀번호 해싱
+PyJWT==2.10.1              # 액세스 토큰 발급/검증
+pypdf==5.1.0               # 이력서/JD PDF 파싱
+python-docx==1.1.2         # 이력서/JD DOCX 파싱
+
+# 영상 분석 (Python 3.13 미지원 — 3.11/3.12 가상환경이어야 한다)
+opencv-python==4.11.0.86
+mediapipe==0.10.21
 
 # 프론트엔드
 streamlit==1.59.1

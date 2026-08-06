@@ -20,19 +20,27 @@ st.markdown("""<style>
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
 [data-testid="stColumn"] { padding: 0 !important; }
+[data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
+    width: 100% !important;
+}
 
-/* 카드 — stLayoutWrapper가 border=True 컨테이너 */
 [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
 [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] {
     background: white !important;
     border: none !important;
     outline: none !important;
 }
+
 [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {
     border-radius: 16px !important;
     box-shadow: 0px 4px 24px rgba(0,0,0,0.1) !important;
     padding: 20px !important;
     box-sizing: border-box !important;
+    width: 480px !important;
+    max-width: 480px !important;
+    position: relative !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
 }
 
 [data-testid="stBaseButton-primary"] {
@@ -44,7 +52,6 @@ st.markdown("""<style>
     border-color: #2d55c8 !important;
 }
 
-/* 카드 내 마지막 요소 아래 여백 제거 */
 [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="element-container"]:last-child {
     margin-bottom: 0 !important;
     padding-bottom: 0 !important;
