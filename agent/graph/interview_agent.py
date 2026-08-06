@@ -20,6 +20,7 @@ from agent.graph.nodes.question_generator import question_generator
 from agent.graph.nodes.answer_evaluator import answer_evaluator
 from agent.graph.nodes.follow_up_generator import follow_up_generator
 from agent.graph.nodes.report_generator import report_generator
+from agent.graph.nodes.resume_optimizer import resume_optimizer
 from agent.graph.edges.topic_router import topic_router
 from agent.graph.edges.question_router import question_router
 
@@ -55,6 +56,7 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_node("answer_evaluator", answer_evaluator)
     builder.add_node("follow_up_generator", follow_up_generator)
     builder.add_node("report_generator", report_generator)
+    builder.add_node("resume_optimizer", resume_optimizer)
 
     # 엣지 연결
     # 초기 흐름: 페르소나 확인 → JD/이력서 파싱 → 매칭 → 첫 질문 생성
@@ -86,7 +88,11 @@ def build_graph(checkpointer=None, interrupt_before=None):
         ["report_generator", "follow_up_generator", "question_generator"],
     )
     builder.add_edge("follow_up_generator", "answer_evaluator")
-    builder.add_edge("report_generator", END)
+    # 종료 직전 이력서 자동 최적화. report_generator가 END 직전 유일 노드라
+    # interrupt/non-interrupt 양쪽 토폴로지 공통 경로에 삽입된다.
+    # is_finished 등 종료값은 report_generator가 이미 설정하며 resume_optimizer는 건드리지 않는다.
+    builder.add_edge("report_generator", "resume_optimizer")
+    builder.add_edge("resume_optimizer", END)
 
     return builder.compile(
         checkpointer=checkpointer,
