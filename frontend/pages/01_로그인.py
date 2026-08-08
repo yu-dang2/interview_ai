@@ -17,7 +17,7 @@ st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
-/* ── Streamlit 크롬 숨기기 ── */
+
 #MainMenu, footer, [data-testid="stDecoration"],
 [data-testid="stSidebarNav"] { display:none !important; }
 header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !important; }
@@ -25,12 +25,10 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 [data-testid="collapsedControl"],
 [data-testid="stExpandSidebarButton"] { display:none !important; }
 
-/* ── 전체 화면, 스크롤 없음 ── */
 html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"] { height:100vh !important; overflow:hidden !important; }
 
-/* ── 오른쪽 콘텐츠 영역: 왼쪽 43% 비우기 ── */
 .main .block-container,
 [data-testid="stMainBlockContainer"] {
     margin-left: 43% !important;
@@ -42,11 +40,9 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
     box-sizing: border-box !important;
 }
 
-/* ── 모든 gap 제거 ── */
 [data-testid="stVerticalBlock"]  { gap:0 !important; }
 [data-testid="stHorizontalBlock"] { gap:0 !important; }
 
-/* ── 텍스트 인풋 ── */
 [data-testid="stTextInput"] { margin:0 !important; padding:0 0 6px 0 !important; overflow:visible !important; }
 [data-testid="stTextInput"] > div { padding:0 !important; margin:0 !important; overflow:visible !important; }
 [data-testid="stTextInput"] label,
@@ -71,7 +67,6 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
     box-shadow: 0 0 0 3px rgba(59,109,239,0.15) !important;
     outline: none !important;
 }
-/* ── 비번 눈 버튼: input 안으로 ── */
 [data-testid="stTextInput"] > div > div {
     position: relative !important;
     overflow: visible !important;
@@ -91,14 +86,12 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
     z-index: 1 !important;
 }
 
-/* ── 로그인 버튼 ── */
 [data-testid="stBaseButton-primary"] {
     width: 100% !important;
     height: 48px !important;
     border-radius: 8px !important;
 }
 
-/* ── 회원가입 page_link ── */
 [data-testid="stPageLink"] { display:flex !important; justify-content:center !important; margin:0 !important; padding:0 !important; }
 [data-testid="stPageLink"] a { font-size:13px !important; font-weight:600 !important; color:#3b6def !important; text-decoration:none !important; }
 [data-testid="stPageLink"] svg { display:none !important; }
@@ -106,7 +99,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 """, unsafe_allow_html=True)
 
 
-# ── 왼쪽 패널 (position: fixed) ───────────────────────────────────────
+# ── 왼쪽 패널 ───────────────────────────────────────
 CHECK = """<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
   <circle cx="11" cy="11" r="11" fill="rgba(255,255,255,0.2)"/>
   <path d="M7 11l2.8 2.8 5.2-5.2" stroke="white" stroke-width="2.2"
@@ -171,17 +164,20 @@ with form_col:
                margin:0 0 60px;line-height:1.2;">로그인</div>
     """, unsafe_allow_html=True)
 
-    email = st.text_input("이메일", placeholder="example@email.com",
-                          key="login_email")
+    with st.form("login_form", border=False):
+        email = st.text_input("이메일", placeholder="example@email.com",
+                              key="login_email")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    password = st.text_input("비밀번호", placeholder="비밀번호를 입력하세요",
-                             type="password", key="login_pw")
+        password = st.text_input("비밀번호", placeholder="비밀번호를 입력하세요",
+                                 type="password", key="login_pw")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    if st.button("로그인", type="primary", use_container_width=True, key="btn_login"):
+        submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
+
+    if submitted:
         if not email or not password:
             st.error("이메일과 비밀번호를 입력해주세요.")
         else:
