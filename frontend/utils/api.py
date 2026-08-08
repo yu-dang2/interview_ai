@@ -62,7 +62,7 @@ def start_interview(resume_id: int, jd_id: int, persona: str) -> dict:
         f"{BASE_URL}/interview/sessions",
         json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
         headers=_headers(),
-        timeout=180,  # JD·이력서 파싱 + 첫 질문 생성까지 LLM 호출이 이어져 오래 걸림
+        timeout=180, 
     )
     res.raise_for_status()
     return res.json()
@@ -76,7 +76,7 @@ def send_answer(session_id: str, answer: str, input_type: str | None = None) -> 
         f"{BASE_URL}/interview/sessions/{session_id}/chat",
         json=payload,
         headers=_headers(),
-        timeout=90,  # 답변 평가 + 다음 질문 생성 LLM 호출
+        timeout=180, 
     )
     res.raise_for_status()
     return res.json()
@@ -94,7 +94,7 @@ def get_result(session_id: str) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/result",
         headers=_headers(),
-        timeout=90,  # 결과 종합 분석 LLM 호출
+        timeout=90,
     )
     res.raise_for_status()
     return res.json()
@@ -105,6 +105,28 @@ def get_result(session_id: str) -> dict:
 def get_feedback(session_id: str) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/feedback",
+        headers=_headers(),
+        timeout=30,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+# ── 영상 분석 ───────────────────────────────────────────────────────────────
+
+def get_video_metrics(session_id: str) -> dict:
+    res = requests.get(
+        f"{BASE_URL}/interview/{session_id}/video-metrics",
+        headers=_headers(),
+        timeout=30,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+def get_my_videos() -> dict:
+    res = requests.get(
+        f"{BASE_URL}/mypage/videos",
         headers=_headers(),
         timeout=30,
     )
