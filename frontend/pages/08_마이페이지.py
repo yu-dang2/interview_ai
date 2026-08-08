@@ -1,7 +1,11 @@
+import json
+from datetime import datetime
+
 import streamlit as st
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
 from utils.state import init_session
+from utils import api
 
 try:
     import plotly.graph_objects as go
@@ -19,6 +23,11 @@ st.set_page_config(
 init_session()
 render_sidebar(active="마이페이지")
 
+try:
+    _my_videos = api.get_my_videos().get("videos", [])
+except Exception:
+    _my_videos = []
+
 # ── 데이터 ───────────────────────────────────────────────────────────────
 HISTORY = [
     {"date": "04.30", "style": "기술 리드",   "resume": 72, "iv": 78, "total": 75, "has_video": True,  "video_url": ""},
@@ -27,6 +36,19 @@ HISTORY = [
     {"date": "04.10", "style": "임원 면접관", "resume": 68, "iv": 71, "total": 70, "has_video": False, "video_url": ""},
     {"date": "04.03", "style": "기술 리드",   "resume": 60, "iv": 58, "total": 59, "has_video": True,  "video_url": ""},
 ]
+
+for _i, _h in enumerate(HISTORY):
+    if _i < len(_my_videos):
+        _h["has_video"] = True
+        _h["video_url"] = _my_videos[_i]["video_url"]
+        try:
+            _real_dt = datetime.fromisoformat(_my_videos[_i]["date"].replace("Z", "+00:00"))
+            _h["date"] = _real_dt.strftime("%m.%d")
+        except (ValueError, KeyError):
+            pass
+    else:
+        _h["has_video"] = False
+        _h["video_url"] = ""
 
 VERSIONS = [
     {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
@@ -142,8 +164,9 @@ col_chart, _gap, col_ver = st.columns([35, 1, 21])
 
 with col_chart:
     if HAS_PLOTLY:
-        x_labels = ["04.03", "04.10", "04.18", "04.24", "04.30"]
-        iv_scores = [h["iv"] for h in reversed(HISTORY)]
+        CHART_HISTORY = HISTORY[:5]
+        x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
+        iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
 
         def ann_style(s):
             if s >= 80: return {"color": "#16a34a", "size": 11}
@@ -170,16 +193,16 @@ with col_chart:
             showlegend=False,
         ))
 
-        fig.add_shape(type="line", x0=-0.45, x1=4.45, y0=70, y1=70,
+        _last_idx = len(CHART_HISTORY) - 1
+        fig.add_shape(type="line", x0=-0.45, x1=_last_idx + 0.45, y0=70, y1=70,
                       line=dict(color="#94a3b8", width=1))
         fig.add_annotation(
-            x=4.55, y=70, text="기준<br>70",
+            x=_last_idx + 0.55, y=70, text="기준<br>70",
             showarrow=False, xanchor="left", yanchor="middle",
             font=dict(size=8, color="#94a3b8", family="Pretendard"),
             align="center",
         )
 
-        # 카테고리 축에서 annotation yshift가 불안정해서 text scatter trace 사용
         fig.add_trace(go.Scatter(
             x=x_labels,
             y=[s + 4 for s in iv_scores],
@@ -272,8 +295,9 @@ with col_ver:
 COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(90px,1fr)"
 
 def _play_btn(video_url: str) -> str:
+    full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
     return (
-        f'<div data-video-url="{video_url}" style="display:inline-flex;align-items:center;gap:6px;'
+        f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
         'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
         'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
         '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
@@ -341,19 +365,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-components.html("""
+
+_access_token = st.session_state.get("access_token", "")
+
+components.html(f"""
 <script>
-(function () {
+(function () {{
     var doc = window.parent.document;
-    if (doc._videoModalReady) return;
+    var ACCESS_TOKEN = {json.dumps(_access_token)};
+    if (doc._videoModalReady) {{
+        doc._videoModalToken = ACCESS_TOKEN;
+        return;
+    }}
     doc._videoModalReady = true;
+    doc._videoModalToken = ACCESS_TOKEN;
 
-    function closeModal() {
+    function closeModal() {{
         var m = doc.getElementById('_video_modal');
-        if (m) m.remove();
-    }
+        if (m) {{
+            var v = m.querySelector('video');
+            if (v && v.src && v.src.indexOf('blob:') === 0) URL.revokeObjectURL(v.src);
+            m.remove();
+        }}
+    }}
 
-    function openModal(url) {
+    function openModal(url) {{
         closeModal();
 
         var modal = doc.createElement('div');
@@ -375,29 +411,44 @@ components.html("""
         box.appendChild(closeBtn);
         box.appendChild(title);
 
-        if (url) {
-            var video = doc.createElement('video');
-            video.controls = true;
-            video.autoplay = true;
-            video.src = url;
-            video.style.cssText = 'width:100%;max-height:70vh;border-radius:8px;background:#000;display:block;';
-            box.appendChild(video);
-        } else {
+        if (url) {{
+            var status = doc.createElement('p');
+            status.textContent = '영상을 불러오는 중...';
+            status.style.cssText = 'font-size:13px;color:#6b7280;text-align:center;padding:40px 0;margin:0;';
+            box.appendChild(status);
+
+            fetch(url, {{ headers: {{ 'Authorization': 'Bearer ' + doc._videoModalToken }} }})
+                .then(function (res) {{
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.blob();
+                }})
+                .then(function (blob) {{
+                    var video = doc.createElement('video');
+                    video.controls = true;
+                    video.autoplay = true;
+                    video.src = URL.createObjectURL(blob);
+                    video.style.cssText = 'width:100%;max-height:70vh;border-radius:8px;background:#000;display:block;';
+                    if (status.parentNode) status.replaceWith(video);
+                }})
+                .catch(function (err) {{
+                    status.textContent = '영상을 불러오지 못했습니다: ' + err.message;
+                }});
+        }} else {{
             var ph = doc.createElement('div');
             ph.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:#9ca3af;gap:12px;';
             ph.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:14px;">저장된 영상이 없습니다</span>';
             box.appendChild(ph);
-        }
+        }}
 
         modal.appendChild(box);
-        modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+        modal.addEventListener('click', function (e) {{ if (e.target === modal) closeModal(); }});
         doc.body.appendChild(modal);
-    }
+    }}
 
-    doc.addEventListener('click', function (e) {
+    doc.addEventListener('click', function (e) {{
         var btn = e.target.closest('[data-video-url]');
         if (btn) openModal(btn.getAttribute('data-video-url'));
-    });
-}());
+    }});
+}}());
 </script>
 """, height=0)
