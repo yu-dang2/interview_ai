@@ -19,6 +19,22 @@ st.set_page_config(
 
 init_session()
 
+if st.session_state.pop("_iv_nav_ready_consumed", False):
+    st.session_state["_iv_nav_ready"] = ""
+
+st.markdown(
+    "<style>.st-key-_iv_nav_ready { position:absolute; width:0; height:0; "
+    "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+    unsafe_allow_html=True,
+)
+_nav_ready = st.text_input(
+    "_iv_nav_ready", key="_iv_nav_ready", label_visibility="collapsed"
+)
+if _nav_ready and _nav_ready.startswith("go:"):
+    st.session_state.webcam_on = _nav_ready.split(":", 1)[1] == "1"
+    st.session_state["_iv_nav_ready_consumed"] = True
+    st.switch_page("pages/045_결과로딩.py")
+
 if "iv_messages" not in st.session_state:
     session_id = get("session_id")
     first_q    = get("first_question")
@@ -92,47 +108,84 @@ elapsed   = int(time.time() - st.session_state.iv_start)
 remaining = max(0, 30 * 60 - elapsed)
 timer_str = f"{remaining // 60:02d}:{remaining % 60:02d}"
 
-# ── 데이터 ───────────────────────────────────────────────────────────────
-TOTAL  = 72
-SCORES = [("논리성", 78), ("커뮤니케이션", 82), ("전문 지식", 65), ("태도", 71), ("문제 해결력", 75)]
-VIDEO_METRICS = [("시선 처리", 76, "#3b6def")]
+# ── 실시간 피드백 데이터 ───────────────────────────────────────────────────
+_rt_pending  = bool(st.session_state.get("_pending_answer"))
+_rt_score    = None if _rt_pending else st.session_state.get("realtime_score")
+_rt_feedback = [] if _rt_pending else (st.session_state.get("realtime_feedback") or [])
+
+TOTAL = _rt_score.get("total") if _rt_score else None
+SCORES = [
+    ("논리성",       _rt_score.get("logic", 0)),
+    ("커뮤니케이션", _rt_score.get("communication", 0)),
+    ("전문 지식",    _rt_score.get("expertise", 0)),
+    ("태도",         _rt_score.get("attitude", 0)),
+    ("문제 해결력",  _rt_score.get("problem_solving", 0)),
+] if _rt_score else []
 
 R = 40; cx = cy = 52
 circ = 2 * math.pi * R
-fill = circ * TOTAL / 100
-donut_svg = (
-    f'<svg width="108" height="108" viewBox="0 0 104 104">'
-    f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#e5e7eb" stroke-width="10"/>'
-    f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#3b6def" stroke-width="10"'
-    f' stroke-dasharray="{fill:.1f} {circ - fill:.1f}"'
-    f' transform="rotate(-90 {cx} {cy})" stroke-linecap="round"/>'
-    f'<text x="{cx}" y="{cy + 7}" text-anchor="middle" font-size="22" font-weight="700"'
-    f' fill="#1f1f1f" font-family="sans-serif">{TOTAL}</text>'
-    f'<text x="{cx}" y="{cy + 22}" text-anchor="middle" font-size="10"'
-    f' fill="#9ca3af" font-family="sans-serif">/100</text>'
-    f'</svg>'
-)
-
-scores_html = ""
-for label, score in SCORES:
-    scores_html += (
-        f'<div style="display:flex;justify-content:space-between;font-size:12px;'
-        f'color:#1f1f1f;margin-bottom:4px;">'
-        f'<span>{label}</span>'
-        f'<span style="font-weight:600;color:#3b6def;">{score}</span></div>'
-        f'<div style="background:#edeef0;border-radius:3px;height:5px;margin-bottom:14px;">'
-        f'<div style="width:{score}%;background:#3b6def;height:5px;border-radius:3px;"></div></div>'
+if TOTAL is None:
+    donut_svg = (
+        f'<svg width="108" height="108" viewBox="0 0 104 104">'
+        f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#e5e7eb" stroke-width="10"/>'
+        f'<text x="{cx}" y="{cy + 5}" text-anchor="middle" font-size="12"'
+        f' fill="#9ca3af" font-family="sans-serif">{"분석 중" if _rt_pending else "대기 중"}</text>'
+        f'</svg>'
+    )
+else:
+    fill = circ * TOTAL / 100
+    donut_svg = (
+        f'<svg width="108" height="108" viewBox="0 0 104 104">'
+        f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#e5e7eb" stroke-width="10"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#3b6def" stroke-width="10"'
+        f' stroke-dasharray="{fill:.1f} {circ - fill:.1f}"'
+        f' transform="rotate(-90 {cx} {cy})" stroke-linecap="round"/>'
+        f'<text x="{cx}" y="{cy + 7}" text-anchor="middle" font-size="22" font-weight="700"'
+        f' fill="#1f1f1f" font-family="sans-serif">{TOTAL}</text>'
+        f'<text x="{cx}" y="{cy + 22}" text-anchor="middle" font-size="10"'
+        f' fill="#9ca3af" font-family="sans-serif">/100</text>'
+        f'</svg>'
     )
 
-video_bars_html = ""
-for label, score, color in VIDEO_METRICS:
-    video_bars_html += (
-        f'<div style="display:flex;justify-content:space-between;font-size:12px;'
-        f'color:#1f1f1f;margin-bottom:6px;">'
-        f'<span style="font-weight:500;">{label}</span>'
-        f'<span style="font-weight:700;color:{color};">{score}</span></div>'
-        f'<div style="background:#edeef0;border-radius:3px;height:6px;margin-bottom:18px;">'
-        f'<div style="width:{score}%;background:{color};height:6px;border-radius:3px;"></div></div>'
+if SCORES:
+    scores_html = ""
+    for label, score in SCORES:
+        scores_html += (
+            f'<div style="display:flex;justify-content:space-between;font-size:12px;'
+            f'color:#1f1f1f;margin-bottom:4px;">'
+            f'<span>{label}</span>'
+            f'<span style="font-weight:600;color:#3b6def;">{score}</span></div>'
+            f'<div style="background:#edeef0;border-radius:3px;height:5px;margin-bottom:14px;">'
+            f'<div style="width:{score}%;background:#3b6def;height:5px;border-radius:3px;"></div></div>'
+        )
+else:
+    scores_html = (
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
+        + ("분석 중입니다..." if _rt_pending else "첫 답변을 제출하면 표시됩니다")
+        + '</div>'
+    )
+
+if _rt_feedback:
+    feedback_html = ""
+    for item in _rt_feedback:
+        is_positive = item.get("type") == "positive"
+        bg    = "#f7f8fc" if is_positive else "#fffbeb"
+        color = "#374151" if is_positive else "#92400e"
+        icon  = "✓" if is_positive else "💡"
+        feedback_html += (
+            f'<div style="background:{bg};border-radius:8px;padding:10px 12px;'
+            f'margin-bottom:6px;font-size:12px;color:{color};">'
+            f'{icon} {item.get("text", "")}</div>'
+        )
+elif _rt_pending:
+    feedback_html = (
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
+        '분석 중입니다...</div>'
+    )
+else:
+    feedback_html = (
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
+        '첫 답변을 제출하면 표시됩니다</div>'
     )
 
 # ── CSS ──────────────────────────────────────────────────────────────────
@@ -160,6 +213,12 @@ st.markdown(f"""<style>
     margin: 0 !important; padding: 0 !important;
 }}
 [data-testid="stHeader"] {{ pointer-events: none !important; }}
+
+#webcam-preview-video::-webkit-media-controls-start-playback-button {{
+    display: none !important;
+    -webkit-appearance: none !important;
+}}
+#webcam-preview-video::-webkit-media-controls {{ display: none !important; }}
 
 .iv-ai-row {{ display:flex; align-items:flex-start; gap:12px; margin-bottom:28px; }}
 .iv-ai-avatar {{
@@ -219,20 +278,16 @@ st.markdown(
 )
 
 # ── 피드백 패널 ───────────────────────────
-person_svg = (
-    '<svg width="100%" height="100%" viewBox="0 0 288 210" preserveAspectRatio="xMidYMid slice"'
-    ' xmlns="http://www.w3.org/2000/svg">'
-    '<rect width="288" height="210" fill="#12151e"/>'
-    '<circle cx="144" cy="74" r="30" fill="#4d5973"/>'
-    '<rect x="108" y="110" width="72" height="52" rx="5" fill="#4d5973"/>'
-    '</svg>'
-)
-
 _webcam_display = "" if webcam_on else "display:none;"
 webcam_html = (
-    f'<div id="webcam-preview-block" style="width:100%;height:210px;overflow:hidden;{_webcam_display}">'
-    + person_svg
-    + '</div>'
+    f'<div id="webcam-preview-block" style="width:100%;height:210px;overflow:hidden;{_webcam_display}'
+    'background:#12151e;position:relative;">'
+    '<video id="webcam-preview-video" autoplay playsinline muted '
+    'style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>'
+    '<div id="webcam-preview-status" style="display:none;position:absolute;inset:0;'
+    'align-items:center;justify-content:center;text-align:center;padding:12px;'
+    'font-size:11px;color:#e5e7eb;background:rgba(0,0,0,0.55);"></div>'
+    '</div>'
     f'<div id="webcam-preview-divider" style="height:1px;background:#e5e8ec;margin-bottom:16px;{_webcam_display}"></div>'
 )
 
@@ -247,18 +302,12 @@ st.markdown(
     '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
     + donut_svg
     + '<div style="font-size:12px;font-weight:500;color:#1f1f1f;margin-top:4px;">현재 점수</div>'
-    '<div style="font-size:11px;color:#3b6def;font-weight:500;">상위 28%</div>'
     '</div>'
     '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
     + scores_html
     + '<div style="font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:10px;">AI 실시간 피드백</div>'
-    '<div style="background:#f7f8fc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;color:#374151;">'
-    '✓ 답변 구조가 명확합니다</div>'
-    '<div style="background:#f7f8fc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;color:#374151;">'
-    '✓ 전문 용어 사용이 적절합니다</div>'
-    '<div style="background:#fffbeb;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;">'
-    '💡 조금 더 구체적인 예시를 추가해보세요</div>'
-    '</div>'
+    + feedback_html
+    + '</div>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -436,14 +485,23 @@ body{{
 
   // ── 전송 ─────────────────────────────────────────────────────────
   function send() {{
+    var value = cta.value;
     syncInputType(lastInputType);
-    syncSt(cta.value);
-    setTimeout(function() {{
+    syncSt(value);
+    function doClick() {{
       var btn = doc.querySelector('[data-testid="stChatInputSubmitButton"]');
       if (btn) {{ btn.click(); cta.value = ''; }}
       lastInputType = 'text';
       autosize();
-    }}, 50);
+    }}
+    var topWin = window.parent;
+    if (topWin && topWin.requestAnimationFrame) {{
+      topWin.requestAnimationFrame(function() {{
+        topWin.requestAnimationFrame(function() {{ setTimeout(doClick, 30); }});
+      }});
+    }} else {{
+      setTimeout(doClick, 80);
+    }}
   }}
   cta.addEventListener('keydown', function(e) {{
     if (e.key === 'Enter' && !e.shiftKey) {{ e.preventDefault(); send(); }}
@@ -472,67 +530,212 @@ body{{
     var pd = doc.getElementById('webcam-preview-divider');
     if (pv) pv.style.display = webcamOn ? '' : 'none';
     if (pd) pd.style.display = webcamOn ? '' : 'none';
+    if (webcamOn) startVideoRecording();
   }});
 
-  // ── AI 질문 음성 안내 ────────────────────────────────────
+  // ── 영상 녹화 (웹캠 허용 시, 면접 시작과 동시에 자동 시작) ─────
   var _accessToken = {json.dumps(_access_token)};
+  var _videoSessionId = {json.dumps(str(get("session_id")))};
+  var _videoRecActive = {str(webcam_on).lower()};
+
+  function startVideoRecording() {{
+    if (window.parent.__ivVideoRec && window.parent.__ivVideoRec.stream) {{
+      var preview0 = doc.getElementById('webcam-preview-video');
+      if (preview0) {{
+        preview0.srcObject = window.parent.__ivVideoRec.stream;
+        var p0 = preview0.play();
+        if (p0 && p0.catch) p0.catch(function(err) {{ console.warn('미리보기 재생 실패:', err); }});
+      }}
+      return;
+    }}
+    if (!window.parent.__ivVideoRec) {{
+      window.parent.__ivVideoRec = {{ recorder: null, stream: null, chunks: [], uploaded: false }};
+    }}
+    var pWin = window.parent;
+    pWin.navigator.mediaDevices.getUserMedia({{
+      video: {{ width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }},
+      audio: false
+    }}).then(function(stream) {{
+      var vr = pWin.__ivVideoRec;
+      vr.stream = stream;
+      _videoRecActive = true;
+      var preview = doc.getElementById('webcam-preview-video');
+      if (preview) {{
+        preview.srcObject = stream;
+        var p = preview.play();
+        if (p && p.catch) p.catch(function(err) {{ console.warn('미리보기 재생 실패:', err); }});
+      }}
+      var statusEl = doc.getElementById('webcam-preview-status');
+      if (statusEl) {{ statusEl.style.display = 'none'; }}
+      try {{
+        var _vMimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+        var _vChosenMime = '';
+        var PRecorder = pWin.MediaRecorder;
+        for (var _vi = 0; _vi < _vMimeCandidates.length; _vi++) {{
+          if (PRecorder.isTypeSupported && PRecorder.isTypeSupported(_vMimeCandidates[_vi])) {{
+            _vChosenMime = _vMimeCandidates[_vi];
+            break;
+          }}
+        }}
+        var _vOpts = {{ videoBitsPerSecond: 500000 }};
+        if (_vChosenMime) _vOpts.mimeType = _vChosenMime;
+        vr.recorder = new PRecorder(stream, _vOpts);
+        vr.recorder.ondataavailable = function(e) {{ if (e.data.size > 0) vr.chunks.push(e.data); }};
+        vr.recorder.start();
+      }} catch (err) {{
+        console.warn('영상 녹화 시작 실패:', err);
+      }}
+    }}).catch(function(err) {{
+      console.warn('웹캠 접근 실패:', err);
+      setStatusIfExists('카메라 접근 실패: ' + err.name + ' — 권한을 허용했는지 확인해주세요.');
+    }});
+  }}
+
+  function setStatusIfExists(msg) {{
+    var el = doc.getElementById('webcam-preview-status');
+    if (el) {{ el.textContent = msg; el.style.display = 'flex'; }}
+  }}
+
+  if (_videoRecActive) {{ startVideoRecording(); }}
+
+  function stopAndUploadVideo(onDone) {{
+    var vr = window.parent.__ivVideoRec;
+    if (!vr || !vr.recorder) {{
+      console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
+      onDone();
+      return;
+    }}
+    if (vr.recorder.state === 'inactive' || vr.uploaded) {{
+      console.warn('[영상] 이미 처리됨(state=' + vr.recorder.state + ', uploaded=' + vr.uploaded + ') — 업로드 건너뜀.');
+      onDone();
+      return;
+    }}
+    vr.uploaded = true;
+    vr.recorder.onstop = function() {{
+      var actualType = vr.recorder.mimeType || 'video/webm';
+      var ext = actualType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+      var blob = new Blob(vr.chunks, {{ type: actualType }});
+      if (blob.size === 0) {{
+        console.warn('[영상] 녹화된 데이터가 0바이트입니다.');
+      }}
+      var form = new FormData();
+      form.append('video', blob, 'interview_' + _videoSessionId + '.' + ext);
+      fetch('{api.BASE_URL}/interview/' + _videoSessionId + '/video', {{
+        method: 'POST',
+        headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
+        body: form
+      }}).then(function(res) {{
+        if (!res.ok) {{
+          return res.text().then(function(t) {{
+            console.warn('[영상] 업로드 실패 HTTP ' + res.status + ': ' + t);
+          }});
+        }}
+      }}).catch(function(err) {{
+        console.warn('[영상] 업로드 네트워크 오류:', err);
+      }}).finally(onDone);
+    }};
+    vr.recorder.stop();
+    if (vr.stream) vr.stream.getTracks().forEach(function(t) {{ t.stop(); }});
+  }}
+
   function speakText(text, msgIdx) {{
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    var pWin = window.parent;
+    if (!pWin.speechSynthesis) return;
+    pWin.speechSynthesis.cancel();
     doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
       r.classList.remove('playing');
     }});
     var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
-    var u = new SpeechSynthesisUtterance(text);
+    var u = new (pWin.SpeechSynthesisUtterance)(text);
     u.lang = 'ko-KR';
     u.onstart = function() {{ if (row) row.classList.add('playing'); }};
     u.onend   = function() {{ if (row) row.classList.remove('playing'); }};
     u.onerror = function() {{ if (row) row.classList.remove('playing'); }};
-    window.speechSynthesis.speak(u);
+    pWin.speechSynthesis.speak(u);
   }}
-  doc.addEventListener('click', function(e) {{
-    var el = e.target && e.target.closest && e.target.closest('.iv-playback-replay');
-    if (el) {{
-      var row = el.closest('.iv-playback-row');
-      var idx = row ? row.getAttribute('data-msg-idx') : null;
-      speakText(el.getAttribute('data-tts'), idx);
+  (function() {{
+    var tries = 0;
+    function attachReplayHandlers() {{
+      doc.querySelectorAll('.iv-playback-replay').forEach(function(el) {{
+        el.onclick = function() {{
+          var row = el.closest('.iv-playback-row');
+          var idx = row ? row.getAttribute('data-msg-idx') : null;
+          speakText(el.getAttribute('data-tts'), idx);
+        }};
+      }});
+      tries++;
+      if (tries < 15) setTimeout(attachReplayHandlers, 200);
     }}
-  }});
+    attachReplayHandlers();
+  }})();
+
+  if (!window.parent.__ivCopyGuardBound) {{
+    window.parent.__ivCopyGuardBound = true;
+    window.parent.addEventListener('keydown', function(e) {{
+      if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey)) {{
+        e.stopPropagation();
+      }}
+    }}, true);
+  }}
 
   // ── 음성 안내 토글 ────
-  var voiceGuideOn = {str(voice_guide_on).lower()};
+
+  if (typeof window.parent.__ivVoiceGuideOn === 'undefined') {{
+    window.parent.__ivVoiceGuideOn = {str(voice_guide_on).lower()};
+  }}
   var vgTrack = doc.getElementById('vg-track');
   var vgKnob  = doc.getElementById('vg-knob');
-  doc.addEventListener('click', function(e) {{
-    if (e.target && e.target.closest && e.target.closest('#voice-guide-toggle')) {{
-      voiceGuideOn = !voiceGuideOn;
-      if (vgTrack) vgTrack.style.background = voiceGuideOn ? '#3b6def' : '#d1d5db';
-      if (vgKnob)  vgKnob.style.left        = voiceGuideOn ? '18px' : '2px';
-      doc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
-        b.style.display = voiceGuideOn ? '' : 'none';
+  (function() {{
+    var on = window.parent.__ivVoiceGuideOn;
+    if (vgTrack) vgTrack.style.background = on ? '#3b6def' : '#d1d5db';
+    if (vgKnob)  vgKnob.style.left        = on ? '18px' : '2px';
+    doc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
+      b.style.display = on ? '' : 'none';
+    }});
+  }})();
+
+  var vgToggleEl = doc.getElementById('voice-guide-toggle');
+  if (vgToggleEl) {{
+    vgToggleEl.onclick = function() {{
+      var on = !window.parent.__ivVoiceGuideOn;
+      window.parent.__ivVoiceGuideOn = on;
+      var pdoc = window.parent.document;
+      var t = pdoc.getElementById('vg-track');
+      var k = pdoc.getElementById('vg-knob');
+      if (t) t.style.background = on ? '#3b6def' : '#d1d5db';
+      if (k) k.style.left       = on ? '18px' : '2px';
+      pdoc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
+        b.style.display = on ? '' : 'none';
       }});
-      if (!voiceGuideOn) {{
-        window.speechSynthesis.cancel();
-        doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
+      if (!on) {{
+        window.parent.speechSynthesis.cancel();
+        pdoc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
           r.classList.remove('playing');
         }});
       }}
-    }}
-  }});
+    }};
+  }}
 
   var _lastAiIdx  = {_last_ai_idx if _last_ai_idx is not None else -1};
   var _lastAiText = {json.dumps(_last_ai_text)};
-  // __ivLastSpoken은 탭(window.parent)에 붙어있어 새 면접을 시작해도 안 사라지므로
-  // session_id를 키에 포함시켜 이전 면접의 "idx=0 읽음" 기록과 구분한다.
+
   var _spokenKey = {json.dumps(str(get("session_id")))} + ':' + _lastAiIdx;
-  if (voiceGuideOn && window.parent.__ivLastSpoken !== _spokenKey) {{
+  if (window.parent.__ivVoiceGuideOn && window.parent.__ivLastSpoken !== _spokenKey) {{
     window.parent.__ivLastSpoken = _spokenKey;
     if (_lastAiText) {{
-      setTimeout(function() {{ speakText(_lastAiText, _lastAiIdx); }}, 300);
+      var _autoSpoken = false;
+      var _attemptAutoSpeak = function() {{
+        if (_autoSpoken || !window.parent.__ivVoiceGuideOn) return;
+        _autoSpoken = true;
+        speakText(_lastAiText, _lastAiIdx);
+      }};
+      setTimeout(_attemptAutoSpeak, 300);
+      doc.addEventListener('click', _attemptAutoSpeak, {{ once: true }});
     }}
   }}
 
   // ── 면접 종료 ─────────────────────────
+
   function showLoadingAndEnd() {{
     if (!doc.getElementById('_iv_ov')) {{
       var sty = doc.createElement('style');
@@ -555,24 +758,59 @@ body{{
         '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">' +
         '면접 답변을 AI가 종합 분석 중입니다.<br>잠시만 기다려 주세요.</div>' +
         '<div style="text-align:left;display:inline-block;">' +
-        '<div style="font-size:13px;color:#374151;margin-bottom:10px;">● 답변 내용 분석 중...</div>' +
-        '<div style="font-size:13px;color:#374151;margin-bottom:10px;">● 역량 점수 산출 중...</div>' +
-        '<div style="font-size:13px;color:#374151;">● 개선 피드백 생성 중...</div>' +
-        '</div></div>';
+        '<div style="font-size:13px;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
+        '답변 내용 분석 중...</div>' +
+        '<div style="font-size:13px;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
+        '역량 점수 산출 중...</div>' +
+        '<div style="font-size:13px;color:#374151;display:flex;align-items:center;gap:10px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
+        '개선 피드백 생성 중...</div>' +
+        '</div>' +
+        '</div>';
       doc.body.appendChild(ov);
     }}
-    setTimeout(function() {{
-      var wc = webcamOn ? '1' : '0';
-      var s = doc.createElement('script');
-      s.textContent = "window.location.href = window.location.origin + '/결과리포트?webcam_on=" + wc + "';";
-      doc.head.appendChild(s);
-    }}, 5000);
-  }}
-  doc.addEventListener('click', function(e) {{
-    if (e.target && e.target.closest && e.target.closest('#end-interview')) {{
-      showLoadingAndEnd();
+    function navigate() {{
+      
+      var vr = window.parent.__ivVideoRec;
+      var wc = (vr && vr.stream) ? '1' : '0';
+      var input = doc.querySelector('.st-key-_iv_nav_ready input');
+      if (input) {{
+        var setter = Object.getOwnPropertyDescriptor(
+          window.parent.HTMLInputElement.prototype, 'value'
+        ).set;
+        setter.call(input, 'go:' + wc);
+        input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+        input.dispatchEvent(new FocusEvent('focusout', {{ bubbles: true }}));
+        input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', code: 'Enter', bubbles: true }}));
+      }}
     }}
-  }});
+    var videoDone = new Promise(function(res) {{ stopAndUploadVideo(res); }});
+    var videoTimeout = new Promise(function(res) {{
+      setTimeout(function() {{
+        console.warn('[영상] 업로드 대기 시간 초과(20초) — 결과 화면으로 진행합니다.');
+        res();
+      }}, 20000);
+    }});
+    var endDone = fetch('{api.BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
+      method: 'POST',
+      headers: {{ 'Authorization': 'Bearer ' + _accessToken }}
+    }}).catch(function(err) {{
+      console.warn('[면접 종료] 서버에 종료 알림 실패:', err);
+    }});
+    Promise.all([endDone, Promise.race([videoDone, videoTimeout])]).then(navigate);
+  }}
+
+  window.parent.__ivShowLoadingAndEnd = showLoadingAndEnd;
+  if (!window.parent.__ivEndListenerBound) {{
+    window.parent.__ivEndListenerBound = true;
+    doc.addEventListener('click', function(e) {{
+      if (e.target && e.target.closest && e.target.closest('#end-interview')) {{
+        showLoadingAndEnd();
+      }}
+    }});
+  }}
 
   // ── 마이크 (녹음 → 백엔드 STT: gpt-4o-transcribe) ──────────────────
   var hintRow  = document.getElementById('hint-row');
@@ -629,16 +867,28 @@ body{{
     navigator.mediaDevices.getUserMedia({{ audio: true }}).then(function(stream) {{
       micStream = stream;
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      var _mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      var _chosenMime = '';
+      for (var _i = 0; _i < _mimeCandidates.length; _i++) {{
+        if (window.MediaRecorder.isTypeSupported && window.MediaRecorder.isTypeSupported(_mimeCandidates[_i])) {{
+          _chosenMime = _mimeCandidates[_i];
+          break;
+        }}
+      }}
+      mediaRecorder = _chosenMime ? new MediaRecorder(stream, {{ mimeType: _chosenMime }}) : new MediaRecorder(stream);
       mediaRecorder.ondataavailable = function(e) {{
         if (e.data.size > 0) audioChunks.push(e.data);
       }};
       mediaRecorder.onstop = function() {{
         micStream.getTracks().forEach(function(t) {{ t.stop(); }});
         setMicProcessing();
-        var blob = new Blob(audioChunks, {{ type: 'audio/webm' }});
+        var actualType = mediaRecorder.mimeType || 'audio/webm';
+        var ext = actualType.indexOf('mp4') !== -1 ? 'm4a'
+                : actualType.indexOf('ogg') !== -1 ? 'ogg'
+                : 'webm';
+        var blob = new Blob(audioChunks, {{ type: actualType }});
         var formData = new FormData();
-        formData.append('audio', blob, 'recording.webm');
+        formData.append('audio', blob, 'recording.' + ext);
         fetch('{api.BASE_URL}/voice/transcribe', {{
           method: 'POST',
           headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
@@ -650,9 +900,11 @@ body{{
           }})
           .then(function(data) {{
             var t = data.text || '';
-            cta.value = t;
+            var prev = cta.value || '';
+            var joined = prev && t ? (prev.replace(/\\s+$/, '') + ' ' + t) : (prev || t);
+            cta.value = joined;
             lastInputType = 'voice';
-            syncSt(t);
+            syncSt(joined);
             autosize();
             setMicIdle();
           }})
@@ -734,42 +986,100 @@ for i, msg in enumerate(st.session_state.iv_messages):
         )
 
 # ── 채팅 입력 ─────────────────────────────────────────────────────────────
+
 if prompt := st.chat_input("답변을 입력하세요..."):
     st.session_state.iv_messages.append({"role": "user", "tag": None, "text": prompt})
+    st.session_state["_pending_answer"] = {
+        "prompt": prompt,
+        "input_type": st.session_state.get("input_type_hidden", "text"),
+    }
+    st.rerun()
 
-    answer_input_type = st.session_state.get("input_type_hidden", "text")
-
+_pending = st.session_state.get("_pending_answer")
+if _pending:
     session_id = get("session_id")
     if not session_id:
         st.session_state.iv_messages.pop()
+        st.session_state["_pending_answer"] = None
         st.error("면접 세션이 없습니다. 처음부터 다시 시작해주세요.")
     else:
         try:
-            resp = api.send_answer(session_id, prompt, input_type=answer_input_type)
+            with st.spinner("AI가 답변을 분석하고 있습니다..."):
+                resp = api.send_answer(
+                    session_id, _pending["prompt"], input_type=_pending["input_type"]
+                )
+            st.session_state["_pending_answer"] = None
+            st.session_state["realtime_score"] = resp.get("realtime_score")
+            st.session_state["realtime_feedback"] = resp.get("realtime_feedback")
             if resp.get("question_type") == "end":
+                try:
+                    api.end_session(session_id)
+                except Exception:
+                    pass
                 state_set("interview_done", True)
-                st.switch_page("pages/05_결과리포트.py")
+            
+                components.html("""
+                <script>
+                (function () {
+                    var tries = 0;
+                    function attempt() {
+                        if (window.parent.__ivShowLoadingAndEnd) {
+                            window.parent.__ivShowLoadingAndEnd();
+                            return;
+                        }
+                        tries++;
+                        if (tries < 40) { setTimeout(attempt, 50); return; }
+                        var doc2 = window.parent.document;
+                        var input = doc2.querySelector('.st-key-_iv_nav_ready input');
+                        if (input) {
+                            var setter = Object.getOwnPropertyDescriptor(
+                                window.parent.HTMLInputElement.prototype, 'value'
+                            ).set;
+                            setter.call(input, 'go:0');
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+                        }
+                    }
+                    attempt();
+                }());
+                </script>
+                """, height=0)
+                st.stop()
             else:
                 tag = "꼬리 질문" if resp.get("question_type") == "follow_up" else None
-                st.session_state.iv_messages.append({
-                    "role": "ai",
-                    "tag":  tag,
-                    "text": resp["next_question"],
-                })
+                st.session_state["_pending_next_question"] = {
+                    "tag": tag, "text": resp["next_question"]
+                }
                 st.rerun()
         except requests.exceptions.ConnectionError:
             st.session_state.iv_messages.pop()
+            st.session_state["_pending_answer"] = None
             st.error("서버에 연결할 수 없습니다. 답변이 전송되지 않았습니다.")
         except requests.exceptions.Timeout:
             st.session_state.iv_messages.pop()
+            st.session_state["_pending_answer"] = None
             st.error("응답 생성이 시간 초과되었습니다. 다시 시도해주세요.")
         except requests.exceptions.HTTPError as e:
             st.session_state.iv_messages.pop()
+            st.session_state["_pending_answer"] = None
             status = e.response.status_code if e.response is not None else "?"
             st.error(f"답변 전송에 실패했습니다. (서버 오류: {status})")
         except Exception as e:
             st.session_state.iv_messages.pop()
+            st.session_state["_pending_answer"] = None
             st.error(f"알 수 없는 오류가 발생했습니다: {e}")
+
+_pending_q = st.session_state.get("_pending_next_question")
+if _pending_q:
+    time.sleep(1.2)
+    st.session_state.iv_messages.append({
+        "role": "ai",
+        "tag":  _pending_q["tag"],
+        "text": _pending_q["text"],
+    })
+    st.session_state["_pending_next_question"] = None
+    st.rerun()
 
 # ── 숨김 종료 버튼 ──────────
 if st.button("종료", key="btn_end_interview"):
