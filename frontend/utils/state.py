@@ -31,12 +31,13 @@ def init_session():
         if key not in st.session_state:
             st.session_state[key] = value
     sync_access_token()
+    sync_interviewer_style()
+    sync_session_id()
 
 
 # ── 로그인 유지 (새로고침 대응) ──────────────────────────────────────────
 
 def sync_access_token():
-   
     if st.session_state.get("_logout_pending", False):
         st.session_state["_token_restore"] = "__NONE__"
 
@@ -106,6 +107,128 @@ def sync_access_token():
     </script>
     """, height=0)
     st.stop()
+
+
+# ── 페르소나 선택 유지 (새로고침 대응) ────────────────────────────────────
+
+def sync_interviewer_style():
+    st.markdown(
+        "<style>.st-key-_persona_restore { position:absolute; width:0; height:0; "
+        "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+        unsafe_allow_html=True,
+    )
+    restored = st.text_input(
+        "_persona_restore", key="_persona_restore", label_visibility="collapsed"
+    )
+
+    style = st.session_state.get("interviewer_style", "")
+
+    if style:
+        components.html(
+            f"<script>localStorage.setItem('iv_interviewer_style', {json.dumps(style)});</script>",
+            height=0,
+        )
+        return
+
+    if restored == "__NONE__":
+        return
+
+    if restored:
+        st.session_state["interviewer_style"] = restored
+        st.rerun()
+        return
+
+    components.html("""
+    <script>
+    (function() {
+      var doc = window.parent.document;
+      var tries = 0;
+      function attempt() {
+        var input = doc.querySelector('.st-key-_persona_restore input');
+        if (!input) {
+          tries++;
+          if (tries < 20) setTimeout(attempt, 50);
+          return;
+        }
+        var saved = localStorage.getItem('iv_interviewer_style');
+        var setter = Object.getOwnPropertyDescriptor(
+          window.parent.HTMLInputElement.prototype, 'value'
+        ).set;
+        setter.call(input, saved || '__NONE__');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      }
+      attempt();
+    })();
+    </script>
+    """, height=0)
+
+
+# ── 면접 세션 ID 유지 (하드 리다이렉트 대응) ────────────────────────────
+
+def sync_session_id():
+    if st.session_state.get("_session_id_clear_pending", False):
+        st.session_state["_session_id_restore"] = "__NONE__"
+
+    st.markdown(
+        "<style>.st-key-_session_id_restore { position:absolute; width:0; height:0; "
+        "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+        unsafe_allow_html=True,
+    )
+    restored = st.text_input(
+        "_session_id_restore", key="_session_id_restore", label_visibility="collapsed"
+    )
+
+    if st.session_state.pop("_session_id_clear_pending", False):
+        components.html(
+            "<script>localStorage.removeItem('iv_session_id');</script>",
+            height=0,
+        )
+        return
+
+    session_id = st.session_state.get("session_id")
+
+    if session_id:
+        components.html(
+            f"<script>localStorage.setItem('iv_session_id', {json.dumps(session_id)});</script>",
+            height=0,
+        )
+        return
+
+    if restored == "__NONE__":
+        return
+
+    if restored:
+        st.session_state["session_id"] = restored
+        st.rerun()
+        return
+
+    components.html("""
+    <script>
+    (function() {
+      var doc = window.parent.document;
+      var tries = 0;
+      function attempt() {
+        var input = doc.querySelector('.st-key-_session_id_restore input');
+        if (!input) {
+          tries++;
+          if (tries < 20) setTimeout(attempt, 50);
+          return;
+        }
+        var saved = localStorage.getItem('iv_session_id');
+        var setter = Object.getOwnPropertyDescriptor(
+          window.parent.HTMLInputElement.prototype, 'value'
+        ).set;
+        setter.call(input, saved || '__NONE__');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      }
+      attempt();
+    })();
+    </script>
+    """, height=0)
 
 
 # ── 로그인 유지 (비차단, 랜딩페이지 전용) ─────────────────────────────────
@@ -185,10 +308,3 @@ def get(key: str):
 
 def set(key: str, value):
     st.session_state[key] = value
-
-
-def reset_interview():
-    """면접 관련 세션만 초기화 (로그인 정보는 유지)"""
-    set("interview_done", False)
-    set("messages", [])
-    set("scores", {})

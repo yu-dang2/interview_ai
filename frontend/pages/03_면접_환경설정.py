@@ -15,6 +15,15 @@ st.set_page_config(
 
 init_session()
 
+if get("session_id"):
+    st.session_state["_session_id_clear_pending"] = True
+    state_set("session_id", None)
+    state_set("first_question", None)
+    state_set("result", None)
+    state_set("interview_done", False)
+    if "iv_messages" in st.session_state:
+        del st.session_state["iv_messages"]
+
 render_sidebar(active="면접 시작")
 
 
