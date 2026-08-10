@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.core.deps import current_user
+from backend.core.masking import mask_personal_info
 from backend.database import get_db
 from backend.models.models import (
     InterviewResult,
@@ -45,7 +46,9 @@ router = APIRouter(prefix="/resume", tags=["Resume"])
 
 
 def _create(db: Session, content: str, user: User) -> Resume:
-    resume = Resume(content=content, users_user_id=user.user_id)
+    # 텍스트 직접 등록 경로도 파일 업로드와 같게 비식별화한다.
+    # (파일 업로드는 read_document_upload 안에서 이미 지워져서 들어온다)
+    resume = Resume(content=mask_personal_info(content), users_user_id=user.user_id)
     db.add(resume)
     db.commit()
     db.refresh(resume)

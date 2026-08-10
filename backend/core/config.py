@@ -51,6 +51,20 @@ SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
+# ── 사용량 제한 ────────────────────────────────────────
+# 요청 수가 아니라 LLM 호출이 일어나는 지점을 막는다. 비용은 거기서 발생한다.
+# 면접 1회에 gpt-5-mini 호출이 십수 번 나가므로 세션 생성이 가장 비싼 동작이다.
+#
+# 현재 규모를 고려해 DB 카운트로 세는 방식으로 구현했다. 사용자가 늘어나면
+# Redis 기반 큐로 전환할 예정이다.
+#
+# ※ 아래 기본값(하루 10회 / 동시 3개)은 임시로 잡은 값이다. 베타 테스트 참가자가
+#   몇 번씩 써볼지에 따라 달라져야 해서 회의에서 논의 예정이다.
+#
+# 0 이하로 두면 제한을 끈다 (개발 중 편의).
+INTERVIEW_DAILY_LIMIT = int(os.getenv("INTERVIEW_DAILY_LIMIT", "10"))
+INTERVIEW_ACTIVE_LIMIT = int(os.getenv("INTERVIEW_ACTIVE_LIMIT", "3"))
+
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
 # report_generator가 마지막 AIMessage로 리포트 JSON 전체를 넣기 때문에,

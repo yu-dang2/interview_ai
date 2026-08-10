@@ -9,12 +9,17 @@ DB에는 조회용 기록(세션/대화/결과)을 남긴다.
 
 import json
 import uuid
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.core.config import CLOSING_MESSAGE
+from backend.core.config import (
+    CLOSING_MESSAGE,
+    INTERVIEW_ACTIVE_LIMIT,
+    INTERVIEW_DAILY_LIMIT,
+)
 from backend.models.models import (
     JD,
     InterviewMessage,
@@ -92,9 +97,58 @@ class InterviewService:
             )
         )
 
+    # ── 사용량 제한 ────────────────────────────────────
+
+    def _check_usage_limit(self) -> None:
+        """
+        면접 생성 횟수를 제한한다.
+
+        요청 수를 재는 일반적인 rate limit 대신 세션 생성만 막는 이유: 비용은 LLM
+        호출에서 발생하고, 면접 1회에 십수 번이 나간다. 조회 API 를 아무리 많이 불러도
+        비용이 안 드는 반면 세션 생성은 한 번이 비싸다.
+
+        Redis 없이 DB 카운트로 센다. 사용자 수가 적어 이 정도로 충분하고,
+        인프라를 늘리지 않아도 된다.
+        """
+        if INTERVIEW_DAILY_LIMIT > 0:
+            since = datetime.now() - timedelta(days=1)
+            recent = (
+                self.db.query(func.count(InterviewSession.session_id))
+                .filter(
+                    InterviewSession.users_user_id == self.user.user_id,
+                    InterviewSession.created_at >= since,
+                )
+                .scalar()
+            )
+            if recent >= INTERVIEW_DAILY_LIMIT:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"하루에 면접을 {INTERVIEW_DAILY_LIMIT}회까지 진행할 수 있습니다. "
+                           "내일 다시 시도해주세요.",
+                )
+
+        if INTERVIEW_ACTIVE_LIMIT > 0:
+            active = (
+                self.db.query(func.count(InterviewSession.session_id))
+                .filter(
+                    InterviewSession.users_user_id == self.user.user_id,
+                    InterviewSession.status == "active",
+                )
+                .scalar()
+            )
+            if active >= INTERVIEW_ACTIVE_LIMIT:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"진행 중인 면접이 {INTERVIEW_ACTIVE_LIMIT}개입니다. "
+                           "기존 면접을 끝내거나 종료한 뒤 새로 시작해주세요.",
+                )
+
     # ── 세션 생성 ──────────────────────────────────────
 
     async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+        # LLM 호출 전에 막는다. 그래프를 돌린 뒤 거절하면 비용은 이미 나간 뒤다.
+        self._check_usage_limit()
+
         # 남의 JD·이력서로 세션을 만들 수 없도록 소유자까지 확인한다.
         jd = self.db.get(JD, req.jd_id)
         if jd is None or jd.users_user_id != self.user.user_id:
