@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set
+from utils.state import init_session, get, set as state_set, handle_session_expired
 from utils import api
 
 st.set_page_config(
@@ -286,6 +286,8 @@ with up1:
         try:
             state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
             st.caption(f"✅ {jd_file.name} 업로드 완료")
+        except api.SessionExpiredError:
+            handle_session_expired()
         except Exception as e:
             state_set("jd_id", 0)
             st.error(_upload_error_message(e))
@@ -301,6 +303,8 @@ with up2:
         try:
             state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
             st.caption(f"✅ {resume_file.name} 업로드 완료")
+        except api.SessionExpiredError:
+            handle_session_expired()
         except Exception as e:
             state_set("resume_id", 0)
             st.error(_upload_error_message(e))
