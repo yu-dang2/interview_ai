@@ -8,7 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set
+from utils.state import init_session, get, set as state_set, handle_session_expired
 from utils import api
 
 st.set_page_config(
@@ -49,6 +49,8 @@ if "iv_messages" not in st.session_state:
             state_set("session_id", resp["session_id"])
             first_q = resp["first_question"]
             state_set("first_question", first_q)
+        except api.SessionExpiredError:
+            handle_session_expired()
         except requests.exceptions.ConnectionError:
             st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
             st.stop()
@@ -1052,6 +1054,10 @@ if _pending:
                     "tag": tag, "text": resp["next_question"]
                 }
                 st.rerun()
+        except api.SessionExpiredError:
+            st.session_state.iv_messages.pop()
+            st.session_state["_pending_answer"] = None
+            handle_session_expired()
         except requests.exceptions.ConnectionError:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None

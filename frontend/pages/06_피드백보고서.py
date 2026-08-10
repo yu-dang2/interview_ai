@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
 from components.sidebar import render_sidebar
-from utils.state import init_session, get
+from utils.state import init_session, get, handle_session_expired
 from utils import api
 
 st.set_page_config(
@@ -21,6 +21,8 @@ feedback_data = None
 if session_id:
     try:
         feedback_data = api.get_feedback(session_id)
+    except api.SessionExpiredError:
+        handle_session_expired()
     except Exception:
         feedback_data = None
 

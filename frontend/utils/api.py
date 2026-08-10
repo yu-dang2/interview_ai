@@ -4,9 +4,21 @@ import streamlit as st
 BASE_URL = "http://127.0.0.1:8000"
 
 
+class SessionExpiredError(Exception):
+    """토큰이 만료·무효(401)일 때 — 호출부에서 재로그인 유도용으로 구분해서 잡는다."""
+    pass
+
+
 def _headers() -> dict:
     token = st.session_state.get("access_token", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _check(res: requests.Response) -> requests.Response:
+    if res.status_code == 401:
+        raise SessionExpiredError()
+    res.raise_for_status()
+    return res
 
 
 # ── 인증 ────────────────────────────────────────────────────────────────────
@@ -40,7 +52,7 @@ def upload_resume(file_bytes: bytes, filename: str) -> int:
         headers=_headers(),
         timeout=30,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()["resume_id"]
 
 
@@ -51,7 +63,7 @@ def upload_jd(file_bytes: bytes, filename: str) -> int:
         headers=_headers(),
         timeout=30,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()["jd_id"]
 
 
@@ -62,9 +74,9 @@ def start_interview(resume_id: int, jd_id: int, persona: str) -> dict:
         f"{BASE_URL}/interview/sessions",
         json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
         headers=_headers(),
-        timeout=180, 
+        timeout=180,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()
 
 
@@ -76,18 +88,19 @@ def send_answer(session_id: str, answer: str, input_type: str | None = None) -> 
         f"{BASE_URL}/interview/sessions/{session_id}/chat",
         json=payload,
         headers=_headers(),
-        timeout=180, 
+        timeout=180,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()
 
 
 def end_session(session_id: str) -> None:
-    requests.post(
+    res = requests.post(
         f"{BASE_URL}/interview/sessions/{session_id}/end",
         headers=_headers(),
         timeout=30,
-    ).raise_for_status()
+    )
+    _check(res)
 
 
 def get_result(session_id: str) -> dict:
@@ -96,7 +109,7 @@ def get_result(session_id: str) -> dict:
         headers=_headers(),
         timeout=90,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()
 
 
@@ -108,7 +121,7 @@ def get_feedback(session_id: str) -> dict:
         headers=_headers(),
         timeout=30,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()
 
 
@@ -120,7 +133,7 @@ def get_video_metrics(session_id: str) -> dict:
         headers=_headers(),
         timeout=30,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()
 
 
@@ -130,5 +143,5 @@ def get_my_videos() -> dict:
         headers=_headers(),
         timeout=30,
     )
-    res.raise_for_status()
+    _check(res)
     return res.json()

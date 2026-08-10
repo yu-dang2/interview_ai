@@ -4,7 +4,7 @@ import streamlit as st
 from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set
+from utils.state import init_session, get, set as state_set, handle_session_expired
 from utils import api
 
 try:
@@ -50,6 +50,8 @@ if not result_data and session_id:
         try:
             result_data = api.get_result(session_id)
             state_set("result", result_data)
+        except api.SessionExpiredError:
+            handle_session_expired()
         except Exception:
             result_data = None
 
@@ -289,6 +291,8 @@ st.markdown(
 if st.session_state.get("webcam_on", False) and session_id:
     try:
         video_metrics = api.get_video_metrics(session_id)
+    except api.SessionExpiredError:
+        handle_session_expired()
     except requests.exceptions.HTTPError as e:
         video_metrics = None
         if e.response is not None and e.response.status_code == 404:
