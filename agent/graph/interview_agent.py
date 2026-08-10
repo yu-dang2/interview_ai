@@ -59,11 +59,23 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_node("resume_optimizer", resume_optimizer)
 
     # 엣지 연결
-    # 초기 흐름: 페르소나 확인 → JD/이력서 파싱 → 매칭 → 첫 질문 생성
+    # 초기 흐름: 페르소나 확인 → JD/이력서 병렬 파싱 → 매칭 → 첫 질문 생성
     builder.add_edge(START, "persona_selector")
+
+    # jd_parser와 resume_parser는 서로의 결과를 쓰지 않는다.
+    # (각각 jd_raw/resume_raw만 읽고 jd_parsed/resume_parsed에만 쓴다 — 반환 키 교집합 없음)
+    # 그래서 persona_selector에서 둘 다 내보내(fan-out) 같은 super-step에서 동시에 돌리고,
+    # jd_resume_matcher로 모은다(fan-in). 직렬일 때 두 파싱 시간이 더해지던 것을
+    # 느린 쪽 하나(max)로 줄이는 것이 목적이다.
+    #
+    # fan-in 대기: 부모가 둘이면 LangGraph가 두 파서를 같은 super-step에 스케줄하므로
+    # 그 step이 끝나야 matcher가 열린다. 한쪽만 끝난 상태로 matcher가 먼저 도는 일은 없고,
+    # matcher는 jd_parsed와 resume_parsed가 모두 채워진 State를 본다.
     builder.add_edge("persona_selector", "jd_parser")
-    builder.add_edge("jd_parser", "resume_parser")
+    builder.add_edge("persona_selector", "resume_parser")
+    builder.add_edge("jd_parser", "jd_resume_matcher")
     builder.add_edge("resume_parser", "jd_resume_matcher")
+
     builder.add_edge("jd_resume_matcher", "question_generator")
 
     # question_generator 나가는 엣지(조건부, question_router 판단):
