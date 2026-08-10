@@ -112,6 +112,107 @@ def estimate_resume_score(match_result: dict) -> int:
     return clamp(round(100 * matching / max(1, matching + missing)))
 
 
+def weighted_total(resume_score: int, interview_score: int) -> int:
+    """최종 총점. 저장할 때와 응답할 때가 어긋나지 않도록 한 곳에서만 계산한다."""
+    return clamp(round(resume_score * RESUME_WEIGHT + interview_score * INTERVIEW_WEIGHT))
+
+
+# ── 저장용 (agent 출력 → InterviewResult 컬럼) ─────────
+
+def to_result_columns(report: dict, match_result: dict) -> dict:
+    """
+    report_generator 출력을 interview_results 컬럼 값으로 편다.
+
+    이 매핑을 서비스가 아니라 여기 두는 이유: agent 키 ↔ 우리 필드 대응이 이 파일에
+    모여 있어야 agent 쪽이 바뀔 때 한 곳만 고치면 된다.
+    """
+    category = report.get("category_scores", {}) or {}
+    summary = report.get("summary", {}) or {}
+
+    resume_score = estimate_resume_score(match_result)
+    interview_score = clamp(report.get("total_score", 0))
+
+    columns = {
+        "resume_score": resume_score,
+        "interview_score": interview_score,
+        "total_score": weighted_total(resume_score, interview_score),
+        "grade": report.get("grade"),
+        "summary_strength": _join(summary.get("strengths")),
+        "summary_improvement": _join(summary.get("improvements")),
+        "summary_recommendation": _join(summary.get("recommended_study")),
+    }
+    # 컬럼 이름과 agent 키가 같아서 그대로 쓴다 (logic_score, communication_score, ...)
+    columns.update({key: clamp(category.get(key, 0)) for key in _SCORE_KEYS.values()})
+    return columns
+
+
+def to_question_feedback_rows(report: dict) -> list[dict]:
+    """리포트의 question_feedbacks 배열 → InterviewQuestionFeedback 행 값들."""
+    raw = report.get("question_feedbacks") or []
+    return [
+        {
+            # 리포트에 번호가 없으므로 to_feedback 과 동일하게 리스트 순서로 매긴다.
+            "question_number": i,
+            "question": str(item.get("question", "")),
+            "user_answer": str(item.get("user_answer", "")),   # agent 쪽 키는 user_answer
+            "score": clamp(item.get("score", 0)),
+            "improved_answer": str(item.get("improved_answer", "")),
+        }
+        for i, item in enumerate(raw, start=1)
+        if isinstance(item, dict)
+    ]
+
+
+# ── 조회용 (InterviewResult 행 → 응답 스키마) ──────────
+
+def to_result_from_row(session_id: str, row) -> ResultResponse:
+    """
+    저장된 결과 행을 그대로 응답으로 바꾼다.
+
+    체크포인트가 없어도 이 경로만으로 완전한 리포트가 나와야 한다.
+    (예전에는 resume_score 를 체크포인트의 match_result 에서 계산해서, 체크포인트를
+     지우면 0 으로 떨어졌다.)
+    """
+    return ResultResponse(
+        session_id=session_id,
+        resume_score=clamp(row.resume_score),
+        interview_score=clamp(row.interview_score),
+        total_score=clamp(row.total_score),
+        grade=row.grade,
+        radar_chart=RadarChart(
+            **{field: clamp(getattr(row, key, 0)) for field, key in _SCORE_KEYS.items()}
+        ),
+        summary=ResultSummary(
+            strength=row.summary_strength or "",
+            improvement=row.summary_improvement or "",
+            recommendation=row.summary_recommendation or "",
+        ),
+    )
+
+
+def to_feedback_from_rows(rows) -> FeedbackResponse:
+    """저장된 질문별 피드백 행들을 응답으로 바꾼다."""
+    items = [
+        FeedbackItem(
+            question_number=row.question_number,
+            question=row.question or "",
+            my_answer=row.user_answer or "",
+            score=clamp(row.score),
+            improved_answer=row.improved_answer or "",
+        )
+        for row in rows
+    ]
+    average = round(sum(item.score for item in items) / len(items)) if items else 0
+    return FeedbackResponse(
+        total_questions=len(items),
+        average_score=clamp(average),
+        feedbacks=items,
+    )
+
+
+# ── 조회용 (체크포인트 State → 응답 스키마) ───────────
+# 아직 결과가 저장되지 않은 진행 중 세션의 폴백 경로다.
+
 def to_result(session_id: str, report: dict, match_result: dict) -> ResultResponse:
     category = report.get("category_scores", {}) or {}
     summary = report.get("summary", {}) or {}
@@ -123,7 +224,7 @@ def to_result(session_id: str, report: dict, match_result: dict) -> ResultRespon
         session_id=session_id,
         resume_score=resume_score,
         interview_score=interview_score,
-        total_score=clamp(round(resume_score * RESUME_WEIGHT + interview_score * INTERVIEW_WEIGHT)),
+        total_score=weighted_total(resume_score, interview_score),
         grade=report.get("grade"),
         radar_chart=RadarChart(
             **{field: clamp(category.get(key, 0)) for field, key in _SCORE_KEYS.items()}

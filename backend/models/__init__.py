@@ -5,5 +5,6 @@ from backend.models.models import (
     InterviewSession,
     InterviewMessage,
     InterviewResult,
+    InterviewQuestionFeedback,
     InterviewVideo,
 )

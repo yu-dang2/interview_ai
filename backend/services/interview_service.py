@@ -11,14 +11,17 @@ import json
 import uuid
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.core.config import CLOSING_MESSAGE
 from backend.models.models import (
     JD,
     InterviewMessage,
+    InterviewQuestionFeedback,
     InterviewResult,
     InterviewSession,
+    InterviewVideo,
     Resume,
     User,
 )
@@ -28,8 +31,16 @@ from backend.schemas.interview import (
     ResultResponse,
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionListItem,
+    SessionListResponse,
+    SessionListSummary,
 )
 from backend.services import graph_runner, report_mapper
+
+_NO_REPORT = HTTPException(
+    status_code=409,
+    detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
+)
 
 
 class InterviewService:
@@ -50,28 +61,23 @@ class InterviewService:
             raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
         return session
 
-    async def _get_report(self, session_id: str) -> tuple[dict, dict]:
-        """(report_result, match_result) 반환. 리포트가 아직 없으면 409."""
+    def _get_result_row(self, session_id: str) -> InterviewResult | None:
+        """저장된 결과 행. 면접이 끝났다면 여기에 완전한 리포트가 들어 있다."""
+        return (
+            self.db.query(InterviewResult)
+            .filter(InterviewResult.interview_sessions_session_id == session_id)
+            .first()
+        )
+
+    async def _checkpoint_report(self, session_id: str) -> tuple[dict, dict]:
+        """
+        체크포인트에서 (report_result, match_result) 를 읽는 폴백.
+
+        정상 흐름이라면 면접 종료 시 _save_result 가 DB 에 남기므로 여기까지 오지 않는다.
+        체크포인트 파일은 언제든 지울 수 있는 임시 데이터라 이쪽을 우선하면 안 된다.
+        """
         values, _ = await graph_runner.snapshot(session_id)
-        report = values.get("report_result") or {}
-
-        if not report:
-            # 체크포인트가 날아갔더라도 DB에 저장해둔 리포트로 응답할 수 있다.
-            row = (
-                self.db.query(InterviewResult)
-                .filter(InterviewResult.interview_sessions_session_id == session_id)
-                .first()
-            )
-            if row and row.feedback:
-                report = json.loads(row.feedback)
-
-        if not report:
-            raise HTTPException(
-                status_code=409,
-                detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
-            )
-
-        return report, values.get("match_result") or {}
+        return values.get("report_result") or {}, values.get("match_result") or {}
 
     def _log_message(self, session_id: str, role: str, content: str, eval_score: int = 0) -> None:
         self.db.add(
@@ -189,15 +195,111 @@ class InterviewService:
         )
 
     def _save_result(self, session_id: str, values: dict) -> None:
+        """
+        리포트를 컬럼으로 펴서 저장한다.
+
+        match_result 를 함께 읽는 게 중요하다. resume_score 는 여기서만 계산할 수 있고,
+        저장하지 않으면 체크포인트가 사라진 뒤 0 으로 떨어진다.
+        """
         report = values.get("report_result") or {}
-        self.db.add(
-            InterviewResult(
-                total_score=report_mapper.clamp(report.get("total_score", 0)),
-                feedback=json.dumps(report, ensure_ascii=False),
-                eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
-                weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
-                interview_sessions_session_id=session_id,
+        match_result = values.get("match_result") or {}
+
+        result = InterviewResult(
+            **report_mapper.to_result_columns(report, match_result),
+            eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
+            weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
+            # 컬럼 매핑이 틀렸을 때 재계산할 수 있도록 원본을 남긴다.
+            raw_report=json.dumps(report, ensure_ascii=False),
+            interview_sessions_session_id=session_id,
+        )
+        result.question_feedbacks = [
+            InterviewQuestionFeedback(**row)
+            for row in report_mapper.to_question_feedback_rows(report)
+        ]
+        self.db.add(result)
+
+    # ── 기록 목록 (마이페이지) ─────────────────────────
+
+    def list_sessions(self, limit: int = 20) -> SessionListResponse:
+        """
+        내 면접 기록을 최신순으로. 결과·영상 유무를 한 번에 붙여 내보낸다.
+
+        영상은 세션당 여러 개일 수 있어서 outerjoin 하면 세션 행이 중복된다.
+        그래서 세션↔결과만 조인(1:1)하고, 영상은 별도 한 방 조회로 붙인다.
+        """
+        base = self.db.query(InterviewSession).filter(
+            InterviewSession.users_user_id == self.user.user_id
+        )
+        total = base.count()
+
+        rows = (
+            base.outerjoin(
+                InterviewResult,
+                InterviewResult.interview_sessions_session_id == InterviewSession.session_id,
             )
+            .with_entities(InterviewSession, InterviewResult)
+            .order_by(InterviewSession.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # 세션별 최신 영상 id. 목록에 나온 세션만 조회한다.
+        session_ids = [session.session_id for session, _ in rows]
+        video_map = {}
+        if session_ids:
+            video_map = dict(
+                self.db.query(
+                    InterviewVideo.interview_sessions_session_id,
+                    func.max(InterviewVideo.video_id),
+                )
+                .filter(InterviewVideo.interview_sessions_session_id.in_(session_ids))
+                .group_by(InterviewVideo.interview_sessions_session_id)
+                .all()
+            )
+
+        sessions = []
+        for session, result in rows:
+            video_id = video_map.get(session.session_id)
+            sessions.append(
+                SessionListItem(
+                    session_id=session.session_id,
+                    created_at=session.created_at,
+                    persona=session.persona,
+                    status=session.status,
+                    resume_score=result.resume_score if result else None,
+                    interview_score=result.interview_score if result else None,
+                    total_score=result.total_score if result else None,
+                    grade=result.grade if result else None,
+                    has_video=video_id is not None,
+                    video_url=f"/mypage/videos/{video_id}/file" if video_id else None,
+                )
+            )
+
+        return SessionListResponse(total=total, summary=self._summary(), sessions=sessions)
+
+    def _summary(self) -> SessionListSummary:
+        """상단 통계 카드용 집계. 목록이 잘려도 맞도록 전체 결과를 대상으로 한다."""
+        results = (
+            self.db.query(InterviewResult)
+            .join(
+                InterviewSession,
+                InterviewResult.interview_sessions_session_id == InterviewSession.session_id,
+            )
+            .filter(InterviewSession.users_user_id == self.user.user_id)
+        )
+
+        count, avg_interview = results.with_entities(
+            func.count(InterviewResult.result_id),
+            func.avg(InterviewResult.interview_score),
+        ).one()
+
+        # "현재 이력서 점수" 는 가장 최근 면접에서 산출된 값이다.
+        latest = results.order_by(InterviewResult.created_at.desc()).first()
+
+        return SessionListSummary(
+            total_interviews=count or 0,
+            average_interview_score=round(float(avg_interview), 1) if avg_interview else None,
+            latest_resume_score=latest.resume_score if latest else None,
         )
 
     # ── 종료 / 조회 ────────────────────────────────────
@@ -214,10 +316,25 @@ class InterviewService:
 
     async def get_result(self, session_id: str) -> ResultResponse:
         self._get_session(session_id)
-        report, match_result = await self._get_report(session_id)
+
+        # DB 우선. 체크포인트를 지워도 완료된 면접의 점수는 그대로 나와야 한다.
+        row = self._get_result_row(session_id)
+        if row is not None:
+            return report_mapper.to_result_from_row(session_id, row)
+
+        report, match_result = await self._checkpoint_report(session_id)
+        if not report:
+            raise _NO_REPORT
         return report_mapper.to_result(session_id, report, match_result)
 
     async def get_feedback(self, session_id: str) -> FeedbackResponse:
         self._get_session(session_id)
-        report, _ = await self._get_report(session_id)
+
+        row = self._get_result_row(session_id)
+        if row is not None:
+            return report_mapper.to_feedback_from_rows(row.question_feedbacks)
+
+        report, _ = await self._checkpoint_report(session_id)
+        if not report:
+            raise _NO_REPORT
         return report_mapper.to_feedback(report)
