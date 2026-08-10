@@ -16,13 +16,14 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.core.config import (
+    VIDEO_ANALYZE_TIMEOUT_MIN,
     VIDEO_MAX_PER_USER,
     VIDEO_MAX_UPLOAD_MB,
     VIDEO_SAMPLE_EVERY,
@@ -42,6 +43,59 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 1024 * 1024   # 1MB
 _MAX_UPLOAD_BYTES = VIDEO_MAX_UPLOAD_MB * 1024 * 1024
+
+
+_STALE_ERROR = (
+    "분석이 완료되지 않았습니다. 서버가 재시작되었을 수 있으니 다시 업로드해주세요."
+)
+
+
+def mark_if_stale(db: Session, row: InterviewVideo) -> InterviewVideo:
+    """
+    analyzing 인 채로 너무 오래된 행을 failed 로 바꾼다.
+
+    분석은 백그라운드 스레드에서 도는데, 그 도중 서버가 죽으면 상태를 done/failed 로
+    바꿔줄 주체가 사라진다. 그러면 프론트가 영원히 폴링한다. 조회 시점에 경과 시간으로
+    끊어주면 별도 정리 작업 없이 해결된다.
+    """
+    if row.status != "analyzing" or row.created_at is None:
+        return row
+
+    elapsed = datetime.now() - row.created_at
+    if elapsed < timedelta(minutes=VIDEO_ANALYZE_TIMEOUT_MIN):
+        return row
+
+    row.status = "failed"
+    row.error_message = _STALE_ERROR
+    row.analyzed_at = datetime.now()
+    db.commit()
+    logger.warning(
+        "analyzing 상태로 %s분 초과 — failed 처리 (video_id=%s)",
+        VIDEO_ANALYZE_TIMEOUT_MIN, row.video_id,
+    )
+    return row
+
+
+def fail_orphaned_analyses() -> int:
+    """
+    서버 기동 시 호출. 이전 프로세스가 분석 중에 죽어 남긴 analyzing 행을 정리한다.
+
+    조회 시점 정리(mark_if_stale)만으로도 결국 풀리지만, 그건 타임아웃을 기다려야 한다.
+    재시작 시점에는 진행 중이던 분석이 확실히 중단된 상태이므로 즉시 정리해도 된다.
+    """
+    db = SessionLocal()
+    try:
+        rows = db.query(InterviewVideo).filter(InterviewVideo.status == "analyzing").all()
+        for row in rows:
+            row.status = "failed"
+            row.error_message = _STALE_ERROR
+            row.analyzed_at = datetime.now()
+        if rows:
+            db.commit()
+            logger.warning("기동 시 analyzing 상태 %d건을 failed 로 정리했습니다.", len(rows))
+        return len(rows)
+    finally:
+        db.close()
 
 
 def _video_url(video_id: int) -> str:
@@ -257,6 +311,9 @@ class VideoService:
             raise HTTPException(
                 status_code=404, detail="이 세션에 업로드된 영상이 없습니다."
             )
+
+        # 폴링 진입점이라 여기서 오래된 analyzing 을 끊어준다.
+        row = mark_if_stale(self.db, row)
 
         gaze = None
         if row.status == "done" and row.gaze_percent is not None:
