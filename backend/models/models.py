@@ -174,6 +174,37 @@ class InterviewResult(Base):
         cascade="all, delete-orphan",
         order_by="InterviewQuestionFeedback.question_number",
     )
+    resume_optimization = relationship(
+        "InterviewResumeOptimization",
+        back_populates="result",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class InterviewResumeOptimization(Base):
+    """
+    면접 종료 직전 resume_optimizer 노드가 만든 이력서 최적화 제안.
+
+    interview_results 에 컬럼을 더하지 않고 테이블을 나눈 이유가 두 가지다.
+    하나는 화면에 그대로 뿌리는 값이라 집계 대상이 아니어서 JSON 으로 둬도 되고,
+    다른 하나는 create_all 이 없는 테이블은 만들어주지만 기존 테이블에 컬럼은
+    추가하지 못해서다. 테이블을 나누면 팀원들이 DROP TABLE 을 다시 돌리지 않아도 된다.
+    """
+
+    __tablename__ = "interview_resume_optimizations"
+
+    optimization_id = Column(Integer, primary_key=True, autoincrement=True)
+    # JD 키워드 중 이력서에서 확인된 것. JSON 배열 문자열.
+    matched_keywords = Column(Text)
+    # [{"id", "section", "original", "improved", "reason"}] JSON 배열 문자열.
+    suggestions = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+    interview_results_result_id = Column(
+        Integer, ForeignKey("interview_results.result_id"), unique=True
+    )
+
+    result = relationship("InterviewResult", back_populates="resume_optimization")
 
 
 class InterviewQuestionFeedback(Base):

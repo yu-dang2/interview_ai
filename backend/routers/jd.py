@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.core.deps import current_user
 from backend.database import get_db
 from backend.models.models import JD, User
+from backend.core.masking import mask_personal_info
 from backend.routers.uploads import read_document_upload
 from backend.schemas.jd import JDCreateRequest, JDListItem, JDResponse
 
@@ -24,7 +25,8 @@ router = APIRouter(prefix="/jd", tags=["JD"])
 
 
 def _create(db: Session, title: str, content: str, user: User) -> JD:
-    jd = JD(title=title, content=content, users_user_id=user.user_id)
+    # JD 에도 담당자 연락처가 적혀 오는 경우가 있어 이력서와 같게 비식별화한다.
+    jd = JD(title=title, content=mask_personal_info(content), users_user_id=user.user_id)
     db.add(jd)
     db.commit()
     db.refresh(jd)

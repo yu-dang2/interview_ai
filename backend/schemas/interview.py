@@ -74,6 +74,9 @@ class ResultSummary(BaseModel):
 
 class ResultResponse(BaseModel):
     session_id: str
+    # 화면 상단에 "OO 면접관"으로 표시된다. 이 값이 없으면 프론트가 기본값으로
+    # 폴백해 임원 면접을 봤는데 기술 리드로 적히는 문제가 생긴다.
+    persona: str | None = None
     resume_score: Score
     interview_score: Score
     total_score: Score
@@ -96,6 +99,30 @@ class FeedbackResponse(BaseModel):
     total_questions: int
     average_score: Score
     feedbacks: list[FeedbackItem]
+
+
+# ── 이력서 최적화 ──────────────────────────────────────
+
+class ResumeSuggestion(BaseModel):
+    id: str | int | None = None
+    section: str = ""          # 경력 요약 / 프로젝트 성과 / 기술 스택 ...
+    original: str = ""
+    improved: str = ""
+    reason: str = ""
+
+
+class ResumeOptimizationResponse(BaseModel):
+    """
+    면접 종료 시 resume_optimizer 가 만든 제안.
+
+    면접 결과에 딸린 값이라 세션 단위로 조회한다. 같은 이력서로 여러 번 면접하면
+    결과도 여러 개이므로 resume_id 만으로는 어느 것인지 정할 수 없다.
+    """
+
+    session_id: str
+    resume_id: int | None = None
+    matched_keywords: list[str] = []
+    suggestions: list[ResumeSuggestion] = []
 
 
 # ── 면접 기록 목록 (마이페이지) ────────────────────────

@@ -11,6 +11,7 @@
     POST /interview/sessions/{id}/end  - 면접 종료
     GET  /interview/sessions/{id}/result   - 결과 리포트 조회
     GET  /interview/sessions/{id}/feedback - 질문별 피드백 보고서 조회
+    GET  /interview/sessions/{id}/resume-optimization - 이력서 최적화 제안 조회
     POST /interview/sessions/{id}/video          - 면접 영상 업로드 (분석은 백그라운드)
     GET  /interview/sessions/{id}/video-metrics  - 영상 분석 상태/결과 조회 (폴링용)
 
@@ -31,6 +32,7 @@ from backend.schemas.interview import (
     ChatRequest,
     ChatResponse,
     ResultResponse,
+    ResumeOptimizationResponse,
     FeedbackResponse,
 )
 from backend.schemas.video import VideoMetricsResponse, VideoUploadResponse
@@ -81,14 +83,19 @@ async def chat(
 
 
 @router.post("/sessions/{session_id}/end")
-def end_session(
+async def end_session(
     session_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
-    """면접 종료"""
+    """
+    면접 종료.
+
+    중도 종료여도 리포트를 생성한다. 그래프에 종료 신호를 넣어 report_generator 를
+    태우므로 LLM 호출이 발생하고 수십 초가 걸릴 수 있다.
+    """
     service = InterviewService(db, user)
-    service.end_session(session_id)
+    await service.end_session(session_id)
     return {"message": "면접이 종료되었습니다."}
 
 
@@ -112,6 +119,25 @@ async def get_feedback(
     """질문별 피드백 보고서 조회"""
     service = InterviewService(db, user)
     return await service.get_feedback(session_id)
+
+
+@router.get(
+    "/sessions/{session_id}/resume-optimization",
+    response_model=ResumeOptimizationResponse,
+)
+async def get_resume_optimization(
+    session_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """
+    이력서 최적화 제안 조회.
+
+    면접 종료 직전 resume_optimizer 가 만든 결과다. 같은 이력서로 여러 번 면접하면
+    결과도 여러 개라 resume_id 가 아니라 세션 단위로 조회한다.
+    """
+    service = InterviewService(db, user)
+    return await service.get_resume_optimization(session_id)
 
 
 # ── 영상 분석 ──────────────────────────────────────────

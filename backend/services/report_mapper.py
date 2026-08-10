@@ -119,17 +119,32 @@ def weighted_total(resume_score: int, interview_score: int) -> int:
 
 # ── 저장용 (agent 출력 → InterviewResult 컬럼) ─────────
 
-def to_result_columns(report: dict, match_result: dict) -> dict:
+def resolve_resume_score(values: dict) -> int:
     """
-    report_generator 출력을 interview_results 컬럼 값으로 편다.
+    이력서 점수를 정한다.
 
+    jd_resume_matcher 가 match_score(0~100)를 State 최상위에 넣어주므로 그 값을 쓴다.
+    그 값이 없던 시절에 만든 근사(매칭/누락 스킬 개수 비율)는 폴백으로만 남긴다.
+    """
+    explicit = values.get("match_score")
+    if explicit is not None:
+        return clamp(explicit)
+    return estimate_resume_score(values.get("match_result") or {})
+
+
+def to_result_columns(values: dict) -> dict:
+    """
+    그래프 State 를 interview_results 컬럼 값으로 편다.
+
+    match_score 가 State 최상위에 있어서 report 만이 아니라 State 전체를 받는다.
     이 매핑을 서비스가 아니라 여기 두는 이유: agent 키 ↔ 우리 필드 대응이 이 파일에
     모여 있어야 agent 쪽이 바뀔 때 한 곳만 고치면 된다.
     """
+    report = values.get("report_result") or {}
     category = report.get("category_scores", {}) or {}
     summary = report.get("summary", {}) or {}
 
-    resume_score = estimate_resume_score(match_result)
+    resume_score = resolve_resume_score(values)
     interview_score = clamp(report.get("total_score", 0))
 
     columns = {
@@ -165,7 +180,7 @@ def to_question_feedback_rows(report: dict) -> list[dict]:
 
 # ── 조회용 (InterviewResult 행 → 응답 스키마) ──────────
 
-def to_result_from_row(session_id: str, row) -> ResultResponse:
+def to_result_from_row(session_id: str, row, persona: str | None = None) -> ResultResponse:
     """
     저장된 결과 행을 그대로 응답으로 바꾼다.
 
@@ -175,6 +190,7 @@ def to_result_from_row(session_id: str, row) -> ResultResponse:
     """
     return ResultResponse(
         session_id=session_id,
+        persona=persona,
         resume_score=clamp(row.resume_score),
         interview_score=clamp(row.interview_score),
         total_score=clamp(row.total_score),
@@ -213,15 +229,17 @@ def to_feedback_from_rows(rows) -> FeedbackResponse:
 # ── 조회용 (체크포인트 State → 응답 스키마) ───────────
 # 아직 결과가 저장되지 않은 진행 중 세션의 폴백 경로다.
 
-def to_result(session_id: str, report: dict, match_result: dict) -> ResultResponse:
+def to_result(session_id: str, values: dict, persona: str | None = None) -> ResultResponse:
+    report = values.get("report_result") or {}
     category = report.get("category_scores", {}) or {}
     summary = report.get("summary", {}) or {}
 
     interview_score = clamp(report.get("total_score", 0))
-    resume_score = estimate_resume_score(match_result)
+    resume_score = resolve_resume_score(values)
 
     return ResultResponse(
         session_id=session_id,
+        persona=persona,
         resume_score=resume_score,
         interview_score=interview_score,
         total_score=weighted_total(resume_score, interview_score),
