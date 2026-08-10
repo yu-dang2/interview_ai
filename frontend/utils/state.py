@@ -52,7 +52,7 @@ def sync_access_token():
 
     if st.session_state.pop("_logout_pending", False):
         components.html(
-            "<script>localStorage.removeItem('iv_access_token');</script>",
+            "<script>sessionStorage.removeItem('iv_access_token');</script>",
             height=0,
         )
         return
@@ -61,7 +61,7 @@ def sync_access_token():
 
     if token:
         components.html(
-            f"<script>localStorage.setItem('iv_access_token', {json.dumps(token)});</script>",
+            f"<script>sessionStorage.setItem('iv_access_token', {json.dumps(token)});</script>",
             height=0,
         )
         return
@@ -93,7 +93,7 @@ def sync_access_token():
           if (tries < 20) setTimeout(attempt, 50);
           return;
         }
-        var saved = localStorage.getItem('iv_access_token');
+        var saved = sessionStorage.getItem('iv_access_token');
         var setter = Object.getOwnPropertyDescriptor(
           window.parent.HTMLInputElement.prototype, 'value'
         ).set;
@@ -249,7 +249,7 @@ def restore_access_token_nonblocking() -> str:
 
     if st.session_state.pop("_logout_pending", False):
         components.html(
-            "<script>localStorage.removeItem('iv_access_token');</script>",
+            "<script>sessionStorage.removeItem('iv_access_token');</script>",
             height=0,
         )
         return ""
@@ -258,7 +258,7 @@ def restore_access_token_nonblocking() -> str:
 
     if token:
         components.html(
-            f"<script>localStorage.setItem('iv_access_token', {json.dumps(token)});</script>",
+            f"<script>sessionStorage.setItem('iv_access_token', {json.dumps(token)});</script>",
             height=0,
         )
         return token
@@ -284,7 +284,7 @@ def restore_access_token_nonblocking() -> str:
           if (tries < 20) setTimeout(attempt, 50);
           return;
         }
-        var saved = localStorage.getItem('iv_access_token');
+        var saved = sessionStorage.getItem('iv_access_token');
         var setter = Object.getOwnPropertyDescriptor(
           window.parent.HTMLInputElement.prototype, 'value'
         ).set;
@@ -308,3 +308,14 @@ def get(key: str):
 
 def set(key: str, value):
     st.session_state[key] = value
+
+
+# ── 세션 만료 처리 ────────────────────────────────────────────────────
+def handle_session_expired():
+    st.session_state["_logout_pending"] = True
+    st.session_state["access_token"] = ""
+    st.session_state["is_logged_in"] = False
+    st.error("로그인이 만료되었습니다. 다시 로그인해주세요.")
+    if st.button("로그인 화면으로 이동", key="_session_expired_relogin"):
+        st.switch_page("pages/01_로그인.py")
+    st.stop()
