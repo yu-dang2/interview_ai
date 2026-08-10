@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -24,34 +24,38 @@ init_session()
 render_sidebar(active="마이페이지")
 
 try:
-    _my_videos = api.get_my_videos().get("videos", [])
+    _sessions_data = api.get_my_sessions(limit=20)
 except api.SessionExpiredError:
     handle_session_expired()
 except Exception:
-    _my_videos = []
+    _sessions_data = None
 
-# ── 데이터 ───────────────────────────────────────────────────────────────
-HISTORY = [
-    {"date": "04.30", "style": "기술 리드",   "resume": 72, "iv": 78, "total": 75, "has_video": True,  "video_url": ""},
-    {"date": "04.24", "style": "인사 담당자", "resume": 70, "iv": 65, "total": 68, "has_video": False, "video_url": ""},
-    {"date": "04.18", "style": "기술 리드",   "resume": 75, "iv": 82, "total": 79, "has_video": True,  "video_url": ""},
-    {"date": "04.10", "style": "임원 면접관", "resume": 68, "iv": 71, "total": 70, "has_video": False, "video_url": ""},
-    {"date": "04.03", "style": "기술 리드",   "resume": 60, "iv": 58, "total": 59, "has_video": True,  "video_url": ""},
-]
+_sessions = _sessions_data.get("sessions", []) if _sessions_data else []
+_summary  = _sessions_data.get("summary", {}) if _sessions_data else {}
 
-for _i, _h in enumerate(HISTORY):
-    if _i < len(_my_videos):
-        _h["has_video"] = True
-        _h["video_url"] = _my_videos[_i]["video_url"]
-        try:
-            _real_dt = datetime.fromisoformat(_my_videos[_i]["date"].replace("Z", "+00:00"))
-            _h["date"] = _real_dt.strftime("%m.%d")
-        except (ValueError, KeyError):
-            pass
-    else:
-        _h["has_video"] = False
-        _h["video_url"] = ""
+# ── 데이터 (실제 GET /interview/sessions) ──────────────────────────────────
+HISTORY = []
+for _s in _sessions:
+    try:
+        _dt = datetime.fromisoformat(_s["created_at"].replace("Z", "+00:00"))
+        # DB의 created_at은 타임존 정보 없이 저장돼 있어서(naive) UTC로 간주하고
+        # 붙여준다 — 안 그러면 아래 "최근 30일" 계산에서 aware-naive 뺄셈 오류가 난다.
+        if _dt.tzinfo is None:
+            _dt = _dt.replace(tzinfo=timezone.utc)
+    except (ValueError, KeyError, TypeError):
+        _dt = None
+    HISTORY.append({
+        "dt":         _dt,
+        "date":       _dt.strftime("%m.%d") if _dt else "-",
+        "style":      _s.get("persona") or "-",
+        "resume":     _s.get("resume_score"),
+        "iv":         _s.get("interview_score"),
+        "total":      _s.get("total_score"),
+        "has_video":  bool(_s.get("has_video")),
+        "video_url":  _s.get("video_url") or "",
+    })
 
+# 이력서 버전 관리는 백엔드에 해당 개념/API 자체가 없어 목업 그대로 둔다.
 VERSIONS = [
     {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
     {"v": "v2.1", "date": "2026.04.18", "score": 68, "active": False},
@@ -59,7 +63,8 @@ VERSIONS = [
     {"v": "v1.0", "date": "2026.03.28", "score": 55, "active": False},
 ]
 
-def score_color(s: int) -> str:
+def score_color(s) -> str:
+    if s is None: return "#9ca3af"
     if s >= 80: return "#16a34a"
     if s >= 75: return "#3b6def"
     if s >= 65: return "#d97706"
@@ -135,11 +140,28 @@ _ICON_LINEUP = (
     '</svg>'
 )
 
+# "최근 30일 점수 향상"은 summary API에 없는 값이라, 이미 받아온 히스토리에서
+# 최근 30일 내 완료된 면접(interview_score 존재)의 최신값-최초값으로 직접 계산한다.
+# 그 구간에 완료된 면접이 2개 미만이면 비교할 게 없으니 "-"로 정직하게 표시한다.
+_now = datetime.now(timezone.utc)
+_recent_scored = [
+    h for h in HISTORY
+    if h["iv"] is not None and h["dt"] is not None and (_now - h["dt"]).days <= 30
+]
+if len(_recent_scored) >= 2:
+    _delta = _recent_scored[0]["iv"] - _recent_scored[-1]["iv"]
+    _delta_str = f"{_delta:+d}"
+else:
+    _delta_str = "-"
+
+_avg_iv = _summary.get("average_interview_score")
+_latest_resume = _summary.get("latest_resume_score")
+
 STAT_CARDS = [
-    {"v": "5회",    "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
-    {"v": "74.8점", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
-    {"v": "72점",   "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
-    {"v": "+16.8",  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
+    {"v": f"{_summary.get('total_interviews', 0)}회", "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
+    {"v": f"{_avg_iv}점" if _avg_iv is not None else "-", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
+    {"v": f"{_latest_resume}점" if _latest_resume is not None else "-", "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
+    {"v": _delta_str,  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
 ]
 
 stat_html = '<div style="display:flex;gap:17px;padding-bottom:32px;">'
@@ -164,9 +186,14 @@ st.markdown(stat_html, unsafe_allow_html=True)
 # ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
 col_chart, _gap, col_ver = st.columns([35, 1, 21])
 
+# 아직 결과가 없는(진행 중/중단된) 면접은 추이 그래프에서 의미가 없으니 뺀다.
+_SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
+
 with col_chart:
-    if HAS_PLOTLY:
-        CHART_HISTORY = HISTORY[:5]
+    if not _SCORED_HISTORY:
+        st.info("완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.")
+    elif HAS_PLOTLY:
+        CHART_HISTORY = _SCORED_HISTORY[:5]
         x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
         iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
 
@@ -332,6 +359,9 @@ for i, h in enumerate(HISTORY):
     row_bg = "#f9fafb" if i % 2 == 0 else "white"
     iv_c   = score_color(h["iv"])
     tot_c  = score_color(h["total"])
+    resume_txt = h["resume"] if h["resume"] is not None else "-"
+    iv_txt     = h["iv"] if h["iv"] is not None else "-"
+    total_txt  = h["total"] if h["total"] is not None else "-"
     rows_html += (
         f'<div style="display:grid;grid-template-columns:{COLS};'
         f'align-items:center;height:42px;background:{row_bg};'
@@ -341,11 +371,11 @@ for i, h in enumerate(HISTORY):
         f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
         f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
         f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["resume"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
         f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["iv"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
         f'<span style="font-size:11px;font-weight:700;color:{tot_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["total"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{total_txt}</span>'
         f'<div style="display:flex;justify-content:center;">'
         f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
         f'</div>'
