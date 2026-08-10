@@ -145,3 +145,14 @@ def get_my_videos() -> dict:
     )
     _check(res)
     return res.json()
+
+
+def get_my_sessions(limit: int = 20) -> dict:
+    res = requests.get(
+        f"{BASE_URL}/interview/sessions",
+        params={"limit": limit},
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
