@@ -4,7 +4,7 @@ from datetime import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
-from utils.state import init_session
+from utils.state import init_session, handle_session_expired
 from utils import api
 
 try:
@@ -25,6 +25,8 @@ render_sidebar(active="마이페이지")
 
 try:
     _my_videos = api.get_my_videos().get("videos", [])
+except api.SessionExpiredError:
+    handle_session_expired()
 except Exception:
     _my_videos = []
 
