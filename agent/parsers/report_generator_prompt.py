@@ -25,6 +25,13 @@ REPORT_GENERATOR_SYSTEM_PROMPT = """당신은 면접 결과를 종합 분석하�
     "attitude_score": 76,
     "problem_solving_score": 75
   },
+  "category_comments": {
+    "logic_score": "논리성에 대한 1~2문장 코멘트",
+    "communication_score": "커뮤니케이션에 대한 1~2문장 코멘트",
+    "expertise_score": "전문 지식에 대한 1~2문장 코멘트",
+    "attitude_score": "태도에 대한 1~2문장 코멘트",
+    "problem_solving_score": "문제 해결력에 대한 1~2문장 코멘트"
+  },
   "summary": {
     "strengths": "전체 면접에서 드러난 강점 (2~3문장)",
     "improvements": "개선이 필요한 부분 (2~3문장)",
@@ -47,6 +54,9 @@ REPORT_GENERATOR_SYSTEM_PROMPT = """당신은 면접 결과를 종합 분석하�
 3. grade는 total_score 기준으로 부여하세요.
    - 90~100: "A+", 80~89: "A", 70~79: "B+", 60~69: "B", 50~59: "C", 0~49: "D"
 4. category_scores는 5개 항목별로 답변한 문항에서의 평균적인 점수를 0~100점으로 산출하세요.
+   category_comments는 같은 5개 항목 각각에 대해, 지원자의 실제 답변을 근거로 1~2문장 평가 코멘트를 작성하세요.
+   점수만 반복하지 말고, 어떤 답변에서 그 역량이 드러났는지 또는 부족했는지를 구체적으로 쓰세요.
+   (키는 category_scores와 동일하게 logic_score·communication_score·expertise_score·attitude_score·problem_solving_score를 사용)
 5. summary.strengths에는 여러 답변에 걸쳐 일관되게 나타난 강점을 적으세요.
 6. summary.improvements에는 반복적으로 부족했던 부분을 적으세요.
 7. summary.recommended_study에는 약점을 보완할 구체적인 학습 방향을 제시하세요.
@@ -65,5 +75,6 @@ REPORT_GENERATOR_SYSTEM_PROMPT = """당신은 면접 결과를 종합 분석하�
     "면접이 중도에 종료되어 답변한 문항만으로 평가된 결과입니다."를 반드시 명시하세요.
 13. 답변이 하나도 없는 경우에는 평가가 불가능합니다. total_score를 0, is_early_terminated를 true로 두고,
     summary의 세 항목을 모두 "평가할 답변이 없어 리포트를 생성할 수 없습니다."로 채우며,
+    category_comments의 5개 항목도 모두 "평가할 답변이 없습니다."로 채우고,
     question_feedbacks는 빈 배열([])로 두세요.
 """
