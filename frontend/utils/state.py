@@ -35,7 +35,7 @@ def init_session():
     sync_session_id()
 
 
-# ── 로그인 유지 (새로고침 대응) ──────────────────────────────────────────
+# ── 로그인 유지 ──────────────────────────────────────────────────────────
 
 def sync_access_token():
     if st.session_state.get("_logout_pending", False):
@@ -109,7 +109,7 @@ def sync_access_token():
     st.stop()
 
 
-# ── 페르소나 선택 유지 (새로고침 대응) ────────────────────────────────────
+# ── 페르소나 선택 유지 ───────────────────────────────────────────────────
 
 def sync_interviewer_style():
     st.markdown(
@@ -165,7 +165,7 @@ def sync_interviewer_style():
     """, height=0)
 
 
-# ── 면접 세션 ID 유지 (하드 리다이렉트 대응) ────────────────────────────
+# ── 면접 세션 ID 유지 ────────────────────────────────────────────────────
 
 def sync_session_id():
     if st.session_state.get("_session_id_clear_pending", False):
@@ -234,7 +234,6 @@ def sync_session_id():
 # ── 로그인 유지 (비차단, 랜딩페이지 전용) ─────────────────────────────────
 
 def restore_access_token_nonblocking() -> str:
-    """인증 API를 직접 호출하지 않는 페이지용 가벼운 복원 (st.stop() 없이 동작)."""
     if st.session_state.get("_logout_pending", False):
         st.session_state["_landing_token_restore"] = "__NONE__"
 
@@ -308,6 +307,20 @@ def get(key: str):
 
 def set(key: str, value):
     st.session_state[key] = value
+
+
+def ensure_latest_session_id():
+    if get("session_id"):
+        return
+    from utils import api
+    try:
+        sessions = api.get_my_sessions(limit=20).get("sessions") or []
+    except Exception:
+        return
+    for s in sessions:
+        if s.get("total_score") is not None:
+            set("session_id", s["session_id"])
+            return
 
 
 # ── 세션 만료 처리 ────────────────────────────────────────────────────
