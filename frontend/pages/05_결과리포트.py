@@ -4,7 +4,7 @@ import streamlit as st
 from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
+from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
 from utils import api
 
 try:
@@ -23,6 +23,14 @@ init_session()
 
 if "webcam_on" in st.query_params:
     st.session_state.webcam_on = st.query_params["webcam_on"] == "1"
+
+_sid_param = st.query_params.get("sid")
+if _sid_param and _sid_param != get("session_id"):
+    state_set("session_id", _sid_param)
+    state_set("result", None)
+
+# 사이드바로 바로 들어와 session_id가 아예 없는 경우 — 가장 최근 면접으로 채운다.
+ensure_latest_session_id()
 
 render_sidebar(active="결과 리포트")
 
@@ -67,7 +75,13 @@ if result_data:
         radar.get("problem_solving", 0),
     ]
     AVG_SCORES   = [0] * 5
-    COMPETENCIES = [(cat, s, 0, "") for cat, s in zip(CATEGORIES, MY_SCORES)]
+
+    _CAT_KEYS = ["logic", "communication", "expertise", "attitude", "problem_solving"]
+    _cat_comments = result_data.get("category_comments") or {}
+    COMPETENCIES = [
+        (cat, s, 0, _cat_comments.get(key) or "")
+        for cat, s, key in zip(CATEGORIES, MY_SCORES, _CAT_KEYS)
+    ]
     summary_text = "\n\n".join(filter(None, [
         summary_obj.get("strength", ""),
         summary_obj.get("improvement", ""),
@@ -287,8 +301,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ── AI 영상 분석 코멘트 (웹캠 ON일 때) ───────────────────────────────────
-if st.session_state.get("webcam_on", False) and session_id:
+# ── AI 영상 분석 코멘트 (영상이 있는 세션만) ─────────────────────────────
+if session_id:
     try:
         video_metrics = api.get_video_metrics(session_id)
     except api.SessionExpiredError:
@@ -297,7 +311,7 @@ if st.session_state.get("webcam_on", False) and session_id:
     except requests.exceptions.HTTPError as e:
         video_metrics = None
         if e.response is not None and e.response.status_code == 404:
-            pass  # 업로드된 영상이 없음 — 패널 자체를 표시하지 않는다.
+            pass 
         else:
             st.warning("영상 분석 결과를 불러오지 못했습니다.")
     except Exception:
