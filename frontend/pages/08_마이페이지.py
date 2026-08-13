@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import streamlit as st
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
-from utils.state import init_session, handle_session_expired
+from utils.state import init_session, mark_session_expired, render_session_expired_banner
 from utils import api
 
 try:
@@ -26,7 +26,8 @@ render_sidebar(active="마이페이지")
 try:
     _sessions_data = api.get_my_sessions(limit=20)
 except api.SessionExpiredError:
-    handle_session_expired()
+    _sessions_data = None
+    mark_session_expired()
 except Exception:
     _sessions_data = None
 
@@ -38,8 +39,6 @@ HISTORY = []
 for _s in _sessions:
     try:
         _dt = datetime.fromisoformat(_s["created_at"].replace("Z", "+00:00"))
-        # DB의 created_at은 타임존 정보 없이 저장돼 있어서(naive) UTC로 간주하고
-        # 붙여준다 — 안 그러면 아래 "최근 30일" 계산에서 aware-naive 뺄셈 오류가 난다.
         if _dt.tzinfo is None:
             _dt = _dt.replace(tzinfo=timezone.utc)
     except (ValueError, KeyError, TypeError):
@@ -53,9 +52,9 @@ for _s in _sessions:
         "total":      _s.get("total_score"),
         "has_video":  bool(_s.get("has_video")),
         "video_url":  _s.get("video_url") or "",
+        "session_id": _s.get("session_id") or "",
     })
 
-# 이력서 버전 관리는 백엔드에 해당 개념/API 자체가 없어 목업 그대로 둔다.
 VERSIONS = [
     {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
     {"v": "v2.1", "date": "2026.04.18", "score": 68, "active": False},
@@ -77,8 +76,11 @@ st.markdown("""<style>
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
 [data-testid="stColumn"] { padding: 0 !important; }
-/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링 */
-[data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
+/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링.
+   .st-key-chart_ver_row로 범위를 좁혀야 한다 — 안 그러면 이 페이지의 다른
+   st.columns(세션 만료 배너의 st.columns([1,2,1])까지 포함)의 첫 번째 칸에도
+   흰 카드 테두리가 씌워져서 레이아웃이 깨진다. */
+.st-key-chart_ver_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
     background: white !important;
     border: 1px solid #e5e7eb !important;
     border-radius: 8px !important;
@@ -140,9 +142,6 @@ _ICON_LINEUP = (
     '</svg>'
 )
 
-# "최근 30일 점수 향상"은 summary API에 없는 값이라, 이미 받아온 히스토리에서
-# 최근 30일 내 완료된 면접(interview_score 존재)의 최신값-최초값으로 직접 계산한다.
-# 그 구간에 완료된 면접이 2개 미만이면 비교할 게 없으니 "-"로 정직하게 표시한다.
 _now = datetime.now(timezone.utc)
 _recent_scored = [
     h for h in HISTORY
@@ -184,9 +183,9 @@ stat_html += '</div>'
 st.markdown(stat_html, unsafe_allow_html=True)
 
 # ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
-col_chart, _gap, col_ver = st.columns([35, 1, 21])
+_chart_ver_row = st.container(key="chart_ver_row")
+col_chart, _gap, col_ver = _chart_ver_row.columns([35, 1, 21])
 
-# 아직 결과가 없는(진행 중/중단된) 면접은 추이 그래프에서 의미가 없으니 뺀다.
 _SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
 
 with col_chart:
@@ -379,10 +378,15 @@ for i, h in enumerate(HISTORY):
         f'<div style="display:flex;justify-content:center;">'
         f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
         f'</div>'
-        f'<a href="/결과리포트" target="_self" style="font-size:11px;font-weight:600;'
-        f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
-        f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
-        f'</div>'
+        + (
+            f'<a href="/결과리포트?sid={h["session_id"]}" target="_self" style="font-size:11px;font-weight:600;'
+            f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
+            f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
+            if h["iv"] is not None and h["session_id"] else
+            '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
+            'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
+        )
+        + '</div>'
     )
 
 st.markdown(
@@ -484,3 +488,6 @@ components.html(f"""
 }}());
 </script>
 """, height=0)
+
+st.markdown('<div style="height:48px"></div>', unsafe_allow_html=True)
+render_session_expired_banner()

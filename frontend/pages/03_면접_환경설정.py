@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set, handle_session_expired
+from utils.state import init_session, get, set as state_set, mark_session_expired, is_session_expired, render_session_expired_inline
 from utils import api
 
 st.set_page_config(
@@ -287,7 +287,7 @@ with up1:
             state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
             st.caption(f"✅ {jd_file.name} 업로드 완료")
         except api.SessionExpiredError:
-            handle_session_expired()
+            mark_session_expired()
         except Exception as e:
             state_set("jd_id", 0)
             st.error(_upload_error_message(e))
@@ -304,7 +304,7 @@ with up2:
             state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
             st.caption(f"✅ {resume_file.name} 업로드 완료")
         except api.SessionExpiredError:
-            handle_session_expired()
+            mark_session_expired()
         except Exception as e:
             state_set("resume_id", 0)
             st.error(_upload_error_message(e))
@@ -370,14 +370,17 @@ st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
 # ── 시작 버튼 ────────────────────────────────────────────────────────────
 _, center, _ = st.columns([4.3, 2, 4.3])
 with center:
-    with st.container(key="start_area"):
-        if st.button("면접 시작하기 →", type="primary", key="btn_start"):
-            if not (get("user_name") or name):
-                st.error("성함을 입력해주세요.")
-            elif not get("jd_id"):
-                st.error("직무 기술서(JD)를 업로드해주세요.")
-            elif not get("resume_id"):
-                st.error("이력서를 업로드해주세요.")
-            else:
-                state_set("interviewer_style", selected)
-                st.switch_page("pages/035_웹캠_허용.py")
+    if is_session_expired():
+        render_session_expired_inline()
+    else:
+        with st.container(key="start_area"):
+            if st.button("면접 시작하기 →", type="primary", key="btn_start"):
+                if not (get("user_name") or name):
+                    st.error("성함을 입력해주세요.")
+                elif not get("jd_id"):
+                    st.error("직무 기술서(JD)를 업로드해주세요.")
+                elif not get("resume_id"):
+                    st.error("이력서를 업로드해주세요.")
+                else:
+                    state_set("interviewer_style", selected)
+                    st.switch_page("pages/035_웹캠_허용.py")

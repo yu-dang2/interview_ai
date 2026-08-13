@@ -8,7 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set, handle_session_expired
+from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
 from utils import api
 
 st.set_page_config(
@@ -50,7 +50,7 @@ if "iv_messages" not in st.session_state:
             first_q = resp["first_question"]
             state_set("first_question", first_q)
         except api.SessionExpiredError:
-            handle_session_expired()
+            mark_session_expired()
         except requests.exceptions.ConnectionError:
             st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
             st.stop()
@@ -541,25 +541,74 @@ body{{
   var _videoRecActive = {str(webcam_on).lower()};
 
   function startVideoRecording() {{
-    if (window.parent.__ivVideoRec && window.parent.__ivVideoRec.stream) {{
-      var preview0 = doc.getElementById('webcam-preview-video');
-      if (preview0) {{
-        preview0.srcObject = window.parent.__ivVideoRec.stream;
-        var p0 = preview0.play();
-        if (p0 && p0.catch) p0.catch(function(err) {{ console.warn('미리보기 재생 실패:', err); }});
-      }}
-      return;
-    }}
-    if (!window.parent.__ivVideoRec) {{
-      window.parent.__ivVideoRec = {{ recorder: null, stream: null, chunks: [], uploaded: false }};
-    }}
     var pWin = window.parent;
-    pWin.navigator.mediaDevices.getUserMedia({{
-      video: {{ width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }},
-      audio: false
-    }}).then(function(stream) {{
-      var vr = pWin.__ivVideoRec;
-      vr.stream = stream;
+    if (!pWin.__ivVideoInit) {{
+      pWin.__ivVideoInit = true;
+      var _s = pWin.document.createElement('script');
+      _s.textContent = [
+        'window.__ivVideoRec = window.__ivVideoRec || {{ recorder: null, stream: null, chunks: [], uploaded: false, connecting: false }};',
+        'window.__ivStartVideoRecording = function(onReady) {{',
+        '  var vr = window.__ivVideoRec;',
+        '  if (vr.stream) {{ onReady(vr.stream); return; }}',
+        '  if (vr.connecting) {{ return; }}',
+        '  vr.connecting = true;',
+        '  navigator.mediaDevices.getUserMedia({{',
+        '    video: {{ width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }},',
+        '    audio: false',
+        '  }}).then(function(stream) {{',
+        '    vr.connecting = false;',
+        '    vr.stream = stream;',
+        '    try {{',
+        '      var mimeCandidates = ["video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm", "video/mp4"];',
+        '      var chosen = "";',
+        '      for (var i = 0; i < mimeCandidates.length; i++) {{',
+        '        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeCandidates[i])) {{ chosen = mimeCandidates[i]; break; }}',
+        '      }}',
+        '      var opts = {{ videoBitsPerSecond: 500000 }};',
+        '      if (chosen) opts.mimeType = chosen;',
+        '      vr.recorder = new MediaRecorder(stream, opts);',
+        '      vr.recorder.ondataavailable = function(e) {{ if (e.data.size > 0) vr.chunks.push(e.data); }};',
+        '      vr.recorder.onerror = function(e) {{ console.warn("[영상] 레코더 에러:", e.error || e); }};',
+        '      vr.recorder.start(2000);',
+        '    }} catch (err) {{ console.warn("[영상] 레코더 생성 실패:", err); }}',
+        '    onReady(stream);',
+        '  }}).catch(function(err) {{',
+        '    vr.connecting = false;',
+        '    console.warn("[영상] 웹캠 접근 실패:", err);',
+        '  }});',
+        '}};',
+  
+        'window.__ivStopAndUploadVideo = function(sessionId, accessToken, baseUrl, onDone) {{',
+        '  var vr = window.__ivVideoRec;',
+        '  if (!vr || !vr.recorder) {{ onDone(); return; }}',
+        '  if (vr.recorder.state === "inactive" || vr.uploaded) {{ onDone(); return; }}',
+        '  vr.uploaded = true;',
+        '  vr.recorder.onstop = function() {{',
+        '    var actualType = vr.recorder.mimeType || "video/webm";',
+        '    var ext = actualType.indexOf("mp4") !== -1 ? "mp4" : "webm";',
+        '    var blob = new Blob(vr.chunks, {{ type: actualType }});',
+        '    if (blob.size === 0) {{ console.warn("[영상] 녹화된 데이터가 0바이트입니다."); }}',
+        '    var form = new FormData();',
+        '    form.append("video", blob, "interview_" + sessionId + "." + ext);',
+        '    fetch(baseUrl + "/interview/" + sessionId + "/video", {{',
+        '      method: "POST",',
+        '      headers: {{ "Authorization": "Bearer " + accessToken }},',
+        '      body: form',
+        '    }}).then(function(res) {{',
+        '      if (!res.ok) {{',
+        '        res.text().then(function(t) {{ console.warn("[영상] 업로드 실패 HTTP " + res.status + ": " + t); }});',
+        '      }}',
+        '    }}).catch(function(err) {{',
+        '      console.warn("[영상] 업로드 네트워크 오류:", err);',
+        '    }}).finally(onDone);',
+        '  }};',
+        '  vr.recorder.stop();',
+        '  if (vr.stream) {{ vr.stream.getTracks().forEach(function(t) {{ t.stop(); }}); }}',
+        '}};'
+      ].join('\\n');
+      pWin.document.head.appendChild(_s);
+    }}
+    pWin.__ivStartVideoRecording(function(stream) {{
       _videoRecActive = true;
       var preview = doc.getElementById('webcam-preview-video');
       if (preview) {{
@@ -569,75 +618,18 @@ body{{
       }}
       var statusEl = doc.getElementById('webcam-preview-status');
       if (statusEl) {{ statusEl.style.display = 'none'; }}
-      try {{
-        var _vMimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-        var _vChosenMime = '';
-        var PRecorder = pWin.MediaRecorder;
-        for (var _vi = 0; _vi < _vMimeCandidates.length; _vi++) {{
-          if (PRecorder.isTypeSupported && PRecorder.isTypeSupported(_vMimeCandidates[_vi])) {{
-            _vChosenMime = _vMimeCandidates[_vi];
-            break;
-          }}
-        }}
-        var _vOpts = {{ videoBitsPerSecond: 500000 }};
-        if (_vChosenMime) _vOpts.mimeType = _vChosenMime;
-        vr.recorder = new PRecorder(stream, _vOpts);
-        vr.recorder.ondataavailable = function(e) {{ if (e.data.size > 0) vr.chunks.push(e.data); }};
-        vr.recorder.start();
-      }} catch (err) {{
-        console.warn('영상 녹화 시작 실패:', err);
-      }}
-    }}).catch(function(err) {{
-      console.warn('웹캠 접근 실패:', err);
-      setStatusIfExists('카메라 접근 실패: ' + err.name + ' — 권한을 허용했는지 확인해주세요.');
     }});
-  }}
-
-  function setStatusIfExists(msg) {{
-    var el = doc.getElementById('webcam-preview-status');
-    if (el) {{ el.textContent = msg; el.style.display = 'flex'; }}
   }}
 
   if (_videoRecActive) {{ startVideoRecording(); }}
 
   function stopAndUploadVideo(onDone) {{
-    var vr = window.parent.__ivVideoRec;
-    if (!vr || !vr.recorder) {{
+    if (window.parent.__ivStopAndUploadVideo) {{
+      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.BASE_URL}', onDone);
+    }} else {{
       console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
       onDone();
-      return;
     }}
-    if (vr.recorder.state === 'inactive' || vr.uploaded) {{
-      console.warn('[영상] 이미 처리됨(state=' + vr.recorder.state + ', uploaded=' + vr.uploaded + ') — 업로드 건너뜀.');
-      onDone();
-      return;
-    }}
-    vr.uploaded = true;
-    vr.recorder.onstop = function() {{
-      var actualType = vr.recorder.mimeType || 'video/webm';
-      var ext = actualType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
-      var blob = new Blob(vr.chunks, {{ type: actualType }});
-      if (blob.size === 0) {{
-        console.warn('[영상] 녹화된 데이터가 0바이트입니다.');
-      }}
-      var form = new FormData();
-      form.append('video', blob, 'interview_' + _videoSessionId + '.' + ext);
-      fetch('{api.BASE_URL}/interview/' + _videoSessionId + '/video', {{
-        method: 'POST',
-        headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
-        body: form
-      }}).then(function(res) {{
-        if (!res.ok) {{
-          return res.text().then(function(t) {{
-            console.warn('[영상] 업로드 실패 HTTP ' + res.status + ': ' + t);
-          }});
-        }}
-      }}).catch(function(err) {{
-        console.warn('[영상] 업로드 네트워크 오류:', err);
-      }}).finally(onDone);
-    }};
-    vr.recorder.stop();
-    if (vr.stream) vr.stream.getTracks().forEach(function(t) {{ t.stop(); }});
   }}
 
   function speakText(text, msgIdx) {{
@@ -774,7 +766,7 @@ body{{
       doc.body.appendChild(ov);
     }}
     function navigate() {{
-      
+
       var vr = window.parent.__ivVideoRec;
       var wc = (vr && vr.stream) ? '1' : '0';
       var input = doc.querySelector('.st-key-_iv_nav_ready input');
@@ -787,6 +779,14 @@ body{{
         input.dispatchEvent(new FocusEvent('focusout', {{ bubbles: true }}));
         input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', code: 'Enter', bubbles: true }}));
       }}
+      window.parent.eval(
+        'setTimeout(function() {{' +
+        '  var ov = document.getElementById("_iv_ov");' +
+        '  if (ov) {{ ov.remove(); }}' +
+        '  var sty = document.getElementById("_iv_sty");' +
+        '  if (sty) {{ sty.remove(); }}' +
+        '}}, 800);'
+      );
     }}
     var videoDone = new Promise(function(res) {{ stopAndUploadVideo(res); }});
     var videoTimeout = new Promise(function(res) {{
@@ -805,13 +805,11 @@ body{{
   }}
 
   window.parent.__ivShowLoadingAndEnd = showLoadingAndEnd;
-  if (!window.parent.__ivEndListenerBound) {{
-    window.parent.__ivEndListenerBound = true;
-    doc.addEventListener('click', function(e) {{
-      if (e.target && e.target.closest && e.target.closest('#end-interview')) {{
-        showLoadingAndEnd();
-      }}
-    }});
+  var endBtnEl = doc.getElementById('end-interview');
+  if (endBtnEl) {{
+    endBtnEl.onclick = function() {{
+      showLoadingAndEnd();
+    }};
   }}
 
   // ── 마이크 (녹음 → 백엔드 STT: gpt-4o-transcribe) ──────────────────
@@ -838,6 +836,7 @@ body{{
   var audioChunks   = [];
   var micStream     = null;
   var recording     = false;
+  var _recordStartedAt = 0;
 
   function setMicIdle() {{
     recording = false;
@@ -891,6 +890,8 @@ body{{
         var blob = new Blob(audioChunks, {{ type: actualType }});
         var formData = new FormData();
         formData.append('audio', blob, 'recording.' + ext);
+        var durationSec = _recordStartedAt ? (Date.now() - _recordStartedAt) / 1000 : 0;
+        formData.append('duration', String(durationSec));
         fetch('{api.BASE_URL}/voice/transcribe', {{
           method: 'POST',
           headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
@@ -915,6 +916,7 @@ body{{
             setMicIdle();
           }});
       }};
+      _recordStartedAt = Date.now();
       mediaRecorder.start();
       setMicRecording();
     }}).catch(function(err) {{
@@ -1057,7 +1059,7 @@ if _pending:
         except api.SessionExpiredError:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
-            handle_session_expired()
+            mark_session_expired()
         except requests.exceptions.ConnectionError:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
@@ -1090,3 +1092,5 @@ if _pending_q:
 # ── 숨김 종료 버튼 ──────────
 if st.button("종료", key="btn_end_interview"):
     st.switch_page("pages/05_결과리포트.py")
+
+render_session_expired_banner()
