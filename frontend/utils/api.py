@@ -145,3 +145,52 @@ def get_my_videos() -> dict:
     )
     _check(res)
     return res.json()
+
+
+def get_my_sessions(limit: int = 20) -> dict:
+    res = requests.get(
+        f"{BASE_URL}/interview/sessions",
+        params={"limit": limit},
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
+# ── 이력서 최적화 ──────────────────────────────────────────────────────────
+
+def get_resume_optimization(session_id: str) -> dict:
+    res = requests.get(
+        f"{BASE_URL}/interview/sessions/{session_id}/resume-optimization",
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
+def apply_resume_optimization(
+    resume_id: int, session_id: str, suggestion_ids: list | None = None
+) -> dict:
+    payload = {"session_id": session_id}
+    if suggestion_ids:
+        payload["suggestion_ids"] = suggestion_ids
+    res = requests.post(
+        f"{BASE_URL}/resume/{resume_id}/apply",
+        json=payload,
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
+def download_resume(resume_id: int) -> bytes:
+    res = requests.get(
+        f"{BASE_URL}/resume/{resume_id}/download",
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.content
