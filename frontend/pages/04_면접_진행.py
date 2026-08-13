@@ -289,6 +289,9 @@ webcam_html = (
     '<div id="webcam-preview-status" style="display:none;position:absolute;inset:0;'
     'align-items:center;justify-content:center;text-align:center;padding:12px;'
     'font-size:11px;color:#e5e7eb;background:rgba(0,0,0,0.55);"></div>'
+    '<select id="webcam-cam-select" style="position:absolute;left:6px;right:6px;bottom:6px;'
+    'font-size:10px;background:rgba(0,0,0,0.55);color:white;border:1px solid rgba(255,255,255,0.3);'
+    'border-radius:5px;padding:3px 5px;box-sizing:border-box;"></select>'
     '</div>'
     f'<div id="webcam-preview-divider" style="height:1px;background:#e5e8ec;margin-bottom:16px;{_webcam_display}"></div>'
 )
@@ -552,10 +555,7 @@ body{{
         '  if (vr.stream) {{ onReady(vr.stream); return; }}',
         '  if (vr.connecting) {{ return; }}',
         '  vr.connecting = true;',
-        '  navigator.mediaDevices.getUserMedia({{',
-        '    video: {{ width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }},',
-        '    audio: false',
-        '  }}).then(function(stream) {{',
+        '  function onStreamReady(stream) {{',
         '    vr.connecting = false;',
         '    vr.stream = stream;',
         '    try {{',
@@ -572,12 +572,51 @@ body{{
         '      vr.recorder.start(2000);',
         '    }} catch (err) {{ console.warn("[영상] 레코더 생성 실패:", err); }}',
         '    onReady(stream);',
+        '  }}',
+        '  var _baseConstraints = {{ width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }};',
+        '  function openCamera(constraints) {{',
+        '    return navigator.mediaDevices.getUserMedia({{ video: constraints, audio: false }});',
+        '  }}',
+        '  var _camId = null;',
+        '  try {{ _camId = localStorage.getItem("iv_camera_device_id"); }} catch (e) {{}}',
+        '  if (_camId) {{',
+        '    var _withDevice = Object.assign({{}}, _baseConstraints, {{ deviceId: {{ exact: _camId }} }});',
+        '    openCamera(_withDevice).then(onStreamReady).catch(function(err) {{',
+        '      console.warn("[영상] 저장된 카메라를 열지 못해 기본 카메라로 재시도:", err);',
+        '      openCamera(_baseConstraints).then(onStreamReady).catch(function(err2) {{',
+        '        vr.connecting = false;',
+        '        console.warn("[영상] 웹캠 접근 실패:", err2);',
+        '      }});',
+        '    }});',
+        '  }} else {{',
+        '    openCamera(_baseConstraints).then(onStreamReady).catch(function(err) {{',
+        '      vr.connecting = false;',
+        '      console.warn("[영상] 웹캠 접근 실패:", err);',
+        '    }});',
+        '  }}',
+        '}};',
+
+        'window.__ivSwitchCamera = function(deviceId, onDone) {{',
+        '  var vr = window.__ivVideoRec;',
+        '  if (!vr || !vr.stream) {{ if (onDone) onDone(false); return; }}',
+        '  navigator.mediaDevices.getUserMedia({{',
+        '    video: {{ deviceId: {{ exact: deviceId }}, width: {{ ideal: 640 }}, height: {{ ideal: 480 }}, frameRate: {{ ideal: 15, max: 15 }} }},',
+        '    audio: false',
+        '  }}).then(function(newStream) {{',
+        '    var newTrack = newStream.getVideoTracks()[0];',
+        '    vr.stream.getVideoTracks().forEach(function(t) {{',
+        '      vr.stream.removeTrack(t);',
+        '      t.stop();',
+        '    }});',
+        '    vr.stream.addTrack(newTrack);',
+        '    try {{ localStorage.setItem("iv_camera_device_id", newTrack.getSettings().deviceId || deviceId); }} catch (e) {{}}',
+        '    if (onDone) onDone(true);',
         '  }}).catch(function(err) {{',
-        '    vr.connecting = false;',
-        '    console.warn("[영상] 웹캠 접근 실패:", err);',
+        '    console.warn("[영상] 카메라 전환 실패:", err);',
+        '    if (onDone) onDone(false);',
         '  }});',
         '}};',
-  
+
         'window.__ivStopAndUploadVideo = function(sessionId, accessToken, baseUrl, onDone) {{',
         '  var vr = window.__ivVideoRec;',
         '  if (!vr || !vr.recorder) {{ onDone(); return; }}',
@@ -618,6 +657,34 @@ body{{
       }}
       var statusEl = doc.getElementById('webcam-preview-status');
       if (statusEl) {{ statusEl.style.display = 'none'; }}
+      populateCamSelect();
+    }});
+  }}
+  function populateCamSelect() {{
+    var sel = doc.getElementById('webcam-cam-select');
+    if (!sel || !navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(function(devices) {{
+      var cams = devices.filter(function(d) {{ return d.kind === 'videoinput'; }});
+      if (!cams.length) {{ sel.style.display = 'none'; return; }}
+      var vr = window.parent.__ivVideoRec;
+      var activeTrack = vr && vr.stream ? vr.stream.getVideoTracks()[0] : null;
+      var activeId = activeTrack ? activeTrack.getSettings().deviceId : null;
+      sel.innerHTML = '';
+      cams.forEach(function(d, i) {{
+        var opt = doc.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || ('카메라 ' + (i + 1));
+        if (d.deviceId === activeId) opt.selected = true;
+        sel.appendChild(opt);
+      }});
+      sel.onchange = function() {{
+        var chosen = sel.value;
+        window.parent.__ivSwitchCamera(chosen, function(ok) {{
+          if (!ok) console.warn('[영상] 카메라 전환에 실패했습니다.');
+        }});
+      }};
+    }}).catch(function(err) {{
+      console.warn('[영상] 카메라 목록을 불러오지 못했습니다:', err);
     }});
   }}
 
