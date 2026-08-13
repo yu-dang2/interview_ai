@@ -1,6 +1,7 @@
+import requests
 import streamlit as st
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, mark_session_expired, render_session_expired_banner
+from utils.state import init_session, get, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
 from utils import api
 
 st.set_page_config(
@@ -12,8 +13,9 @@ st.set_page_config(
 init_session()
 render_sidebar(active="이력서 최적화")
 
+ensure_latest_session_id()
+
 session_id = get("session_id")
-resume_id  = get("resume_id")
 
 optimization = None
 if session_id:
@@ -23,6 +25,8 @@ if session_id:
         mark_session_expired()
     except Exception:
         optimization = None
+
+resume_id = (optimization or {}).get("resume_id") or get("resume_id")
 
 MATCHED_KEYWORDS = (optimization or {}).get("matched_keywords") or []
 MISSING_KEYWORDS = (optimization or {}).get("missing_keywords") or []
@@ -69,6 +73,11 @@ st.markdown("""<style>
 }
 .st-key-bottom_row [data-testid="stElementContainer"] {
     width: auto !important;
+}
+
+[class*="st-key-chk_wrap_"] {
+    display: flex !important;
+    align-items: flex-end !important;
 }
 </style>""", unsafe_allow_html=True)
 
@@ -129,13 +138,13 @@ else:
         )
         st.markdown(
             f'<div style="font-size:12px;font-weight:600;color:#3d78f2;margin-bottom:10px;">{section}</div>'
-            '<div style="display:flex;align-items:center;gap:16px;">'
-            f'<div style="flex:1;background:#fcf7f7;border:1px solid #dedede;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
+            '<div style="display:flex;align-items:stretch;gap:16px;">'
+            f'<div style="flex:1 1 0;min-width:0;background:#fcf7f7;border:1px solid #dedede;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
             '<span style="background:#ffe0e0;color:#bf2626;font-size:11px;font-weight:500;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:10px;">기존</span>'
             f'<p style="font-size:13px;color:#593333;line-height:1.6;margin:0;">{original}</p>'
             '</div>'
-            '<span style="font-size:20px;font-weight:700;color:#3d78f2;flex-shrink:0;">→</span>'
-            f'<div style="flex:1;background:#f2fcf5;border:1px solid #dedede;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
+            '<span style="font-size:20px;font-weight:700;color:#3d78f2;flex-shrink:0;align-self:center;">→</span>'
+            f'<div style="flex:1 1 0;min-width:0;background:#f2fcf5;border:1px solid #dedede;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
             '<span style="background:#e0edff;color:#3d78f2;font-size:11px;font-weight:500;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:10px;">개선 제안</span>'
             f'<p style="font-size:13px;color:#1a478c;line-height:19px;margin:0;">{improved}</p>'
             f'{reason_html}'
@@ -143,9 +152,13 @@ else:
             '</div>',
             unsafe_allow_html=True,
         )
-        st.checkbox("이 제안 적용", value=True, key=f"suggest_sel_{sid}")
+        st.markdown('<div style="height:40px"></div>', unsafe_allow_html=True)
+        _spacer_col, _chk_col = st.columns([1, 1])
+        with _chk_col:
+            with st.container(key=f"chk_wrap_{sid}"):
+                st.checkbox("이 제안 적용", value=True, key=f"suggest_sel_{sid}")
 
-    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:36px"></div>', unsafe_allow_html=True)
 
     applied = st.session_state.resume_applied_result
     if applied:
@@ -168,24 +181,41 @@ else:
         if st.button("건너뛰기", key="skip_btn"):
             st.switch_page("pages/08_마이페이지.py")
 
+        if st.session_state.get("resume_apply_msg"):
+            _level, _text = st.session_state.resume_apply_msg
+            getattr(st, _level)(_text)
+
         if st.button("선택한 제안 적용하기", key="apply_btn", type="primary"):
             selected_ids = [
                 s.get("id", i) for i, s in enumerate(SUGGESTIONS)
                 if st.session_state.get(f"suggest_sel_{s.get('id', i)}", True)
             ]
             if not selected_ids:
-                st.warning("적용할 제안을 하나 이상 선택해주세요.")
+                st.session_state.resume_apply_msg = ("warning", "적용할 제안을 하나 이상 선택해주세요.")
+                st.rerun()
             elif not resume_id:
-                st.error("이력서 정보가 없습니다.")
+                st.session_state.resume_apply_msg = ("error", "이력서 정보가 없습니다.")
+                st.rerun()
             else:
                 try:
                     st.session_state.resume_applied_result = api.apply_resume_optimization(
                         resume_id, session_id, suggestion_ids=selected_ids
                     )
+                    st.session_state.resume_apply_msg = None
                     st.rerun()
                 except api.SessionExpiredError:
                     mark_session_expired()
+                except requests.exceptions.HTTPError as e:
+                    try:
+                        detail = e.response.json().get("detail")
+                    except Exception:
+                        detail = None
+                    st.session_state.resume_apply_msg = (
+                        "error", detail or "제안을 적용하지 못했습니다. 잠시 후 다시 시도해주세요."
+                    )
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"제안을 적용하지 못했습니다: {e}")
+                    st.session_state.resume_apply_msg = ("error", f"제안을 적용하지 못했습니다: {e}")
+                    st.rerun()
 
 render_session_expired_banner()
