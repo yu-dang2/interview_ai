@@ -311,11 +311,28 @@ def set(key: str, value):
 
 
 # ── 세션 만료 처리 ────────────────────────────────────────────────────
-def handle_session_expired():
+
+def mark_session_expired():
     st.session_state["_logout_pending"] = True
     st.session_state["access_token"] = ""
     st.session_state["is_logged_in"] = False
+    st.session_state["_session_expired"] = True
+
+
+def is_session_expired() -> bool:
+    return bool(st.session_state.get("_session_expired"))
+
+
+def render_session_expired_inline():
+    st.session_state["_session_expired"] = False
     st.error("로그인이 만료되었습니다. 다시 로그인해주세요.")
-    if st.button("로그인 화면으로 이동", key="_session_expired_relogin"):
+    if st.button("로그인 화면으로 이동", key="_session_expired_relogin", use_container_width=True):
         st.switch_page("pages/01_로그인.py")
-    st.stop()
+
+
+def render_session_expired_banner():
+    if not is_session_expired():
+        return
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        render_session_expired_inline()
