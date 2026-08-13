@@ -1,0 +1,28 @@
+# 이미지에 들어가면 안 되는 것들
+.env
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# 로컬 데이터 — 컨테이너에서는 볼륨을 쓴다
+uploads/
+*.db
+*.db-wal
+*.db-shm
+
+# 백엔드 이미지에 필요 없는 것
+frontend/
+docs/
+.git/
+.github/
+.vscode/
+.claude/
+*.md
+!video/README.md
+
+# 테스트·캐시
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
