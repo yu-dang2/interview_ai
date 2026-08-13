@@ -576,6 +576,34 @@ body{{
         '    vr.connecting = false;',
         '    console.warn("[영상] 웹캠 접근 실패:", err);',
         '  }});',
+        '}};',
+  
+        'window.__ivStopAndUploadVideo = function(sessionId, accessToken, baseUrl, onDone) {{',
+        '  var vr = window.__ivVideoRec;',
+        '  if (!vr || !vr.recorder) {{ onDone(); return; }}',
+        '  if (vr.recorder.state === "inactive" || vr.uploaded) {{ onDone(); return; }}',
+        '  vr.uploaded = true;',
+        '  vr.recorder.onstop = function() {{',
+        '    var actualType = vr.recorder.mimeType || "video/webm";',
+        '    var ext = actualType.indexOf("mp4") !== -1 ? "mp4" : "webm";',
+        '    var blob = new Blob(vr.chunks, {{ type: actualType }});',
+        '    if (blob.size === 0) {{ console.warn("[영상] 녹화된 데이터가 0바이트입니다."); }}',
+        '    var form = new FormData();',
+        '    form.append("video", blob, "interview_" + sessionId + "." + ext);',
+        '    fetch(baseUrl + "/interview/" + sessionId + "/video", {{',
+        '      method: "POST",',
+        '      headers: {{ "Authorization": "Bearer " + accessToken }},',
+        '      body: form',
+        '    }}).then(function(res) {{',
+        '      if (!res.ok) {{',
+        '        res.text().then(function(t) {{ console.warn("[영상] 업로드 실패 HTTP " + res.status + ": " + t); }});',
+        '      }}',
+        '    }}).catch(function(err) {{',
+        '      console.warn("[영상] 업로드 네트워크 오류:", err);',
+        '    }}).finally(onDone);',
+        '  }};',
+        '  vr.recorder.stop();',
+        '  if (vr.stream) {{ vr.stream.getTracks().forEach(function(t) {{ t.stop(); }}); }}',
         '}};'
       ].join('\\n');
       pWin.document.head.appendChild(_s);
@@ -596,43 +624,12 @@ body{{
   if (_videoRecActive) {{ startVideoRecording(); }}
 
   function stopAndUploadVideo(onDone) {{
-    var vr = window.parent.__ivVideoRec;
-    if (!vr || !vr.recorder) {{
+    if (window.parent.__ivStopAndUploadVideo) {{
+      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.BASE_URL}', onDone);
+    }} else {{
       console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
       onDone();
-      return;
     }}
-    if (vr.recorder.state === 'inactive' || vr.uploaded) {{
-      console.warn('[영상] 이미 처리됨(state=' + vr.recorder.state + ', uploaded=' + vr.uploaded + ') — 업로드 건너뜀.');
-      onDone();
-      return;
-    }}
-    vr.uploaded = true;
-    vr.recorder.onstop = function() {{
-      var actualType = vr.recorder.mimeType || 'video/webm';
-      var ext = actualType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
-      var blob = new Blob(vr.chunks, {{ type: actualType }});
-      if (blob.size === 0) {{
-        console.warn('[영상] 녹화된 데이터가 0바이트입니다.');
-      }}
-      var form = new FormData();
-      form.append('video', blob, 'interview_' + _videoSessionId + '.' + ext);
-      fetch('{api.BASE_URL}/interview/' + _videoSessionId + '/video', {{
-        method: 'POST',
-        headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
-        body: form
-      }}).then(function(res) {{
-        if (!res.ok) {{
-          return res.text().then(function(t) {{
-            console.warn('[영상] 업로드 실패 HTTP ' + res.status + ': ' + t);
-          }});
-        }}
-      }}).catch(function(err) {{
-        console.warn('[영상] 업로드 네트워크 오류:', err);
-      }}).finally(onDone);
-    }};
-    vr.recorder.stop();
-    if (vr.stream) vr.stream.getTracks().forEach(function(t) {{ t.stop(); }});
   }}
 
   function speakText(text, msgIdx) {{
