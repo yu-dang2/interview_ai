@@ -4,7 +4,7 @@ import streamlit as st
 from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set, handle_session_expired
+from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
 from utils import api
 
 try:
@@ -51,7 +51,7 @@ if not result_data and session_id:
             result_data = api.get_result(session_id)
             state_set("result", result_data)
         except api.SessionExpiredError:
-            handle_session_expired()
+            mark_session_expired()
         except Exception:
             result_data = None
 
@@ -75,7 +75,7 @@ if result_data:
     ]))
     date_str    = ""
     job_title   = ""
-    persona_str = get("interviewer_style") or "기술 리드"
+    persona_str = result_data.get("persona") or get("interviewer_style") or "기술 리드"
     resume_score_val    = result_data.get("resume_score", 0)
     interview_score_val = result_data.get("interview_score", 0)
     total_score_val     = result_data.get("total_score", 0)
@@ -292,7 +292,8 @@ if st.session_state.get("webcam_on", False) and session_id:
     try:
         video_metrics = api.get_video_metrics(session_id)
     except api.SessionExpiredError:
-        handle_session_expired()
+        video_metrics = None
+        mark_session_expired()
     except requests.exceptions.HTTPError as e:
         video_metrics = None
         if e.response is not None and e.response.status_code == 404:
@@ -373,3 +374,5 @@ with st.container(key="bottom_actions"):
         st.switch_page("pages/03_면접_환경설정.py")
     if st.button("피드백 보고서 보기", type="primary"):
         st.switch_page("pages/06_피드백보고서.py")
+
+render_session_expired_banner()
