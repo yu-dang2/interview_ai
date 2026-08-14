@@ -195,8 +195,9 @@ class InterviewResumeOptimization(Base):
     __tablename__ = "interview_resume_optimizations"
 
     optimization_id = Column(Integer, primary_key=True, autoincrement=True)
-    # JD 키워드 중 이력서에서 확인된 것. JSON 배열 문자열.
-    matched_keywords = Column(Text)
+    # JD 키워드를 두 갈래로 나눈 것. 둘 다 JSON 배열 문자열.
+    matched_keywords = Column(Text)   # 이력서에 이미 있는 것 (강점)
+    missing_keywords = Column(Text)   # 이력서에 없는 것 (보완 대상)
     # [{"id", "section", "original", "improved", "reason"}] JSON 배열 문자열.
     suggestions = Column(Text)
     created_at = Column(DateTime, default=func.now())

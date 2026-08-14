@@ -275,10 +275,16 @@ class InterviewService:
 
         # resume_optimizer 가 종료 직전에 만든다. 없을 수도 있어 있을 때만 붙인다.
         optimization = values.get("resume_optimization") or {}
-        if optimization.get("matched_keywords") or optimization.get("suggestions"):
+        if any(
+            optimization.get(key)
+            for key in ("matched_keywords", "missing_keywords", "suggestions")
+        ):
             result.resume_optimization = InterviewResumeOptimization(
                 matched_keywords=json.dumps(
                     optimization.get("matched_keywords") or [], ensure_ascii=False
+                ),
+                missing_keywords=json.dumps(
+                    optimization.get("missing_keywords") or [], ensure_ascii=False
                 ),
                 suggestions=json.dumps(
                     optimization.get("suggestions") or [], ensure_ascii=False
@@ -415,21 +421,27 @@ class InterviewService:
             # 아직 저장 전이면 체크포인트에서 읽어본다.
             values = await self._checkpoint_values(session_id)
             data = values.get("resume_optimization") or {}
-            if not (data.get("matched_keywords") or data.get("suggestions")):
+            if not any(
+                data.get(key)
+                for key in ("matched_keywords", "missing_keywords", "suggestions")
+            ):
                 raise HTTPException(
                     status_code=409,
                     detail="면접이 아직 종료되지 않아 이력서 최적화 결과가 없습니다.",
                 )
             matched = data.get("matched_keywords") or []
+            missing = data.get("missing_keywords") or []
             suggestions = data.get("suggestions") or []
         else:
             matched = json.loads(optimization.matched_keywords or "[]")
+            missing = json.loads(optimization.missing_keywords or "[]")
             suggestions = json.loads(optimization.suggestions or "[]")
 
         return ResumeOptimizationResponse(
             session_id=session_id,
             resume_id=session.resumes_resume_id,
             matched_keywords=[str(k) for k in matched],
+            missing_keywords=[str(k) for k in missing],
             suggestions=[ResumeSuggestion(**s) for s in suggestions if isinstance(s, dict)],
         )
 

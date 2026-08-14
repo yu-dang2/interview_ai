@@ -66,6 +66,21 @@ class RadarChart(BaseModel):
     problem_solving: Score
 
 
+class RadarComments(BaseModel):
+    """
+    역량 5개 각각에 대한 1~2문장 평가 코멘트. RadarChart 와 필드명이 같다.
+
+    전부 기본값이 빈 문자열인 이유: 이 항목이 프롬프트에 들어오기 전에 끝난 면접에는
+    코멘트가 없다. 그 결과를 조회해도 응답이 깨지지 않아야 한다.
+    """
+
+    logic: str = ""
+    communication: str = ""
+    expertise: str = ""
+    attitude: str = ""
+    problem_solving: str = ""
+
+
 class ResultSummary(BaseModel):
     strength: str
     improvement: str
@@ -82,6 +97,7 @@ class ResultResponse(BaseModel):
     total_score: Score
     grade: str | None = None       # report_generator 가 내주는 등급 (A+, B+ ...)
     radar_chart: RadarChart
+    radar_comments: RadarComments = RadarComments()
     summary: ResultSummary
 
 
@@ -121,7 +137,10 @@ class ResumeOptimizationResponse(BaseModel):
 
     session_id: str
     resume_id: int | None = None
+    # JD 키워드 중 이력서에 이미 있는 것 / 없는 것.
+    # 화면에서 강점과 보완 대상을 나눠 보여주려면 둘 다 필요하다.
     matched_keywords: list[str] = []
+    missing_keywords: list[str] = []
     suggestions: list[ResumeSuggestion] = []
 
 
