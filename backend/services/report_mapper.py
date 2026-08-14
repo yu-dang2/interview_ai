@@ -17,6 +17,7 @@ report_generator (agent/parsers/report_generator_prompt.py):
     total_score, grade,
     category_scores{logic_score, communication_score, expertise_score,
                     attitude_score, problem_solving_score},
+    category_comments{같은 5개 키, 값은 1~2문장 코멘트},
     summary{strengths, improvements, recommended_study},
     keywords[],
     question_feedbacks[{question, user_answer, score, improved_answer}]
@@ -25,11 +26,14 @@ jd_resume_matcher (agent/parsers/jd_resume_matcher_prompt.py):
     matching_skills[], missing_skills[], ... (점수 없음 → resume_score 는 여기서 근사한다)
 """
 
+import json
+
 from backend.core.config import INTERVIEW_WEIGHT, RESUME_WEIGHT
 from backend.schemas.interview import (
     FeedbackItem,
     FeedbackResponse,
     RadarChart,
+    RadarComments,
     RealtimeFeedbackItem,
     RealtimeScore,
     ResultResponse,
@@ -65,6 +69,22 @@ def _as_list(value) -> list[str]:
 
 def _join(value) -> str:
     return "\n".join(_as_list(value))
+
+
+def _comments_of(report: dict) -> RadarComments:
+    """
+    리포트의 category_comments → RadarComments.
+
+    코멘트는 컬럼으로 펴지 않고 raw_report 안에 둔 채로 꺼내 쓴다. 화면에 그대로 뿌리는
+    문장이라 집계 대상이 아니고, 컬럼을 더하면 create_all 이 기존 테이블을 고치지 못해
+    팀원들이 DROP TABLE 을 다시 돌려야 한다.
+    """
+    raw = report.get("category_comments")
+    if not isinstance(raw, dict):
+        return RadarComments()
+    return RadarComments(
+        **{field: str(raw.get(key) or "") for field, key in _SCORE_KEYS.items()}
+    )
 
 
 # ── 실시간 (매 답변마다) ───────────────────────────────
@@ -180,6 +200,15 @@ def to_question_feedback_rows(report: dict) -> list[dict]:
 
 # ── 조회용 (InterviewResult 행 → 응답 스키마) ──────────
 
+def _raw_report_of(row) -> dict:
+    """저장해둔 리포트 원본 JSON. 없거나 깨져 있으면 빈 dict."""
+    try:
+        data = json.loads(row.raw_report or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def to_result_from_row(session_id: str, row, persona: str | None = None) -> ResultResponse:
     """
     저장된 결과 행을 그대로 응답으로 바꾼다.
@@ -198,6 +227,7 @@ def to_result_from_row(session_id: str, row, persona: str | None = None) -> Resu
         radar_chart=RadarChart(
             **{field: clamp(getattr(row, key, 0)) for field, key in _SCORE_KEYS.items()}
         ),
+        radar_comments=_comments_of(_raw_report_of(row)),
         summary=ResultSummary(
             strength=row.summary_strength or "",
             improvement=row.summary_improvement or "",
@@ -247,6 +277,7 @@ def to_result(session_id: str, values: dict, persona: str | None = None) -> Resu
         radar_chart=RadarChart(
             **{field: clamp(category.get(key, 0)) for field, key in _SCORE_KEYS.items()}
         ),
+        radar_comments=_comments_of(report),
         summary=ResultSummary(
             strength=_join(summary.get("strengths")),
             improvement=_join(summary.get("improvements")),

@@ -155,6 +155,7 @@ def optimize_resume(
         session_id=row.result.interview_sessions_session_id,
         resume_id=resume_id,
         matched_keywords=json.loads(row.matched_keywords or "[]"),
+        missing_keywords=json.loads(row.missing_keywords or "[]"),
         suggestions=[
             ResumeSuggestion(**s)
             for s in json.loads(row.suggestions or "[]")
