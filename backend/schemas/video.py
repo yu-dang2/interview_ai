@@ -51,8 +51,9 @@ class VideoMetricsResponse(BaseModel):
     # status 가 failed 일 때만 채워진다.
     error: str | None = None
 
-    # 발화 속도는 STT 발화시간 경로가 정해지지 않아 아직 항상 None 이다.
-    # (video_assist.speech_rate() 를 붙이면 speech 와 함께 채워진다)
+    # 영상 분석 경로에서는 항상 None 이다. 발화 속도는 녹음 시간이 있어야 하는데
+    # 영상에서는 사용자가 언제부터 말했는지 알 수 없다.
+    # 발화 속도는 POST /voice/transcribe 응답으로 나간다 (프론트가 duration 전달).
     speech_cpm: float | None = None
     speech: GazeFeedback | None = None
 
