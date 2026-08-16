@@ -24,6 +24,10 @@ class InterviewState(MessagesState):
     match_score: int        # JD-이력서 적합도 0~100 정수 (jd_resume_matcher 산출, 백엔드 노출)
     question_list: list     # [{"question", "intent", "good_answer_criteria", ...}]
 
+    # 직무 지식 카드 검색 결과 (question_retriever 산출, question_generator 참고자료)
+    # JD가 질문의 주재료이고 이건 관점을 보태는 보조 자료다. 검색 실패·미설치 시 [].
+    retrieved_knowledge: list
+
     # 현재 진행 상태
     current_question_index: int
     eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
