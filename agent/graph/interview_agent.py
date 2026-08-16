@@ -16,6 +16,7 @@ from agent.graph.nodes.persona_selector import persona_selector
 from agent.graph.nodes.jd_parser import jd_parser
 from agent.graph.nodes.resume_parser import resume_parser
 from agent.graph.nodes.jd_resume_matcher import jd_resume_matcher
+from agent.graph.nodes.question_retriever import question_retriever
 from agent.graph.nodes.question_generator import question_generator
 from agent.graph.nodes.answer_evaluator import answer_evaluator
 from agent.graph.nodes.follow_up_generator import follow_up_generator
@@ -52,6 +53,7 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_node("jd_parser", jd_parser)
     builder.add_node("resume_parser", resume_parser)
     builder.add_node("jd_resume_matcher", jd_resume_matcher)
+    builder.add_node("question_retriever", question_retriever)
     builder.add_node("question_generator", question_generator)
     builder.add_node("answer_evaluator", answer_evaluator)
     builder.add_node("follow_up_generator", follow_up_generator)
@@ -76,7 +78,21 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_edge("jd_parser", "jd_resume_matcher")
     builder.add_edge("resume_parser", "jd_resume_matcher")
 
+    # 직무 지식 검색(RAG)도 같은 방식으로 병렬화한다.
+    # question_retriever 는 jd_parsed 만 읽고 retrieved_knowledge 에만 쓰므로
+    # jd_resume_matcher 와 반환 키가 겹치지 않는다. jd_parser 에서 fan-out 시키면
+    # matcher(LLM 호출, 수 초)와 같은 super-step 에서 돌아 시작 시간에 비용을 더하지 않는다.
+    # (retriever 는 임베딩 왕복 1회, 수백 ms)
+    #
+    # fan-in: question_generator 의 부모가 jd_resume_matcher 와 question_retriever 둘이므로
+    # 둘 다 끝나야 열린다. match_result 와 retrieved_knowledge 가 모두 채워진 State 를 본다.
+    # 순환 경로(answer_evaluator → topic_router → question_generator)로 재진입할 때는
+    # retriever 가 스케줄되지 않으므로 재검색이 일어나지 않는다. retrieved_knowledge 는
+    # LastValue 채널이라 첫 검색 결과가 그대로 남는다.
+    builder.add_edge("jd_parser", "question_retriever")
+
     builder.add_edge("jd_resume_matcher", "question_generator")
+    builder.add_edge("question_retriever", "question_generator")
 
     # question_generator 나가는 엣지(조건부, question_router 판단):
     #   - is_finished == True → report_generator (백엔드 종료 주입 / 질문 소진)
