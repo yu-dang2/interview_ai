@@ -106,7 +106,10 @@ async def transcribe(
     except HTTPException:
         raise
     except Exception as e:
+        # 원본 예외는 로그로만 남긴다. detail 은 화면에 그대로 나가는데,
+        # OpenAI 예외 문자열에는 요청 URL·모델명·요청 ID 가 섞여 있다.
+        logger.error("STT 변환 실패: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=500,
-            detail=f"STT 변환 실패: {str(e)}"
+            detail="음성을 텍스트로 바꾸지 못했습니다. 잠시 후 다시 시도해주세요.",
         )

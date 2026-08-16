@@ -208,7 +208,7 @@ class VideoService:
         """내 세션만 반환. 없거나 남의 것이면 404."""
         session = self.db.get(InterviewSession, session_id)
         if session is None or session.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
+            raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
         return session
 
     def _my_videos_query(self):
@@ -271,7 +271,12 @@ class VideoService:
         except HTTPException:
             raise
         except OSError as e:
-            raise HTTPException(status_code=500, detail=f"영상을 저장하지 못했습니다: {e}")
+            # OSError 문자열에는 서버의 파일 경로가 들어 있어 그대로 내보내지 않는다.
+            logger.error("영상 저장 실패 (session=%s): %s: %s", session_id, type(e).__name__, e)
+            raise HTTPException(
+                status_code=500,
+                detail="영상을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.",
+            )
 
         if size == 0:
             video_storage.delete(key)
@@ -358,7 +363,7 @@ class VideoService:
         """영상 파일 자체를 내려준다. S3 로 바꾸면 presigned URL 리다이렉트로 교체할 자리."""
         row = self._my_videos_query().filter(InterviewVideo.video_id == video_id).first()
         if row is None:
-            raise HTTPException(status_code=404, detail=f"영상을 찾을 수 없습니다: {video_id}")
+            raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
 
         path = video_storage.local_path(row.storage_key)
         if not path.exists():
