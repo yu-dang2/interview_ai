@@ -106,18 +106,22 @@ def build_embedding_text(card: dict) -> str:
     인덱싱 스크립트와 이 모듈이 반드시 같은 함수를 써야 한다. 색인할 때와 검색할 때의
     텍스트 구성이 어긋나면 검색이 조용히 망가진다.
 
-    job_family 만 넣으면 "백엔드 개발" 같은 직무명에만 걸리는데, 실제 검색 쿼리는
-    match_result 의 interview_topics/missing_skills 라서 "대용량 트래픽", "Redis" 처럼
-    세부 역량·기술명으로 들어온다. 그 간극을 aliases 와 related_keywords 가 메운다.
+    job_family 만 넣으면 "백엔드 개발" 같은 직무명에만 걸리는데, 쿼리에는 직무명 외에
+    필수 역량·기술명이 함께 들어온다. 그 간극을 aliases·related_keywords·scope_summary 가 메운다.
 
-    interview_perspective 는 일부러 제외한다. 면접관 행동 지시문이라 검색 쿼리와
-    매칭될 일이 없고 임베딩에 노이즈만 준다. (반환 payload 에는 그대로 포함된다)
+    검색용 필드만 넣는다. real_questions·deep_dive_patterns 같은 '내용' 필드는 제외한다.
+    기출 질문 원문까지 임베딩하면 특정 질문 문구에만 반응하는 편향이 생기고, 쿼리(직무 설명)와
+    입도도 맞지 않는다. 내용 필드는 검색된 뒤 프롬프트로만 나간다.
+
+    core_competencies/evaluation_points/industry_trends 는 구 스키마 호환용이다.
+    (신 스키마는 scope_summary 로 대체했다)
     """
     parts = [
         card.get("job_family", ""),
         " ".join(card.get("aliases", []) or []),
-        " ".join(card.get("core_competencies", []) or []),
+        card.get("scope_summary", ""),
         " ".join(card.get("related_keywords", []) or []),
+        " ".join(card.get("core_competencies", []) or []),
         card.get("evaluation_points", ""),
         card.get("industry_trends", ""),
     ]
