@@ -62,7 +62,7 @@ def _get_owned(db: Session, resume_id: int, user: User) -> Resume:
     """
     resume = db.get(Resume, resume_id)
     if resume is None or resume.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"이력서를 찾을 수 없습니다: {resume_id}")
+        raise HTTPException(status_code=404, detail="이력서를 찾을 수 없습니다.")
     return resume
 
 
@@ -181,7 +181,7 @@ def apply_optimization(
 
     session = db.get(InterviewSession, req.session_id)
     if session is None or session.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {req.session_id}")
+        raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
 
     row = (
         db.query(InterviewResumeOptimization)

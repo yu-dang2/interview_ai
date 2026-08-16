@@ -66,7 +66,7 @@ class InterviewService:
         """
         session = self.db.get(InterviewSession, session_id)
         if session is None or session.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
+            raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
         return session
 
     def _get_result_row(self, session_id: str) -> InterviewResult | None:
@@ -152,12 +152,12 @@ class InterviewService:
         # 남의 JD·이력서로 세션을 만들 수 없도록 소유자까지 확인한다.
         jd = self.db.get(JD, req.jd_id)
         if jd is None or jd.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"JD를 찾을 수 없습니다: {req.jd_id}")
+            raise HTTPException(status_code=404, detail="선택한 직무 기술서를 찾을 수 없습니다.")
 
         resume = self.db.get(Resume, req.resume_id)
         if resume is None or resume.users_user_id != self.user.user_id:
             raise HTTPException(
-                status_code=404, detail=f"이력서를 찾을 수 없습니다: {req.resume_id}"
+                status_code=404, detail="선택한 이력서를 찾을 수 없습니다."
             )
 
         session_id = str(uuid.uuid4())

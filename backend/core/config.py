@@ -92,6 +92,7 @@ INTERVIEW_ACTIVE_LIMIT = int(os.getenv("INTERVIEW_ACTIVE_LIMIT", "3"))
 CLOSING_MESSAGE = "면접이 종료되었습니다. 결과 리포트를 확인해 주세요."
 
 # 최종 총점 = 이력서 점수 × RESUME_WEIGHT + 면접 점수 × INTERVIEW_WEIGHT
+# 3 : 7 은 2026-08-16 회의에서 확정한 비율이다.
 RESUME_WEIGHT = 0.3
 INTERVIEW_WEIGHT = 0.7
 
