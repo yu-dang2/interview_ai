@@ -84,13 +84,15 @@ async def read_document_upload(file: UploadFile) -> str:
     except ImportError as e:
         # 지연 import 실패 = 서버에 파싱 라이브러리 미설치. 파일 문제가 아니므로 415가 아닌 500.
         # (반드시 아래 포괄 except보다 위에 있어야 한다)
+        # 서버 설치 문제라 사용자가 할 수 있는 일이 없다. 어떤 라이브러리가
+        # 빠졌는지는 로그로 남기고, 화면에는 형식만 알려준다.
+        logger.error(
+            "%s 파싱 라이브러리 없음 (%s) — pip install -r requirements.txt 필요",
+            ext, getattr(e, "name", "") or e,
+        )
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"서버에 {ext} 파싱 라이브러리가 설치되어 있지 않습니다"
-                f"({getattr(e, 'name', '') or e}). "
-                "'pip install -r requirements.txt'로 의존성을 설치해주세요."
-            ),
+            detail=f"{ext} 파일을 처리할 수 없습니다. 다른 형식으로 올려주시거나 잠시 후 다시 시도해주세요.",
         )
     except Exception:
         # 손상된 파일/잘못된 구조 등은 500이 아니라 415로 응답한다.
