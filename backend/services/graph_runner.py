@@ -108,6 +108,29 @@ async def resume(session_id: str, answer: str, input_type: str = "text") -> dict
     return (await graph.aget_state(config)).values
 
 
+async def finish(session_id: str) -> dict:
+    """
+    면접을 중도 종료하고 리포트까지 생성한다. (종료 버튼)
+
+    그래프는 answer_evaluator 직전에서 멈춰 사용자 답변을 기다리는 상태다.
+    여기에 is_finished=True 를 넣으면 topic_router 가 report_generator 로 보낸다.
+
+    as_node="answer_evaluator" 를 주는 이유: 이 값이 answer_evaluator 가 낸 결과인 것처럼
+    처리되어 그 노드를 건너뛰고 바로 topic_router 로 넘어간다. 그냥 update_state 하면
+    답변도 없는데 answer_evaluator 가 한 번 더 돌아 LLM 호출이 낭비된다.
+    """
+    graph = _require_graph()
+    config = config_for(session_id)
+
+    state = await graph.aget_state(config)
+    if state.next == ():
+        return state.values      # 이미 끝난 면접. 리포트가 있다.
+
+    await graph.aupdate_state(config, {"is_finished": True}, as_node="answer_evaluator")
+    await graph.ainvoke(None, config)
+    return (await graph.aget_state(config)).values
+
+
 async def snapshot(session_id: str) -> tuple[dict, bool]:
     """(state values, 종료 여부)를 반환한다. next 가 비어 있으면 그래프가 끝난 것."""
     graph = _require_graph()

@@ -1,10 +1,10 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
-from utils.state import init_session
+from utils.state import init_session, mark_session_expired, render_session_expired_banner
 from utils import api
 
 try:
@@ -24,31 +24,36 @@ init_session()
 render_sidebar(active="마이페이지")
 
 try:
-    _my_videos = api.get_my_videos().get("videos", [])
+    _sessions_data = api.get_my_sessions(limit=20)
+except api.SessionExpiredError:
+    _sessions_data = None
+    mark_session_expired()
 except Exception:
-    _my_videos = []
+    _sessions_data = None
 
-# ── 데이터 ───────────────────────────────────────────────────────────────
-HISTORY = [
-    {"date": "04.30", "style": "기술 리드",   "resume": 72, "iv": 78, "total": 75, "has_video": True,  "video_url": ""},
-    {"date": "04.24", "style": "인사 담당자", "resume": 70, "iv": 65, "total": 68, "has_video": False, "video_url": ""},
-    {"date": "04.18", "style": "기술 리드",   "resume": 75, "iv": 82, "total": 79, "has_video": True,  "video_url": ""},
-    {"date": "04.10", "style": "임원 면접관", "resume": 68, "iv": 71, "total": 70, "has_video": False, "video_url": ""},
-    {"date": "04.03", "style": "기술 리드",   "resume": 60, "iv": 58, "total": 59, "has_video": True,  "video_url": ""},
-]
+_sessions = _sessions_data.get("sessions", []) if _sessions_data else []
+_summary  = _sessions_data.get("summary", {}) if _sessions_data else {}
 
-for _i, _h in enumerate(HISTORY):
-    if _i < len(_my_videos):
-        _h["has_video"] = True
-        _h["video_url"] = _my_videos[_i]["video_url"]
-        try:
-            _real_dt = datetime.fromisoformat(_my_videos[_i]["date"].replace("Z", "+00:00"))
-            _h["date"] = _real_dt.strftime("%m.%d")
-        except (ValueError, KeyError):
-            pass
-    else:
-        _h["has_video"] = False
-        _h["video_url"] = ""
+# ── 데이터 (실제 GET /interview/sessions) ──────────────────────────────────
+HISTORY = []
+for _s in _sessions:
+    try:
+        _dt = datetime.fromisoformat(_s["created_at"].replace("Z", "+00:00"))
+        if _dt.tzinfo is None:
+            _dt = _dt.replace(tzinfo=timezone.utc)
+    except (ValueError, KeyError, TypeError):
+        _dt = None
+    HISTORY.append({
+        "dt":         _dt,
+        "date":       _dt.strftime("%m.%d") if _dt else "-",
+        "style":      _s.get("persona") or "-",
+        "resume":     _s.get("resume_score"),
+        "iv":         _s.get("interview_score"),
+        "total":      _s.get("total_score"),
+        "has_video":  bool(_s.get("has_video")),
+        "video_url":  _s.get("video_url") or "",
+        "session_id": _s.get("session_id") or "",
+    })
 
 VERSIONS = [
     {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
@@ -57,7 +62,8 @@ VERSIONS = [
     {"v": "v1.0", "date": "2026.03.28", "score": 55, "active": False},
 ]
 
-def score_color(s: int) -> str:
+def score_color(s) -> str:
+    if s is None: return "#9ca3af"
     if s >= 80: return "#16a34a"
     if s >= 75: return "#3b6def"
     if s >= 65: return "#d97706"
@@ -70,8 +76,11 @@ st.markdown("""<style>
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
 [data-testid="stColumn"] { padding: 0 !important; }
-/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링 */
-[data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
+/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링.
+   .st-key-chart_ver_row로 범위를 좁혀야 한다 — 안 그러면 이 페이지의 다른
+   st.columns(세션 만료 배너의 st.columns([1,2,1])까지 포함)의 첫 번째 칸에도
+   흰 카드 테두리가 씌워져서 레이아웃이 깨진다. */
+.st-key-chart_ver_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
     background: white !important;
     border: 1px solid #e5e7eb !important;
     border-radius: 8px !important;
@@ -133,11 +142,25 @@ _ICON_LINEUP = (
     '</svg>'
 )
 
+_now = datetime.now(timezone.utc)
+_recent_scored = [
+    h for h in HISTORY
+    if h["iv"] is not None and h["dt"] is not None and (_now - h["dt"]).days <= 30
+]
+if len(_recent_scored) >= 2:
+    _delta = _recent_scored[0]["iv"] - _recent_scored[-1]["iv"]
+    _delta_str = f"{_delta:+d}"
+else:
+    _delta_str = "-"
+
+_avg_iv = _summary.get("average_interview_score")
+_latest_resume = _summary.get("latest_resume_score")
+
 STAT_CARDS = [
-    {"v": "5회",    "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
-    {"v": "74.8점", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
-    {"v": "72점",   "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
-    {"v": "+16.8",  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
+    {"v": f"{_summary.get('total_interviews', 0)}회", "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
+    {"v": f"{_avg_iv}점" if _avg_iv is not None else "-", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
+    {"v": f"{_latest_resume}점" if _latest_resume is not None else "-", "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
+    {"v": _delta_str,  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
 ]
 
 stat_html = '<div style="display:flex;gap:17px;padding-bottom:32px;">'
@@ -160,11 +183,16 @@ stat_html += '</div>'
 st.markdown(stat_html, unsafe_allow_html=True)
 
 # ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
-col_chart, _gap, col_ver = st.columns([35, 1, 21])
+_chart_ver_row = st.container(key="chart_ver_row")
+col_chart, _gap, col_ver = _chart_ver_row.columns([35, 1, 21])
+
+_SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
 
 with col_chart:
-    if HAS_PLOTLY:
-        CHART_HISTORY = HISTORY[:5]
+    if not _SCORED_HISTORY:
+        st.info("완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.")
+    elif HAS_PLOTLY:
+        CHART_HISTORY = _SCORED_HISTORY[:5]
         x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
         iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
 
@@ -330,6 +358,9 @@ for i, h in enumerate(HISTORY):
     row_bg = "#f9fafb" if i % 2 == 0 else "white"
     iv_c   = score_color(h["iv"])
     tot_c  = score_color(h["total"])
+    resume_txt = h["resume"] if h["resume"] is not None else "-"
+    iv_txt     = h["iv"] if h["iv"] is not None else "-"
+    total_txt  = h["total"] if h["total"] is not None else "-"
     rows_html += (
         f'<div style="display:grid;grid-template-columns:{COLS};'
         f'align-items:center;height:42px;background:{row_bg};'
@@ -339,18 +370,23 @@ for i, h in enumerate(HISTORY):
         f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
         f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
         f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["resume"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
         f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["iv"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
         f'<span style="font-size:11px;font-weight:700;color:{tot_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["total"]}</span>'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{total_txt}</span>'
         f'<div style="display:flex;justify-content:center;">'
         f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
         f'</div>'
-        f'<a href="/결과리포트" target="_self" style="font-size:11px;font-weight:600;'
-        f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
-        f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
-        f'</div>'
+        + (
+            f'<a href="/결과리포트?sid={h["session_id"]}" target="_self" style="font-size:11px;font-weight:600;'
+            f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
+            f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
+            if h["iv"] is not None and h["session_id"] else
+            '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
+            'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
+        )
+        + '</div>'
     )
 
 st.markdown(
@@ -452,3 +488,6 @@ components.html(f"""
 }}());
 </script>
 """, height=0)
+
+st.markdown('<div style="height:48px"></div>', unsafe_allow_html=True)
+render_session_expired_banner()

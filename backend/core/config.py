@@ -43,6 +43,10 @@ VIDEO_SAMPLE_EVERY = int(os.getenv("VIDEO_SAMPLE_EVERY", "15"))
 # 업로드 크기 상한(MB). 초과하면 413.
 VIDEO_MAX_UPLOAD_MB = int(os.getenv("VIDEO_MAX_UPLOAD_MB", "200"))
 
+# 이 시간을 넘겨도 analyzing 이면 실패로 본다.
+# 분석 도중 서버가 죽으면 상태가 영구히 analyzing 으로 남아 프론트가 끝없이 폴링한다.
+VIDEO_ANALYZE_TIMEOUT_MIN = int(os.getenv("VIDEO_ANALYZE_TIMEOUT_MIN", "30"))
+
 # ── 인증 ───────────────────────────────────────────────
 # SECRET_KEY 를 .env 에 지정하지 않으면 기동할 때마다 새 키가 생성된다.
 # 개발 중에는 편하지만 서버를 재시작하면 발급해둔 토큰이 전부 무효가 되므로,
@@ -50,6 +54,36 @@ VIDEO_MAX_UPLOAD_MB = int(os.getenv("VIDEO_MAX_UPLOAD_MB", "200"))
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+
+# ── 배포 ───────────────────────────────────────────────
+# 실행 환경. "production" 이면 디버그용 엔드포인트를 노출하지 않는다.
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT.lower() in ("production", "prod")
+
+# CORS 허용 출처. 쉼표로 구분한다.
+# 개발 기본값은 로컬 Streamlit 이고, 배포 시에는 실제 프론트 주소를 넣는다.
+# "*" 를 그대로 두면 아무 사이트에서나 토큰을 실어 API 를 호출할 수 있다.
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS", "http://localhost:8501,http://127.0.0.1:8501"
+    ).split(",")
+    if origin.strip()
+]
+
+# ── 사용량 제한 ────────────────────────────────────────
+# 요청 수가 아니라 LLM 호출이 일어나는 지점을 막는다. 비용은 거기서 발생한다.
+# 면접 1회에 gpt-5-mini 호출이 십수 번 나가므로 세션 생성이 가장 비싼 동작이다.
+#
+# 현재 규모를 고려해 DB 카운트로 세는 방식으로 구현했다. 사용자가 늘어나면
+# Redis 기반 큐로 전환할 예정이다.
+#
+# ※ 아래 기본값(하루 10회 / 동시 3개)은 임시로 잡은 값이다. 베타 테스트 참가자가
+#   몇 번씩 써볼지에 따라 달라져야 해서 회의에서 논의 예정이다.
+#
+# 0 이하로 두면 제한을 끈다 (개발 중 편의).
+INTERVIEW_DAILY_LIMIT = int(os.getenv("INTERVIEW_DAILY_LIMIT", "10"))
+INTERVIEW_ACTIVE_LIMIT = int(os.getenv("INTERVIEW_ACTIVE_LIMIT", "3"))
 
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.

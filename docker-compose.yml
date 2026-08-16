@@ -1,0 +1,60 @@
+# 로컬·내부 배포용 구성
+#
+#   docker compose up --build
+#   docker compose down          (데이터는 볼륨에 남는다)
+#   docker compose down -v       (볼륨까지 삭제)
+#
+# .env 파일이 필요하다. .env.example 을 복사해서 값을 채운다.
+# 특히 SECRET_KEY 는 반드시 고정값을 넣어야 재배포해도 로그인이 유지된다.
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-interview_ai}
+      MYSQL_USER: ${MYSQL_USER:-interview_ai}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-interview_ai!}
+    # utf8mb4 로 맞춰야 한글이 깨지지 않는다.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      # 앱이 DB 준비 전에 뜨면 create_all 이 실패한다.
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY 를 .env 에 설정하세요}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY 를 .env 에 설정하세요}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-interview_ai}:${MYSQL_PASSWORD:-interview_ai!}@db:3306/${MYSQL_DATABASE:-interview_ai}?charset=utf8mb4
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8501,http://127.0.0.1:8501}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      INTERVIEW_DAILY_LIMIT: ${INTERVIEW_DAILY_LIMIT:-10}
+      INTERVIEW_ACTIVE_LIMIT: ${INTERVIEW_ACTIVE_LIMIT:-3}
+    ports:
+      - "8000:8000"
+    volumes:
+      # 이 둘을 마운트하지 않으면 컨테이너 재시작마다
+      # 업로드된 영상과 진행 중이던 면접이 사라진다.
+      - video_data:/app/uploads/videos
+      - checkpoint_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  db_data:
+  video_data:
+  checkpoint_data:

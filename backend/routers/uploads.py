@@ -7,10 +7,15 @@ hwpx는 ZIP 컨테이너이고 본문이 Contents/section*.xml(OWPML)에 있어 
 """
 
 import io
+import logging
 import zipfile
 from xml.etree import ElementTree
 
 from fastapi import HTTPException, UploadFile
+
+from backend.core.masking import mask_personal_info, masking_report
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = (".pdf", ".docx", ".hwpx")
 
@@ -97,4 +102,9 @@ async def read_document_upload(file: UploadFile) -> str:
     if not text.strip():
         raise HTTPException(status_code=400, detail="파일에서 추출된 내용이 비어 있습니다.")
 
-    return text
+    # 저장·LLM 전송 전에 여기서 한 번 지운다. 나중에 지우면 이미 저장된 원본이 남는다.
+    report = masking_report(text)
+    if report:
+        # 무엇이 몇 건 지워졌는지만 남긴다. 원문은 로그에도 남기지 않는다.
+        logger.info("업로드 문서 비식별화: %s", report)
+    return mask_personal_info(text)

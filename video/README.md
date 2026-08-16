@@ -8,7 +8,9 @@
 | 파일 | 용도 | 담당 |
 |---|---|---|
 | `video_assist.py` | 영상 분석 모듈 (`analyze_video`, `speech_rate`) | 유정님: 서버에서 import |
-| `webcam_recorder.html` | 웹캠 녹화 → 서버 업로드 컴포넌트 | 지원님: Streamlit 통합 |
+
+> 웹캠 녹화 컴포넌트(`webcam_recorder.html`)는 지원님이 `frontend/pages/04_면접_진행.py`에
+> 인라인으로 직접 구현하여 대체했습니다. (카메라 선택 로직은 지원님 통합 시 반영 예정)
 
 ## 설치 (분석 모듈)
 Python **3.11 또는 3.12** 필요 (3.13은 mediapipe 미지원):

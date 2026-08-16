@@ -17,6 +17,7 @@ report_generator (agent/parsers/report_generator_prompt.py):
     total_score, grade,
     category_scores{logic_score, communication_score, expertise_score,
                     attitude_score, problem_solving_score},
+    category_comments{같은 5개 키, 값은 1~2문장 코멘트},
     summary{strengths, improvements, recommended_study},
     keywords[],
     question_feedbacks[{question, user_answer, score, improved_answer}]
@@ -25,11 +26,14 @@ jd_resume_matcher (agent/parsers/jd_resume_matcher_prompt.py):
     matching_skills[], missing_skills[], ... (점수 없음 → resume_score 는 여기서 근사한다)
 """
 
+import json
+
 from backend.core.config import INTERVIEW_WEIGHT, RESUME_WEIGHT
 from backend.schemas.interview import (
     FeedbackItem,
     FeedbackResponse,
     RadarChart,
+    RadarComments,
     RealtimeFeedbackItem,
     RealtimeScore,
     ResultResponse,
@@ -65,6 +69,22 @@ def _as_list(value) -> list[str]:
 
 def _join(value) -> str:
     return "\n".join(_as_list(value))
+
+
+def _comments_of(report: dict) -> RadarComments:
+    """
+    리포트의 category_comments → RadarComments.
+
+    코멘트는 컬럼으로 펴지 않고 raw_report 안에 둔 채로 꺼내 쓴다. 화면에 그대로 뿌리는
+    문장이라 집계 대상이 아니고, 컬럼을 더하면 create_all 이 기존 테이블을 고치지 못해
+    팀원들이 DROP TABLE 을 다시 돌려야 한다.
+    """
+    raw = report.get("category_comments")
+    if not isinstance(raw, dict):
+        return RadarComments()
+    return RadarComments(
+        **{field: str(raw.get(key) or "") for field, key in _SCORE_KEYS.items()}
+    )
 
 
 # ── 실시간 (매 답변마다) ───────────────────────────────
@@ -112,22 +132,152 @@ def estimate_resume_score(match_result: dict) -> int:
     return clamp(round(100 * matching / max(1, matching + missing)))
 
 
-def to_result(session_id: str, report: dict, match_result: dict) -> ResultResponse:
+def weighted_total(resume_score: int, interview_score: int) -> int:
+    """최종 총점. 저장할 때와 응답할 때가 어긋나지 않도록 한 곳에서만 계산한다."""
+    return clamp(round(resume_score * RESUME_WEIGHT + interview_score * INTERVIEW_WEIGHT))
+
+
+# ── 저장용 (agent 출력 → InterviewResult 컬럼) ─────────
+
+def resolve_resume_score(values: dict) -> int:
+    """
+    이력서 점수를 정한다.
+
+    jd_resume_matcher 가 match_score(0~100)를 State 최상위에 넣어주므로 그 값을 쓴다.
+    그 값이 없던 시절에 만든 근사(매칭/누락 스킬 개수 비율)는 폴백으로만 남긴다.
+    """
+    explicit = values.get("match_score")
+    if explicit is not None:
+        return clamp(explicit)
+    return estimate_resume_score(values.get("match_result") or {})
+
+
+def to_result_columns(values: dict) -> dict:
+    """
+    그래프 State 를 interview_results 컬럼 값으로 편다.
+
+    match_score 가 State 최상위에 있어서 report 만이 아니라 State 전체를 받는다.
+    이 매핑을 서비스가 아니라 여기 두는 이유: agent 키 ↔ 우리 필드 대응이 이 파일에
+    모여 있어야 agent 쪽이 바뀔 때 한 곳만 고치면 된다.
+    """
+    report = values.get("report_result") or {}
+    category = report.get("category_scores", {}) or {}
+    summary = report.get("summary", {}) or {}
+
+    resume_score = resolve_resume_score(values)
+    interview_score = clamp(report.get("total_score", 0))
+
+    columns = {
+        "resume_score": resume_score,
+        "interview_score": interview_score,
+        "total_score": weighted_total(resume_score, interview_score),
+        "grade": report.get("grade"),
+        "summary_strength": _join(summary.get("strengths")),
+        "summary_improvement": _join(summary.get("improvements")),
+        "summary_recommendation": _join(summary.get("recommended_study")),
+    }
+    # 컬럼 이름과 agent 키가 같아서 그대로 쓴다 (logic_score, communication_score, ...)
+    columns.update({key: clamp(category.get(key, 0)) for key in _SCORE_KEYS.values()})
+    return columns
+
+
+def to_question_feedback_rows(report: dict) -> list[dict]:
+    """리포트의 question_feedbacks 배열 → InterviewQuestionFeedback 행 값들."""
+    raw = report.get("question_feedbacks") or []
+    return [
+        {
+            # 리포트에 번호가 없으므로 to_feedback 과 동일하게 리스트 순서로 매긴다.
+            "question_number": i,
+            "question": str(item.get("question", "")),
+            "user_answer": str(item.get("user_answer", "")),   # agent 쪽 키는 user_answer
+            "score": clamp(item.get("score", 0)),
+            "improved_answer": str(item.get("improved_answer", "")),
+        }
+        for i, item in enumerate(raw, start=1)
+        if isinstance(item, dict)
+    ]
+
+
+# ── 조회용 (InterviewResult 행 → 응답 스키마) ──────────
+
+def _raw_report_of(row) -> dict:
+    """저장해둔 리포트 원본 JSON. 없거나 깨져 있으면 빈 dict."""
+    try:
+        data = json.loads(row.raw_report or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def to_result_from_row(session_id: str, row, persona: str | None = None) -> ResultResponse:
+    """
+    저장된 결과 행을 그대로 응답으로 바꾼다.
+
+    체크포인트가 없어도 이 경로만으로 완전한 리포트가 나와야 한다.
+    (예전에는 resume_score 를 체크포인트의 match_result 에서 계산해서, 체크포인트를
+     지우면 0 으로 떨어졌다.)
+    """
+    return ResultResponse(
+        session_id=session_id,
+        persona=persona,
+        resume_score=clamp(row.resume_score),
+        interview_score=clamp(row.interview_score),
+        total_score=clamp(row.total_score),
+        grade=row.grade,
+        radar_chart=RadarChart(
+            **{field: clamp(getattr(row, key, 0)) for field, key in _SCORE_KEYS.items()}
+        ),
+        radar_comments=_comments_of(_raw_report_of(row)),
+        summary=ResultSummary(
+            strength=row.summary_strength or "",
+            improvement=row.summary_improvement or "",
+            recommendation=row.summary_recommendation or "",
+        ),
+    )
+
+
+def to_feedback_from_rows(rows) -> FeedbackResponse:
+    """저장된 질문별 피드백 행들을 응답으로 바꾼다."""
+    items = [
+        FeedbackItem(
+            question_number=row.question_number,
+            question=row.question or "",
+            my_answer=row.user_answer or "",
+            score=clamp(row.score),
+            improved_answer=row.improved_answer or "",
+        )
+        for row in rows
+    ]
+    average = round(sum(item.score for item in items) / len(items)) if items else 0
+    return FeedbackResponse(
+        total_questions=len(items),
+        average_score=clamp(average),
+        feedbacks=items,
+    )
+
+
+# ── 조회용 (체크포인트 State → 응답 스키마) ───────────
+# 아직 결과가 저장되지 않은 진행 중 세션의 폴백 경로다.
+
+def to_result(session_id: str, values: dict, persona: str | None = None) -> ResultResponse:
+    report = values.get("report_result") or {}
     category = report.get("category_scores", {}) or {}
     summary = report.get("summary", {}) or {}
 
     interview_score = clamp(report.get("total_score", 0))
-    resume_score = estimate_resume_score(match_result)
+    resume_score = resolve_resume_score(values)
 
     return ResultResponse(
         session_id=session_id,
+        persona=persona,
         resume_score=resume_score,
         interview_score=interview_score,
-        total_score=clamp(round(resume_score * RESUME_WEIGHT + interview_score * INTERVIEW_WEIGHT)),
+        total_score=weighted_total(resume_score, interview_score),
         grade=report.get("grade"),
         radar_chart=RadarChart(
             **{field: clamp(category.get(key, 0)) for field, key in _SCORE_KEYS.items()}
         ),
+        radar_comments=_comments_of(report),
         summary=ResultSummary(
             strength=_join(summary.get("strengths")),
             improvement=_join(summary.get("improvements")),
