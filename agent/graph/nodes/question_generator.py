@@ -34,10 +34,17 @@ RETRIEVAL_INSTRUCTION = """
 - 참고자료에 있다는 이유만으로 이력서에 근거가 없는 주제를 질문하지 마세요.
 """
 
-# 프롬프트에 실어 보낼 카드 필드. aliases·related_keywords 는 검색용이라 빼고,
-# _distance 같은 검색 메타도 뺀다(LLM 에게는 노이즈).
+# 프롬프트에 실어 보낼 카드 필드. aliases·related_keywords·scope_summary 는 검색용이라 빼고,
+# _distance 같은 검색 메타와 _주의 같은 편집자용 주석도 뺀다(LLM 에게는 노이즈).
+# 화이트리스트라서 카드에 새 필드가 생겨도 여기 추가하지 않으면 프롬프트로 나가지 않는다.
 _PROMPT_FIELDS = (
     "job_family",
+    # 신 스키마: LLM 이 스스로 만들어내지 못하는 구체 정보
+    "trend_2026",
+    "real_questions",
+    "deep_dive_patterns",
+    "common_pitfalls",
+    # 구 스키마 호환
     "core_competencies",
     "evaluation_points",
     "industry_trends",
