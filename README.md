@@ -31,7 +31,6 @@
 - SQLite
 - SQLAlchemy
 - OpenAI API
-=======
 
 ---
 
