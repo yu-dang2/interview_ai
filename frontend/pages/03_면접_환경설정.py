@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set
+from utils.state import init_session, get, set as state_set, mark_session_expired, is_session_expired, render_session_expired_inline
 from utils import api
 
 st.set_page_config(
@@ -14,6 +14,15 @@ st.set_page_config(
 )
 
 init_session()
+
+if get("session_id"):
+    st.session_state["_session_id_clear_pending"] = True
+    state_set("session_id", None)
+    state_set("first_question", None)
+    state_set("result", None)
+    state_set("interview_done", False)
+    if "iv_messages" in st.session_state:
+        del st.session_state["iv_messages"]
 
 render_sidebar(active="면접 시작")
 
@@ -37,41 +46,65 @@ st.markdown("""
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0; }
 
-/* 성함 라벨 폰트 */
+[data-testid="stMainBlockContainer"] {
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
+
 [data-testid="stTextInput"] label p {
     font-size:14px !important; font-weight:600 !important; color:#1f1f1f !important;
 }
 
-/* 파일 업로더 */
 [data-testid="stFileUploader"] label { display:none !important; }
 [data-testid="stFileUploaderDropzone"] {
     background:#f7f8fc !important;
     border:1.5px dashed #c7d2e8 !important;
     border-radius:10px !important; min-height:140px !important;
-    padding-left: 24% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding-top: 10px !important;
+    padding-bottom: 30px !important;
+}
+[data-testid="stFileUploaderDropzone"] > div {
+    align-items: center !important;
+    text-align: center !important;
 }
 
-/* 시작 버튼 — 텍스트가 줄바꿈되지 않도록 내용 너비로 고정하고 중앙 정렬 */
 [data-testid="stBaseButton-primary"] {
     font-size: 17px !important;
     padding: 12px 50px !important;
     white-space: nowrap !important;
     width: auto !important;
 }
-.st-key-btn_start {
-    display: flex !important;
+.st-key-start_area {
+    display: grid !important;
+    grid-template-columns: max-content !important;
     justify-content: center !important;
+    row-gap: 8px !important;
+}
+.st-key-start_area [data-testid="stAlert"] {
+    justify-self: stretch !important;
+    box-sizing: border-box !important;
 }
 
-/* 업로드 버튼 텍스트도 줄바꿈 방지 */
 [data-testid="stFileUploaderDropzone"] button p {
     white-space: nowrap !important;
 }
 
-/* 카드 호버 */
 [data-persona-card]:hover {
     box-shadow: 0 4px 16px rgba(59,109,239,0.15) !important;
     transform: translateY(-1px) !important;
+}
+
+@media (max-width: 900px) {
+    [data-persona-card] {
+        flex-direction: column !important;
+        text-align: center !important;
+        padding: 20px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -116,7 +149,7 @@ for p in PERSONAS:
     cards_html += f"""
     <div data-persona-card="{p['key']}"
          style="flex:1;min-width:0;border:{border};background:{bg};border-radius:12px;
-                padding:20px;display:flex;align-items:center;gap:16px;
+                padding:20px;display:flex;align-items:center;justify-content:center;gap:24px;
                 cursor:pointer;min-height:80px;box-sizing:content-box;
                 transition:transform 0.15s,box-shadow 0.15s;">
       <img src="data:image/png;base64,{p['img']}"
@@ -131,30 +164,25 @@ for p in PERSONAS:
 cards_html += '</div>'
 st.markdown(cards_html, unsafe_allow_html=True)
 
-btn_cols = st.columns(3)
-for i, p in enumerate(PERSONAS):
-    with btn_cols[i]:
-        if st.button(p["key"], key=f"ps_{p['key']}", use_container_width=True):
-            state_set("interviewer_style", p["key"])
-            st.rerun()
+st.markdown(
+    "<style>.st-key-persona_hidden_row { display:none !important; }</style>",
+    unsafe_allow_html=True,
+)
+with st.container(key="persona_hidden_row"):
+    btn_cols = st.columns(3)
+    for i, p in enumerate(PERSONAS):
+        with btn_cols[i]:
+            if st.button(p["key"], key=f"ps_{p['key']}", use_container_width=True):
+                state_set("interviewer_style", p["key"])
+                st.rerun()
 
 components.html("""
 <script>
 (function () {
-    var PERSONA_KEYS = ['기술 리드', '인사 담당자', '임원 면접관'];
-
     function attach() {
         var doc = window.parent.document;
         var cards = doc.querySelectorAll('[data-persona-card]');
         if (!cards.length) { setTimeout(attach, 300); return; }
-
-        var hiddenRow = null;
-        doc.querySelectorAll('button').forEach(function (btn) {
-            if (PERSONA_KEYS.indexOf(btn.innerText.trim()) !== -1 && !hiddenRow) {
-                hiddenRow = btn.closest('[data-testid="stHorizontalBlock"]');
-            }
-        });
-        if (hiddenRow) hiddenRow.style.display = 'none';
 
         cards.forEach(function (card) {
             var key = card.getAttribute('data-persona-card');
@@ -258,6 +286,8 @@ with up1:
         try:
             state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
             st.caption(f"✅ {jd_file.name} 업로드 완료")
+        except api.SessionExpiredError:
+            mark_session_expired()
         except Exception as e:
             state_set("jd_id", 0)
             st.error(_upload_error_message(e))
@@ -273,6 +303,8 @@ with up2:
         try:
             state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
             st.caption(f"✅ {resume_file.name} 업로드 완료")
+        except api.SessionExpiredError:
+            mark_session_expired()
         except Exception as e:
             state_set("resume_id", 0)
             st.error(_upload_error_message(e))
@@ -338,9 +370,17 @@ st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
 # ── 시작 버튼 ────────────────────────────────────────────────────────────
 _, center, _ = st.columns([4.3, 2, 4.3])
 with center:
-    if st.button("면접 시작하기 →", type="primary", key="btn_start"):
-        if not (get("user_name") or name):
-            st.error("성함을 입력해주세요.")
-        else:
-            state_set("interviewer_style", selected)
-            st.switch_page("pages/035_웹캠_허용.py")
+    if is_session_expired():
+        render_session_expired_inline()
+    else:
+        with st.container(key="start_area"):
+            if st.button("면접 시작하기 →", type="primary", key="btn_start"):
+                if not (get("user_name") or name):
+                    st.error("성함을 입력해주세요.")
+                elif not get("jd_id"):
+                    st.error("직무 기술서(JD)를 업로드해주세요.")
+                elif not get("resume_id"):
+                    st.error("이력서를 업로드해주세요.")
+                else:
+                    state_set("interviewer_style", selected)
+                    st.switch_page("pages/035_웹캠_허용.py")

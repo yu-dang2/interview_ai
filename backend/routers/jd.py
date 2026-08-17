@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.core.deps import current_user
 from backend.database import get_db
 from backend.models.models import JD, User
+from backend.core.masking import mask_personal_info
 from backend.routers.uploads import read_document_upload
 from backend.schemas.jd import JDCreateRequest, JDListItem, JDResponse
 
@@ -24,7 +25,8 @@ router = APIRouter(prefix="/jd", tags=["JD"])
 
 
 def _create(db: Session, title: str, content: str, user: User) -> JD:
-    jd = JD(title=title, content=content, users_user_id=user.user_id)
+    # JD 에도 담당자 연락처가 적혀 오는 경우가 있어 이력서와 같게 비식별화한다.
+    jd = JD(title=title, content=mask_personal_info(content), users_user_id=user.user_id)
     db.add(jd)
     db.commit()
     db.refresh(jd)
@@ -35,7 +37,7 @@ def _get_owned(db: Session, jd_id: int, user: User) -> JD:
     """내 JD 만 반환. 없거나 남의 것이면 404 (존재 여부를 흘리지 않는다)."""
     jd = db.get(JD, jd_id)
     if jd is None or jd.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"JD를 찾을 수 없습니다: {jd_id}")
+        raise HTTPException(status_code=404, detail="직무 기술서를 찾을 수 없습니다.")
     return jd
 
 

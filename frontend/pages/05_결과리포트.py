@@ -1,9 +1,10 @@
 import time
+import requests
 import streamlit as st
 from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set
+from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
 from utils import api
 
 try:
@@ -23,6 +24,14 @@ init_session()
 if "webcam_on" in st.query_params:
     st.session_state.webcam_on = st.query_params["webcam_on"] == "1"
 
+_sid_param = st.query_params.get("sid")
+if _sid_param and _sid_param != get("session_id"):
+    state_set("session_id", _sid_param)
+    state_set("result", None)
+
+# 사이드바로 바로 들어와 session_id가 아예 없는 경우 — 가장 최근 면접으로 채운다.
+ensure_latest_session_id()
+
 render_sidebar(active="결과 리포트")
 
 # ── SVG 아이콘 로드 ────────────────────────────────────────────────────────
@@ -40,13 +49,19 @@ icon_trophy  = _svg("Group 8624.svg")
 result_data = get("result")
 session_id  = get("session_id")
 
+if result_data and result_data.get("session_id") != session_id:
+    result_data = None
+    state_set("result", None)
+
 if not result_data and session_id:
-    try:
-        with st.spinner("결과를 불러오는 중..."):
+    with st.spinner("AI가 면접 답변을 종합 분석해 리포트를 만들고 있습니다. 잠시만 기다려 주세요."):
+        try:
             result_data = api.get_result(session_id)
-        state_set("result", result_data)
-    except Exception:
-        result_data = None
+            state_set("result", result_data)
+        except api.SessionExpiredError:
+            mark_session_expired()
+        except Exception:
+            result_data = None
 
 if result_data:
     radar        = result_data.get("radar_chart", {})
@@ -60,7 +75,13 @@ if result_data:
         radar.get("problem_solving", 0),
     ]
     AVG_SCORES   = [0] * 5
-    COMPETENCIES = [(cat, s, 0, "") for cat, s in zip(CATEGORIES, MY_SCORES)]
+
+    _CAT_KEYS = ["logic", "communication", "expertise", "attitude", "problem_solving"]
+    _cat_comments = result_data.get("category_comments") or {}
+    COMPETENCIES = [
+        (cat, s, 0, _cat_comments.get(key) or "")
+        for cat, s, key in zip(CATEGORIES, MY_SCORES, _CAT_KEYS)
+    ]
     summary_text = "\n\n".join(filter(None, [
         summary_obj.get("strength", ""),
         summary_obj.get("improvement", ""),
@@ -68,29 +89,36 @@ if result_data:
     ]))
     date_str    = ""
     job_title   = ""
-    persona_str = get("interviewer_style") or "기술 리드"
+    persona_str = result_data.get("persona") or get("interviewer_style") or "기술 리드"
+    resume_score_val    = result_data.get("resume_score", 0)
+    interview_score_val = result_data.get("interview_score", 0)
+    total_score_val     = result_data.get("total_score", 0)
+    grade_val           = result_data.get("grade") or "-"
 else:
+    st.error("결과를 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
     CATEGORIES   = ["논리성", "커뮤니케이션", "전문지식", "태도", "문제해결력"]
-    MY_SCORES    = [59, 62, 61, 57, 62]
-    AVG_SCORES   = [76, 69, 76, 74, 78]
-    COMPETENCIES = [
-        ("논리성",       59, 76, "논리적 흐름은 명확합니다. 결론을 먼저 말하고 근거를 이어가는 두괄식 구성으로 설득력을 높여보세요."),
-        ("커뮤니케이션", 62, 69, "전달력은 양호합니다. 기술 개념을 비전문가에게 쉽게 설명하는 비유 연습을 추가하면 평균 이상으로 향상됩니다."),
-        ("전문지식",     61, 76, "핵심 개념 이해도는 높습니다. 실무 프로젝트 적용 사례를 수치와 함께 구체적으로 제시하면 더 좋습니다."),
-        ("태도",         57, 74, "경청 태도는 긍정적입니다. 질문 후 2초 생각 후 답변하는 습관을 기르면 자신감 있는 인상을 줄 수 있습니다."),
-        ("문제해결력",   62, 78, "문제 정의는 잘 합니다. STAR 구조(상황→과제→행동→결과)로 답변을 단계별로 구조화하는 연습이 필요합니다."),
-    ]
+    MY_SCORES    = [0, 0, 0, 0, 0]
+    AVG_SCORES   = [0, 0, 0, 0, 0]
+    COMPETENCIES = [(cat, 0, 0, "") for cat in CATEGORIES]
     summary_text = ""
-    date_str     = "2026년 4월 30일"
+    date_str     = ""
     persona_str  = get("interviewer_style") or "기술 리드"
+    resume_score_val    = 0
+    interview_score_val = 0
+    total_score_val     = 0
+    grade_val            = "-"
 
-interview_score = round(sum(MY_SCORES) / len(MY_SCORES)) if MY_SCORES else 78
-today = datetime.now().strftime("%-m월 %-d일")
+_now = datetime.now()
+today = f"{_now.month}월 {_now.day}일"
 meta_str = f"{today} &nbsp;|&nbsp; {persona_str} 면접관"
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 36px 40px 60px 40px !important; }
+[data-testid="stMainBlockContainer"] {
+    padding: 36px 40px 60px 40px !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+}
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stPlotlyChart"] { padding: 0 !important; margin: 0 10px 0 0 !important; border-left: 1px solid #dedede !important; border-right: 1px solid #dedede !important; overflow: hidden !important; }
 [data-testid="stPlotlyChart"] > div { padding: 0 !important; overflow: hidden !important; }
@@ -99,6 +127,30 @@ st.markdown("""<style>
   100% { background-position:  600px 0; }
 }
 .sk { background: linear-gradient(90deg,#f0f2f5 25%,#e4e7ec 50%,#f0f2f5 75%); background-size:1200px 100%; animation: shimmer 1.4s infinite; border-radius:6px; }
+
+[data-score-label], [data-panel-header], [data-comp-label], [data-comp-score] {
+    white-space: nowrap !important;
+}
+[data-testid="stBaseButton-primary"],
+[data-testid="stBaseButton-secondary"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+}
+[data-testid="stBaseButton-primary"] p,
+[data-testid="stBaseButton-secondary"] p {
+    white-space: nowrap !important;
+    text-align: center !important;
+    overflow: visible !important;
+}
+.st-key-bottom_actions {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 12px !important;
+}
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 ──────────────────────────────────────────────────────────────────
@@ -115,34 +167,42 @@ def _score_section(color, pill_bg, pill_border, label, icon, sublabel, score, fi
     return (
         f'<div style="flex:1;padding:14px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;">'
         f'<div style="background:{pill_bg};border:1px solid {pill_border};border-radius:10px;height:20px;display:flex;align-items:center;justify-content:center;">'
-        f'<span style="font-size:9px;font-weight:700;color:{color};">{label}</span>'
+        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};">{label}</span>'
         f'</div>'
         f'<div style="display:flex;align-items:center;justify-content:space-between;">'
-        f'<div style="display:flex;align-items:center;gap:6px;">{icon}<span style="font-size:11px;color:#6b7280;">{sublabel}</span></div>'
-        f'<span style="font-size:26px;font-weight:700;color:{color};line-height:1;">{score}점</span>'
+        f'<div style="display:flex;align-items:center;gap:6px;">{icon}<span data-score-label style="font-size:11px;color:#6b7280;">{sublabel}</span></div>'
+        f'<span data-score-label style="font-size:26px;font-weight:700;color:{color};line-height:1;">{score}점</span>'
         f'</div>'
         f'<div style="background:#e5e7eb;height:6px;border-radius:3px;">'
         f'<div style="background:{color};height:6px;border-radius:3px;width:{fill_pct}%;"></div>'
         f'</div>'
         f'<div style="display:flex;align-items:center;gap:6px;">'
         f'<div style="background:{pill_bg};border:1px solid {color};border-radius:9px;padding:0 8px;height:18px;display:flex;align-items:center;">'
-        f'<span style="font-size:9px;font-weight:700;color:{color};line-height:1;position:relative;top:0.5px;">{badge}</span>'
+        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};line-height:1;position:relative;top:0.5px;">{badge}</span>'
         f'</div>'
-        f'<span style="font-size:10px;color:#6b7280;">{sub}</span>'
+        f'<span data-score-label style="font-size:10px;color:#6b7280;">{sub}</span>'
         f'</div>'
         f'</div>'
     )
 
 _div = '<div style="width:1px;background:#dee3e8;margin:11px 0;flex-shrink:0;"></div>'
 
+def _grade_badge(score: int) -> str:
+    if score >= 80: return "우수"
+    if score >= 65: return "보통"
+    return "개선 필요"
+
 st.markdown(
     '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
     '<div style="display:flex;min-height:148px;">'
-    + _score_section('#d97706','#fffbeb','rgba(217,119,6,0.3)','1차 서류 전형',icon_resume,'이력서 분석',72,72,'보통','JD 키워드 57% 매칭')
+    + _score_section('#d97706','#fffbeb','rgba(217,119,6,0.3)','1차 서류 전형',icon_resume,'이력서 분석',
+                      resume_score_val, resume_score_val, _grade_badge(resume_score_val), '이력서 분석 결과')
     + _div
-    + _score_section('#3b6def','#eef3ff','rgba(59,109,239,0.3)','2차 면접 전형',icon_mic,'AI 면접 코칭',interview_score,interview_score,'우수','상위 23% 수준')
+    + _score_section('#3b6def','#eef3ff','rgba(59,109,239,0.3)','2차 면접 전형',icon_mic,'AI 면접 코칭',
+                      interview_score_val, interview_score_val, _grade_badge(interview_score_val), '면접 답변 분석 결과')
     + _div
-    + _score_section('#16a34a','#f0fdf4','rgba(22,163,74,0.3)','최종 종합 평가',icon_trophy,'합산 결과',75,75,'우수','합격 권장 수준')
+    + _score_section('#16a34a','#f0fdf4','rgba(22,163,74,0.3)','최종 종합 평가',icon_trophy,'합산 결과',
+                      total_score_val, total_score_val, grade_val, '이력서·면접 종합 점수')
     + '</div></div><div style="height:32px"></div>',
     unsafe_allow_html=True
 )
@@ -153,7 +213,7 @@ col_l, col_r = st.columns([485, 635])
 with col_l:
     st.markdown(
         '<div style="background:white;border:1px solid #dedede;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
-        '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
+        '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
         '</div>',
         unsafe_allow_html=True
     )
@@ -193,29 +253,16 @@ with col_r:
     if summary_text:
         st.markdown(
             '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
             f'<div style="font-size:13px;color:#374151;line-height:1.8;white-space:pre-wrap;">{summary_text}</div>'
             '</div>',
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
-            '<div style="margin-bottom:16px;">'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">강점</div>'
-            '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">논리적 사고와 태도가 우수합니다. LangGraph 기반 상태 관리 개념을 명확히 이해하고 있습니다.</div>'
-            '</div>'
-            '<div style="background:#dedede;height:1px;margin-bottom:16px;"></div>'
-            '<div style="margin-bottom:16px;">'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">개선점</div>'
-            '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">답변 구체성이 부족합니다. 실제 수치와 프로젝트 성과를 포함한 답변을 연습하세요.</div>'
-            '</div>'
-            '<div style="background:#dedede;height:1px;margin-bottom:16px;"></div>'
-            '<div>'
-            '<div style="font-size:13px;font-weight:600;color:#3b6def;margin-bottom:6px;">추천 학습</div>'
-            '<div style="font-size:12px;color:#1f1f1f;line-height:1.7;">Pydantic 심화 학습 및 RAG 파이프라인 구현 경험을 추가하면 직무 전문성이 향상됩니다.</div>'
-            '</div>'
+            '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;'
+            'display:flex;align-items:center;justify-content:center;text-align:center;">'
+            '<div style="font-size:13px;color:#9ca3af;">종합 총평을 불러오지 못했습니다.</div>'
             '</div>',
             unsafe_allow_html=True
         )
@@ -226,11 +273,11 @@ for label, score, avg, comment in COMPETENCIES:
     s = min(max(score, 0), 100)
     a = min(max(avg, 0), 100)
     comp_rows += (
-        '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;height:65px;display:flex;align-items:center;margin-bottom:7px;">'
+        '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
         '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
-        f'<div style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
-        f'<span style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
-        f'<span style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
+        f'<div data-comp-label style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
+        f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
+        f'<span data-comp-score style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
         '</div>'
         '<div style="flex:1;padding:0 16px;position:relative;">'
         f'<div style="font-size:10px;color:#3b6ef0;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
@@ -239,8 +286,8 @@ for label, score, avg, comment in COMPETENCIES:
         f'<div style="position:absolute;left:{a}%;top:-4px;width:2px;height:13px;background:rgba(191,196,204,0.8);transform:translateX(-50%);border-radius:1px;"></div>'
         '</div>'
         '</div>'
-        '<div style="width:1px;height:48px;background:#e5e8eb;flex-shrink:0;"></div>'
-        f'<div style="flex:1;padding:0 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
+        '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e8eb;flex-shrink:0;"></div>'
+        f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
         '</div>'
     )
 
@@ -254,9 +301,24 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ── AI 영상 분석 코멘트 (웹캠 ON일 때) ───────────────────────────────────
-if st.session_state.get("webcam_on", False):
-    if not st.session_state.get("webcam_result_ready", False):
+# ── AI 영상 분석 코멘트 (영상이 있는 세션만) ─────────────────────────────
+if session_id:
+    try:
+        video_metrics = api.get_video_metrics(session_id)
+    except api.SessionExpiredError:
+        video_metrics = None
+        mark_session_expired()
+    except requests.exceptions.HTTPError as e:
+        video_metrics = None
+        if e.response is not None and e.response.status_code == 404:
+            pass 
+        else:
+            st.warning("영상 분석 결과를 불러오지 못했습니다.")
+    except Exception:
+        video_metrics = None
+        st.warning("영상 분석 결과를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
+
+    if video_metrics and video_metrics.get("status") == "analyzing":
         st.markdown(
             '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
             'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
@@ -270,13 +332,28 @@ if st.session_state.get("webcam_on", False):
             unsafe_allow_html=True
         )
         time.sleep(3.0)
-        st.session_state.webcam_result_ready = True
         st.rerun()
-    else:
-        WEBCAM_RESULTS = [
-            ("시선 처리", "카메라 방향으로 시선을 더 맞추면 자신감이 높아 보여요."),
-            ("발화 속도", "적정 속도로 발화했어요. 듣기 편한 속도입니다."),
-        ]
+
+    elif video_metrics and video_metrics.get("status") == "failed":
+        error_msg = video_metrics.get("error") or "영상 분석 중 문제가 발생했습니다."
+        st.markdown(
+            '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
+            'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:120px;box-sizing:border-box;">'
+            '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
+            f'<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">{error_msg}</p>'
+            '</div><div style="height:32px"></div>',
+            unsafe_allow_html=True
+        )
+
+    elif video_metrics and video_metrics.get("status") == "done":
+        WEBCAM_RESULTS = []
+        gaze = video_metrics.get("gaze")
+        if gaze:
+            WEBCAM_RESULTS.append(("시선 처리", gaze.get("message", "")))
+        speech = video_metrics.get("speech")
+        if speech:
+            WEBCAM_RESULTS.append(("발화 속도", speech.get("message", "")))
+
         webcam_rows = ""
         for i, (metric, comment) in enumerate(WEBCAM_RESULTS):
             top_border = "" if i == 0 else "padding-top:20px;"
@@ -287,23 +364,21 @@ if st.session_state.get("webcam_on", False):
                 f'<span style="font-size:12px;color:#5e6673;">{comment}</span>'
                 '</div>'
             )
-        st.markdown(
-            '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
-            '<div style="padding:16px 19px 0;">'
-            '<div style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
-            '</div>'
-            f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
-            '</div><div style="height:32px"></div>',
-            unsafe_allow_html=True
-        )
+        if webcam_rows:
+            st.markdown(
+                '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
+                '<div style="padding:16px 19px 0;">'
+                '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
+                '</div>'
+                f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
+                '</div><div style="height:32px"></div>',
+                unsafe_allow_html=True
+            )
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
-_, btn1, _gap, btn2, _ = st.columns([3, 2, 0.3, 2, 3])
-with btn1:
-    if st.button("피드백 보고서 보기", type="primary", use_container_width=True):
-        st.switch_page("pages/06_피드백보고서.py")
-with btn2:
-    if st.button("다시 면접하기", use_container_width=True):
+with st.container(key="bottom_actions"):
+    if st.button("다시 면접하기"):
+        st.session_state["_session_id_clear_pending"] = True
         state_set("session_id",     None)
         state_set("first_question", None)
         state_set("result",         None)
@@ -311,3 +386,7 @@ with btn2:
         if "iv_messages" in st.session_state:
             del st.session_state["iv_messages"]
         st.switch_page("pages/03_면접_환경설정.py")
+    if st.button("피드백 보고서 보기", type="primary"):
+        st.switch_page("pages/06_피드백보고서.py")
+
+render_session_expired_banner()

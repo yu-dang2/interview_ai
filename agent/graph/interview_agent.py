@@ -16,10 +16,12 @@ from agent.graph.nodes.persona_selector import persona_selector
 from agent.graph.nodes.jd_parser import jd_parser
 from agent.graph.nodes.resume_parser import resume_parser
 from agent.graph.nodes.jd_resume_matcher import jd_resume_matcher
+from agent.graph.nodes.question_retriever import question_retriever
 from agent.graph.nodes.question_generator import question_generator
 from agent.graph.nodes.answer_evaluator import answer_evaluator
 from agent.graph.nodes.follow_up_generator import follow_up_generator
 from agent.graph.nodes.report_generator import report_generator
+from agent.graph.nodes.resume_optimizer import resume_optimizer
 from agent.graph.edges.topic_router import topic_router
 from agent.graph.edges.question_router import question_router
 
@@ -51,18 +53,46 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_node("jd_parser", jd_parser)
     builder.add_node("resume_parser", resume_parser)
     builder.add_node("jd_resume_matcher", jd_resume_matcher)
+    builder.add_node("question_retriever", question_retriever)
     builder.add_node("question_generator", question_generator)
     builder.add_node("answer_evaluator", answer_evaluator)
     builder.add_node("follow_up_generator", follow_up_generator)
     builder.add_node("report_generator", report_generator)
+    builder.add_node("resume_optimizer", resume_optimizer)
 
     # 엣지 연결
-    # 초기 흐름: 페르소나 확인 → JD/이력서 파싱 → 매칭 → 첫 질문 생성
+    # 초기 흐름: 페르소나 확인 → JD/이력서 병렬 파싱 → 매칭 → 첫 질문 생성
     builder.add_edge(START, "persona_selector")
+
+    # jd_parser와 resume_parser는 서로의 결과를 쓰지 않는다.
+    # (각각 jd_raw/resume_raw만 읽고 jd_parsed/resume_parsed에만 쓴다 — 반환 키 교집합 없음)
+    # 그래서 persona_selector에서 둘 다 내보내(fan-out) 같은 super-step에서 동시에 돌리고,
+    # jd_resume_matcher로 모은다(fan-in). 직렬일 때 두 파싱 시간이 더해지던 것을
+    # 느린 쪽 하나(max)로 줄이는 것이 목적이다.
+    #
+    # fan-in 대기: 부모가 둘이면 LangGraph가 두 파서를 같은 super-step에 스케줄하므로
+    # 그 step이 끝나야 matcher가 열린다. 한쪽만 끝난 상태로 matcher가 먼저 도는 일은 없고,
+    # matcher는 jd_parsed와 resume_parsed가 모두 채워진 State를 본다.
     builder.add_edge("persona_selector", "jd_parser")
-    builder.add_edge("jd_parser", "resume_parser")
+    builder.add_edge("persona_selector", "resume_parser")
+    builder.add_edge("jd_parser", "jd_resume_matcher")
     builder.add_edge("resume_parser", "jd_resume_matcher")
+
+    # 직무 지식 검색(RAG)도 같은 방식으로 병렬화한다.
+    # question_retriever 는 jd_parsed 만 읽고 retrieved_knowledge 에만 쓰므로
+    # jd_resume_matcher 와 반환 키가 겹치지 않는다. jd_parser 에서 fan-out 시키면
+    # matcher(LLM 호출, 수 초)와 같은 super-step 에서 돌아 시작 시간에 비용을 더하지 않는다.
+    # (retriever 는 임베딩 왕복 1회, 수백 ms)
+    #
+    # fan-in: question_generator 의 부모가 jd_resume_matcher 와 question_retriever 둘이므로
+    # 둘 다 끝나야 열린다. match_result 와 retrieved_knowledge 가 모두 채워진 State 를 본다.
+    # 순환 경로(answer_evaluator → topic_router → question_generator)로 재진입할 때는
+    # retriever 가 스케줄되지 않으므로 재검색이 일어나지 않는다. retrieved_knowledge 는
+    # LastValue 채널이라 첫 검색 결과가 그대로 남는다.
+    builder.add_edge("jd_parser", "question_retriever")
+
     builder.add_edge("jd_resume_matcher", "question_generator")
+    builder.add_edge("question_retriever", "question_generator")
 
     # question_generator 나가는 엣지(조건부, question_router 판단):
     #   - is_finished == True → report_generator (백엔드 종료 주입 / 질문 소진)
@@ -86,7 +116,11 @@ def build_graph(checkpointer=None, interrupt_before=None):
         ["report_generator", "follow_up_generator", "question_generator"],
     )
     builder.add_edge("follow_up_generator", "answer_evaluator")
-    builder.add_edge("report_generator", END)
+    # 종료 직전 이력서 자동 최적화. report_generator가 END 직전 유일 노드라
+    # interrupt/non-interrupt 양쪽 토폴로지 공통 경로에 삽입된다.
+    # is_finished 등 종료값은 report_generator가 이미 설정하며 resume_optimizer는 건드리지 않는다.
+    builder.add_edge("report_generator", "resume_optimizer")
+    builder.add_edge("resume_optimizer", END)
 
     return builder.compile(
         checkpointer=checkpointer,

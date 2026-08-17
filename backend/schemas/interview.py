@@ -5,6 +5,7 @@
 topic_router 의 THRESHOLD=70 이 모두 이 스케일을 전제한다.
 """
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -65,6 +66,21 @@ class RadarChart(BaseModel):
     problem_solving: Score
 
 
+class RadarComments(BaseModel):
+    """
+    역량 5개 각각에 대한 1~2문장 평가 코멘트. RadarChart 와 필드명이 같다.
+
+    전부 기본값이 빈 문자열인 이유: 이 항목이 프롬프트에 들어오기 전에 끝난 면접에는
+    코멘트가 없다. 그 결과를 조회해도 응답이 깨지지 않아야 한다.
+    """
+
+    logic: str = ""
+    communication: str = ""
+    expertise: str = ""
+    attitude: str = ""
+    problem_solving: str = ""
+
+
 class ResultSummary(BaseModel):
     strength: str
     improvement: str
@@ -73,11 +89,15 @@ class ResultSummary(BaseModel):
 
 class ResultResponse(BaseModel):
     session_id: str
+    # 화면 상단에 "OO 면접관"으로 표시된다. 이 값이 없으면 프론트가 기본값으로
+    # 폴백해 임원 면접을 봤는데 기술 리드로 적히는 문제가 생긴다.
+    persona: str | None = None
     resume_score: Score
     interview_score: Score
     total_score: Score
     grade: str | None = None       # report_generator 가 내주는 등급 (A+, B+ ...)
     radar_chart: RadarChart
+    radar_comments: RadarComments = RadarComments()
     summary: ResultSummary
 
 
@@ -95,3 +115,68 @@ class FeedbackResponse(BaseModel):
     total_questions: int
     average_score: Score
     feedbacks: list[FeedbackItem]
+
+
+# ── 이력서 최적화 ──────────────────────────────────────
+
+class ResumeSuggestion(BaseModel):
+    id: str | int | None = None
+    section: str = ""          # 경력 요약 / 프로젝트 성과 / 기술 스택 ...
+    original: str = ""
+    improved: str = ""
+    reason: str = ""
+
+
+class ResumeOptimizationResponse(BaseModel):
+    """
+    면접 종료 시 resume_optimizer 가 만든 제안.
+
+    면접 결과에 딸린 값이라 세션 단위로 조회한다. 같은 이력서로 여러 번 면접하면
+    결과도 여러 개이므로 resume_id 만으로는 어느 것인지 정할 수 없다.
+    """
+
+    session_id: str
+    resume_id: int | None = None
+    # JD 키워드 중 이력서에 이미 있는 것 / 없는 것.
+    # 화면에서 강점과 보완 대상을 나눠 보여주려면 둘 다 필요하다.
+    matched_keywords: list[str] = []
+    missing_keywords: list[str] = []
+    suggestions: list[ResumeSuggestion] = []
+
+
+# ── 면접 기록 목록 (마이페이지) ────────────────────────
+
+class SessionListItem(BaseModel):
+    session_id: str
+    created_at: datetime
+    persona: str | None = None
+    status: str
+
+    # 아직 끝나지 않았거나 중단된 면접은 결과가 없어 전부 None 이다.
+    resume_score: Score | None = None
+    interview_score: Score | None = None
+    total_score: Score | None = None
+    grade: str | None = None
+
+    has_video: bool = False
+    # 영상 재생용 경로. 인증이 필요해 <video src> 에 바로 넣을 수 없다.
+    video_url: str | None = None
+
+
+class SessionListSummary(BaseModel):
+    """
+    마이페이지 상단 통계 카드용. 목록이 limit 으로 잘려도 값이 맞도록
+    전체 결과를 대상으로 따로 집계한다.
+
+    리포트를 JSON 한 컬럼에 넣던 시절에는 이 집계가 불가능했다.
+    """
+
+    total_interviews: int                      # 결과가 남은(완료된) 면접 수
+    average_interview_score: float | None = None
+    latest_resume_score: Score | None = None
+
+
+class SessionListResponse(BaseModel):
+    total: int                                 # 세션 전체 개수 (limit 과 무관)
+    summary: SessionListSummary
+    sessions: list[SessionListItem]

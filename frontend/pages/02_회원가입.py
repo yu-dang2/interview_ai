@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 from utils.paths import resource
 from utils.state import init_session, set as state_set
@@ -93,7 +94,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 """, unsafe_allow_html=True)
 
 
-# ── 왼쪽 패널 (position: fixed) ───────────────────────────────────────
+# ── 왼쪽 패널 ───────────────────────────────────────
 CHECK = """<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
   <circle cx="11" cy="11" r="11" fill="rgba(255,255,255,0.2)"/>
   <path d="M7 11l2.8 2.8 5.2-5.2" stroke="white" stroke-width="2.2"
@@ -157,25 +158,28 @@ with form_col:
                margin:0 0 56px;line-height:1.2;">회원가입</div>
     """, unsafe_allow_html=True)
 
-    name = st.text_input("이름", placeholder="홍길동", key="signup_name")
+    with st.form("signup_form", border=False):
+        name = st.text_input("이름", placeholder="홍길동", key="signup_name")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    email = st.text_input("이메일", placeholder="example@email.com", key="signup_email")
+        email = st.text_input("이메일", placeholder="example@email.com", key="signup_email")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    password = st.text_input("비밀번호", placeholder="비밀번호를 입력하세요",
-                             type="password", key="signup_pw")
+        password = st.text_input("비밀번호", placeholder="비밀번호를 입력하세요",
+                                 type="password", key="signup_pw")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    password_confirm = st.text_input("비밀번호 확인", placeholder="비밀번호를 다시 입력하세요",
-                                     type="password", key="signup_pw_confirm")
+        password_confirm = st.text_input("비밀번호 확인", placeholder="비밀번호를 다시 입력하세요",
+                                         type="password", key="signup_pw_confirm")
 
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
 
-    if st.button("회원가입", type="primary", use_container_width=True, key="btn_signup"):
+        submitted = st.form_submit_button("회원가입", type="primary", use_container_width=True)
+
+    if submitted:
         if not name or not email or not password or not password_confirm:
             st.error("모든 항목을 입력해주세요.")
         elif password != password_confirm:
@@ -189,6 +193,12 @@ with form_col:
                 state_set("user_email", email)
                 state_set("is_logged_in", True)
                 st.switch_page("pages/03_면접_환경설정.py")
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 409:
+                    st.error("이미 가입된 이메일입니다.")
+                else:
+                    status = e.response.status_code if e.response is not None else "?"
+                    st.error(f"회원가입에 실패했습니다. (서버 오류: {status})")
             except Exception:
                 st.error("회원가입에 실패했습니다. 다시 시도해주세요.")
 

@@ -3,8 +3,14 @@ __pycache__/
 *.py[cod]
 venv/
 
+# 업로드된 면접 영상 (VIDEO_STORAGE_DIR, 배포 시 S3로 이전)
+uploads/
+
 # Database
 *.db
+# SQLite WAL 모드 부산물 (LangGraph 체크포인트 등)
+*.db-wal
+*.db-shm
 
 # Byte-compiled / optimized / DLL files
 *.py[codz]
@@ -212,3 +218,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 직무 지식 벡터 인덱스 (생성물)
+# 원본 카드(data/job_knowledge.json)만 커밋하고, 인덱스는 각자
+# scripts/build_knowledge_index.py 로 만든다. 임베딩 결과라 바이너리에 가깝고
+# 재생성이 쉬워 커밋할 이유가 없다.
+data/knowledge_index/
