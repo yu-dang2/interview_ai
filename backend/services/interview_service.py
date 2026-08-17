@@ -8,6 +8,7 @@ DB에는 조회용 기록(세션/대화/결과)을 남긴다.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta
 
@@ -19,6 +20,8 @@ from backend.core.config import (
     CLOSING_MESSAGE,
     INTERVIEW_ACTIVE_LIMIT,
     INTERVIEW_DAILY_LIMIT,
+    INTERVIEW_STALE_AFTER_MIN,
+    INTERVIEW_TIME_LIMIT_MIN,
 )
 from backend.models.models import (
     JD,
@@ -44,6 +47,8 @@ from backend.schemas.interview import (
     SessionListSummary,
 )
 from backend.services import graph_runner, report_mapper
+
+logger = logging.getLogger(__name__)
 
 _NO_REPORT = HTTPException(
     status_code=409,
@@ -99,6 +104,42 @@ class InterviewService:
 
     # ── 사용량 제한 ────────────────────────────────────
 
+    def _sweep_stale_sessions(self) -> int:
+        """
+        오래 방치된 active 세션을 abandoned 로 정리하고 처리한 개수를 반환한다.
+
+        브라우저를 그냥 닫으면 종료 요청이 오지 않아 세션이 계속 active 로 남는다.
+        그대로 두면 동시 진행 제한에 걸려 본인이 새 면접을 시작하지 못한다.
+        (실제로 7/29~8/11 사이 14건이 쌓여 429 가 났다)
+
+        기준은 created_at 이다. 마지막 활동 시각 컬럼을 두는 편이 정확하지만,
+        interview_sessions 에는 이미 데이터가 있어 컬럼을 더하려면 테이블을 다시
+        만들어야 한다. 면접이 제한 시간 안에 끝나므로 생성 시각만으로 충분하고,
+        그 두 배를 기다려 진행 중인 면접은 건드리지 않는다.
+        """
+        if INTERVIEW_STALE_AFTER_MIN <= 0:
+            return 0
+
+        cutoff = datetime.now() - timedelta(minutes=INTERVIEW_STALE_AFTER_MIN)
+        stale = (
+            self.db.query(InterviewSession)
+            .filter(
+                InterviewSession.users_user_id == self.user.user_id,
+                InterviewSession.status == "active",
+                InterviewSession.created_at < cutoff,
+            )
+            .all()
+        )
+        for session in stale:
+            session.status = "abandoned"
+        if stale:
+            self.db.commit()
+            logger.info(
+                "방치된 면접 %d건을 정리했습니다 (user_id=%s, %d분 초과)",
+                len(stale), self.user.user_id, INTERVIEW_STALE_AFTER_MIN,
+            )
+        return len(stale)
+
     def _check_usage_limit(self) -> None:
         """
         면접 생성 횟수를 제한한다.
@@ -110,6 +151,10 @@ class InterviewService:
         Redis 없이 DB 카운트로 센다. 사용자 수가 적어 이 정도로 충분하고,
         인프라를 늘리지 않아도 된다.
         """
+        # 세는 것보다 먼저 정리한다. 방치된 세션이 동시 제한을 차지하고 있으면
+        # 실제로는 진행 중인 게 없는데도 거절된다.
+        self._sweep_stale_sessions()
+
         if INTERVIEW_DAILY_LIMIT > 0:
             since = datetime.now() - timedelta(days=1)
             recent = (
@@ -215,6 +260,19 @@ class InterviewService:
         _, finished = await graph_runner.snapshot(session_id)
         if finished:
             raise HTTPException(status_code=409, detail="이미 종료된 면접입니다.")
+
+        # 제한 시간 확인. 화면 타이머가 0이 되면 프론트가 종료를 걸어주지만, 탭을
+        # 열어둔 채 계속 답변하면 서버가 막을 방법이 없다. 여기서 거절만 하고
+        # 리포트를 자동 생성하지는 않는다. 종료는 LLM 을 두 번 부르는 동작이라
+        # 사용자가 종료 버튼을 눌렀을 때 하는 편이 낫다.
+        if INTERVIEW_TIME_LIMIT_MIN > 0 and session.created_at:
+            elapsed_min = (datetime.now() - session.created_at).total_seconds() / 60
+            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"면접 시간 {INTERVIEW_TIME_LIMIT_MIN}분이 지났습니다. "
+                           "면접을 종료하고 결과를 확인해주세요.",
+                )
 
         values = await graph_runner.resume(session_id, answer, input_type)
         _, finished = await graph_runner.snapshot(session_id)
