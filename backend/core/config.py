@@ -85,6 +85,19 @@ CORS_ORIGINS = [
 INTERVIEW_DAILY_LIMIT = int(os.getenv("INTERVIEW_DAILY_LIMIT", "10"))
 INTERVIEW_ACTIVE_LIMIT = int(os.getenv("INTERVIEW_ACTIVE_LIMIT", "3"))
 
+# ── 면접 제한 시간 ──────────────────────────────────────
+# 화면 타이머와 같은 값이다. 프론트가 0초에 종료를 걸어주지만, 탭을 열어둔 채
+# 계속 답변하면 서버가 막을 방법이 없어 여기서도 확인한다.
+INTERVIEW_TIME_LIMIT_MIN = int(os.getenv("INTERVIEW_TIME_LIMIT_MIN", "30"))
+
+# 이 시간이 지나도 active 로 남아 있는 세션은 정리한다.
+# 브라우저를 그냥 닫으면 종료 요청이 오지 않아 세션이 영원히 active 로 남고,
+# 동시 진행 제한(INTERVIEW_ACTIVE_LIMIT)에 걸려 새 면접을 시작하지 못한다.
+# 제한 시간의 두 배로 잡아, 진행 중인 면접을 건드리지 않게 여유를 둔다.
+INTERVIEW_STALE_AFTER_MIN = int(
+    os.getenv("INTERVIEW_STALE_AFTER_MIN", str(INTERVIEW_TIME_LIMIT_MIN * 2))
+)
+
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
 # report_generator가 마지막 AIMessage로 리포트 JSON 전체를 넣기 때문에,
