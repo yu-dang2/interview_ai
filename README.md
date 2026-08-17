@@ -1,7 +1,6 @@
 # interview_ai
 
 2026 한이음 드림업 공모전 : 랭체인 &amp; 랭그래프 기반 지능형 취업 뽀개기 AI 면접관
-<<<<<<< HEAD
 <br>
 <br>
 
@@ -159,4 +158,3 @@ python backend/tests/demo_flow_check.py    # 데모 경로 백엔드 확인 (LLM
 ```
 
 화면 확인 시나리오는 `backend/tests/README.md` 에 있다.
->>>>>>> upstream/develop
