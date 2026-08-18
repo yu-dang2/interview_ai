@@ -26,11 +26,23 @@ COPY agent/ ./agent/
 COPY backend/ ./backend/
 COPY video/ ./video/
 
-# 영상·체크포인트가 저장될 위치. compose 에서 볼륨으로 마운트한다.
-# 마운트하지 않으면 컨테이너를 재시작할 때마다 진행 중이던 면접과 영상이 사라진다.
-RUN mkdir -p /app/uploads/videos /app/data
+# 직무 지식 카드 원본과 인덱스 생성 스크립트.
+# 인덱스(data/knowledge_index/)는 임베딩 결과라 이미지에 굽지 않는다. 빌드마다
+# OpenAI 를 호출하게 되고 빌드 시점에 키가 필요해진다. 컨테이너를 띄운 뒤
+# 아래 명령으로 한 번 만들면 볼륨에 남는다.
+#   docker compose exec api python scripts/build_knowledge_index.py
+COPY data/ ./data/
+COPY scripts/ ./scripts/
+
+# 쓰기 대상은 /app/var 로 모은다. compose 에서 볼륨으로 마운트해야
+# 컨테이너를 재시작해도 진행 중이던 면접과 영상이 남는다.
+#
+# /app/data(카드 원본)와 분리하는 이유: 같은 경로에 볼륨을 걸면 이미지에 넣은
+# 파일이 볼륨에 가려져, 카드를 고쳐 다시 빌드해도 반영되지 않는다.
+RUN mkdir -p /app/uploads/videos /app/var
 ENV VIDEO_STORAGE_DIR=/app/uploads/videos \
-    CHECKPOINT_DB_PATH=/app/data/interview_checkpoints.db \
+    CHECKPOINT_DB_PATH=/app/var/interview_checkpoints.db \
+    KNOWLEDGE_INDEX_PATH=/app/var/knowledge_index \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
