@@ -9,7 +9,6 @@ import json
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.parsers.report_generator_prompt import REPORT_GENERATOR_SYSTEM_PROMPT
 from agent.graph.state import InterviewState
-from agent.graph.edges.topic_router import MAX_TURNS
 from agent.graph.utils import call_llm
 
 # 답변이 하나도 없는 세션의 고정 리포트 문구 (백엔드 합의 확정 문구 — 정확히 이대로 사용)
@@ -58,8 +57,18 @@ async def report_generator(state: InterviewState):
         }
 
     # 답변 1개 이상: 진행된 답변만 기준으로 평가.
-    # 정상 종료(10턴 완료)가 아니면 중도 종료로 판정 — turn_count로 코드에서 결정해 명시 전달.
-    is_early_terminated = state.get("turn_count", 0) < MAX_TURNS
+    # 준비된 질문을 다 소진했으면 정상 종료, 남아 있으면 중도 종료로 판정한다.
+    # (코드에서 결정해 LLM 에 명시 전달 — LLM 이 재판단하지 않도록)
+    #
+    # 예전에는 turn_count < MAX_TURNS 로 판정했는데, turn_count 는 주 질문에서만 +1 되고
+    # 꼬리질문은 세지 않는다. 본질문이 5개라 turn_count 가 5를 넘지 못해 MAX_TURNS(10)
+    # 미만이 항상 참이었고, 정상 완주한 면접도 전부 "중도 종료"로 표기됐다.
+    #
+    # question_generator 는 질문을 소진하면 current_question_index 를 len(question_list) 로
+    # 올리고 is_finished 를 세운다. 그래서 정상 종료 경로에서는 index == len 이 되고,
+    # 종료 버튼(graph_runner.finish)으로 들어오면 question_generator 를 거치지 않아
+    # index < len 이 유지된다.
+    is_early_terminated = state.get("current_question_index", 0) < len(question_list)
     user_content = json.dumps({
         "question_list": question_list,
         "conversation": qa_history,
