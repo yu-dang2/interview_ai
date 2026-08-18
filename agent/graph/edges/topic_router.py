@@ -8,7 +8,7 @@ answer_evaluator 실행 후 어디로 갈지 판단.
     1. is_finished == True           → report_generator (중도 종료 / 질문 소진)
     2. turn_count >= MAX_TURNS       → report_generator (턴 수 초과)
     3. eval_score < THRESHOLD
-       + follow_up_count < 3        → follow_up_generator (꼬리질문)
+       + follow_up_count < MAX_FOLLOW_UPS → follow_up_generator (꼬리질문)
     4. 그 외                         → question_generator (다음 질문)
 
 1번은 백엔드가 중도 종료를 주입한 경우다. 예전에는 END로 직행해 리포트 없이
@@ -23,6 +23,12 @@ from agent.graph.state import InterviewState
 MAX_TURNS = 10    # 예진님과 합의 후 수정
 THRESHOLD = 70    # 예진님 평가 점수 기준 (70점 미만 = 꼬리질문)
 
+# 한 주제에서 이어갈 수 있는 꼬리질문 수. 누적이 아니라 주제당 상한이다
+# (question_generator가 새 질문마다 follow_up_count를 0으로 리셋한다).
+# 3 → 2 로 줄였다. 답변이 계속 기준 미만이면 한 주제에서 주질문 1 + 꼬리 3 = 4문항이
+# 연달아 나와 면접이 늘어졌다. 2면 한 주제 최대 3문항이 된다.
+MAX_FOLLOW_UPS = 2
+
 
 def topic_router(state: InterviewState):
     if state.get("is_finished", False):
@@ -31,7 +37,8 @@ def topic_router(state: InterviewState):
     if state.get("turn_count", 0) >= MAX_TURNS:
         return "report_generator"
 
-    if state.get("eval_score", 0) < THRESHOLD and state.get("follow_up_count", 0) < 3:
+    if (state.get("eval_score", 0) < THRESHOLD
+            and state.get("follow_up_count", 0) < MAX_FOLLOW_UPS):
         return "follow_up_generator"
 
     return "question_generator"
