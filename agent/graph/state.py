@@ -38,7 +38,7 @@ class InterviewState(MessagesState):
     weakness_areas: Annotated[list, add]
 
     # 흐름 제어 (이현주 관리)
-    follow_up_count: int    # 꼬리질문 횟수. 3회 초과 시 다음 주제로 강제 이동
+    follow_up_count: int    # 꼬리질문 횟수. topic_router.MAX_FOLLOW_UPS 도달 시 다음 주제로 이동
     turn_count: int         # 전체 턴 수. MAX_TURNS 초과 시 종료
     is_finished: bool
 
