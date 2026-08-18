@@ -37,7 +37,7 @@ def _get_owned(db: Session, jd_id: int, user: User) -> JD:
     """내 JD 만 반환. 없거나 남의 것이면 404 (존재 여부를 흘리지 않는다)."""
     jd = db.get(JD, jd_id)
     if jd is None or jd.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"JD를 찾을 수 없습니다: {jd_id}")
+        raise HTTPException(status_code=404, detail="직무 기술서를 찾을 수 없습니다.")
     return jd
 
 
