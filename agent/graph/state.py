@@ -31,7 +31,11 @@ class InterviewState(MessagesState):
     # 현재 진행 상태
     current_question_index: int
     eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
-    eval_result: dict       # {"score", "feedback", "follow_up_needed", "follow_up_focus", ...}
+    eval_result: dict       # answer_evaluator 프롬프트 출력 그대로.
+                            # {"eval_score", "feedback", "strengths", "weaknesses", "eval_keywords",
+                            #  "follow_up_needed", "follow_up_focus",
+                            #  세부 점수 5종(logic/communication/expertise/attitude/problem_solving_score)}
+                            # 종합 점수 키는 "score"가 아니라 "eval_score"다.
 
     # 누적값 (면접 전체에서 쌓임)
     eval_keywords: Annotated[list, add]
@@ -47,7 +51,10 @@ class InterviewState(MessagesState):
                              # "voice"면 answer_evaluator가 음성 말버릇을 감점하지 않도록 안내를 덧붙임.
 
     # 최종 결과 (report_generator가 생성)
-    report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
+    report_result: dict     # {"total_score", "grade", "is_early_terminated", "category_scores",
+                            #  "category_comments", "summary", "keywords", "question_feedbacks"}
+                            # is_early_terminated: 중도 종료 여부. report_generator가
+                            # current_question_index < len(question_list) 로 판정해 넣는다.
 
     # 이력서 자동 최적화 (resume_optimizer가 종료 직전 생성, 화면·DB 기준 키로 정규화)
     # matched_keywords: JD 키워드 중 이력서에 이미 있는 것 (화면 "보유 키워드")
