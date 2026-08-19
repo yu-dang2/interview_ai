@@ -3,7 +3,7 @@ answer_evaluator 노드
 
 예진님 ANSWER_EVALUATOR_SYSTEM_PROMPT + 페르소나 조합하여 답변 평가.
 good_answer_criteria도 함께 전달하여 정확한 평가 유도.
-eval_result의 score가 topic_router 분기 판단의 핵심 값.
+eval_result의 eval_score를 State의 eval_score로 올리며, 이 값이 topic_router 분기 판단의 핵심이다.
 """
 
 import json

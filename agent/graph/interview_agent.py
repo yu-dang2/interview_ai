@@ -1,8 +1,9 @@
 """
 AI 면접관 에이전트 - 그래프 조립 및 실행
 
-사용자 답변 수신은 노드가 아닌 while 루프에서 처리.
-유정님 FastAPI 연동 시 실행 루프 부분 변경 예정.
+그래프 조립(build_graph)은 백엔드와 CLI가 공유한다.
+사용자 답변 수신은 노드가 아니라 그래프 밖에서 처리한다 —
+실제 서비스는 backend/services/graph_runner.py 가, 단독 실행은 아래 main()의 while 루프가 맡는다.
 """
 
 import asyncio
@@ -31,16 +32,16 @@ def build_graph(checkpointer=None, interrupt_before=None):
     """
     그래프를 조립해서 컴파일된 객체를 반환.
 
-    checkpointer=None이면 기존과 동일하게 동작한다.
-    유정님 FastAPI 연동 시 checkpointer를 주입해서 대화 상태를 보존할 수 있다.
+    checkpointer=None이면 대화 상태를 보존하지 않는다(단발 실행·테스트용).
+    백엔드는 graph_runner.init()에서 AsyncSqliteSaver를 주입해 상태를 보존한다.
 
     interrupt_before:
         휴먼-인-더-루프(HITL) 모드 opt-in. ["answer_evaluator"]를 주면
         질문 생성 노드(question_generator/follow_up_generator)에서 answer_evaluator
         직전까지 실행한 뒤 일시정지한다. 이때만 question_generator → answer_evaluator
         엣지를 추가해 하나의 연속 그래프로 순환하게 만든다.
-        None(기본값)이면 기존 토폴로지(첫 질문 생성 후 종료)를 그대로 유지하므로
-        백엔드 등 기존 사용처에는 영향이 없다.
+        None(기본값)이면 첫 질문 생성 후 종료하는 단발 토폴로지가 된다.
+        백엔드(graph_runner)는 ["answer_evaluator"]를 주입해 순환 모드로 쓴다.
     """
     builder = StateGraph(
         InterviewState,
@@ -132,8 +133,8 @@ def build_graph(checkpointer=None, interrupt_before=None):
 graph = build_graph()
 
 
-# ── 실행 루프 ──────────────────────────────────────────
-# 유정님 FastAPI 연동 시 이 부분 변경 예정
+# ── 실행 루프 (CLI 단독 실행 전용) ─────────────────────
+# 실제 서비스 경로는 backend/services/graph_runner.py 다. 여기는 그래프만 따로 돌려볼 때 쓴다.
 #
 # checkpointer(InMemorySaver) + thread_id 방식:
 #   - 하나의 그래프를 매 턴 재사용하고, 전체 State는 checkpointer가 보존한다.
