@@ -252,6 +252,36 @@ class InterviewService:
 
     # ── 답변 처리 ──────────────────────────────────────
 
+    def _asked_within_limit(self, session: InterviewSession) -> bool:
+        """
+        마지막으로 내보낸 질문이 제한 시간 안에 나갔는지.
+
+        답변을 보낸 시각이 아니라 질문이 나간 시각을 본다. 29분에 받은 질문에
+        31분에 답하는 것까지 막으면 질문을 받고도 답할 기회가 없어진다.
+        답변이 길수록 그렇게 되기 쉽다.
+
+        유예 시간 같은 값을 따로 두지 않아도 한 번만 열린다. 이 답변으로 나오는
+        다음 질문은 제한 시간을 넘긴 시각에 기록되므로 그 답변은 거절된다.
+
+        기준 시각은 assistant 메시지의 created_at 이다. 질문을 내보낼 때마다
+        _log_message 가 행을 남기므로 별도 컬럼이 필요 없다.
+        """
+        row = (
+            self.db.query(InterviewMessage.created_at)
+            .filter(
+                InterviewMessage.interview_sessions_session_id == session.session_id,
+                InterviewMessage.role == "assistant",
+            )
+            # created_at 은 같은 초에 여러 건이 찍힐 수 있어 PK 로 정렬한다.
+            .order_by(InterviewMessage.message_id.desc())
+            .first()
+        )
+        if row is None or row[0] is None:
+            return False
+
+        elapsed_min = (row[0] - session.created_at).total_seconds() / 60
+        return elapsed_min <= INTERVIEW_TIME_LIMIT_MIN
+
     async def process_answer(
         self, session_id: str, answer: str, input_type: str = "text"
     ) -> ChatResponse:
@@ -267,7 +297,7 @@ class InterviewService:
         # 사용자가 종료 버튼을 눌렀을 때 하는 편이 낫다.
         if INTERVIEW_TIME_LIMIT_MIN > 0 and session.created_at:
             elapsed_min = (datetime.now() - session.created_at).total_seconds() / 60
-            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN:
+            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN and not self._asked_within_limit(session):
                 raise HTTPException(
                     status_code=409,
                     detail=f"면접 시간 {INTERVIEW_TIME_LIMIT_MIN}분이 지났습니다. "
