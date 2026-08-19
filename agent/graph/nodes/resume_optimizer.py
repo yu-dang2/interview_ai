@@ -26,13 +26,19 @@ from agent.graph.utils import call_llm
 logger = logging.getLogger(__name__)
 
 # 실패/스킵 시 반환할 빈 결과 (화면·DB 기준 구조 유지)
-EMPTY_OPTIMIZATION = {"matched_keywords": [], "suggestions": []}
+EMPTY_OPTIMIZATION = {"matched_keywords": [], "missing_keywords": [], "suggestions": []}
+
+
+def _keywords(value) -> list:
+    """키워드 배열만 통과시킨다. 형식이 어긋나면 빈 배열(실패 격리)."""
+    return value if isinstance(value, list) else []
 
 
 def _normalize(raw) -> dict:
     """
     프롬프트 출력을 화면·DB 기준으로 변환한다.
       matched_keywords    → 그대로 통과
+      missing_keywords    → 그대로 통과
       optimizations       → suggestions (각 원소에 id 부여)
     section/original/improved는 그대로, reason은 유지(화면 미사용, 향후 활용).
     """
@@ -41,8 +47,10 @@ def _normalize(raw) -> dict:
 
     # 8b714c7 에서 프롬프트가 matched_jd_keywords → matched_keywords/missing_keywords 로
     # 바뀌었는데 여기가 따라가지 않아, .get 기본값 때문에 예외 없이 빈 배열만 나갔다.
-    # (missing_keywords 는 팀 확정 후 별도로 다룬다)
+    # missing_keywords 는 화면에 "추가 추천 키워드"로 노출하기로 확정돼 함께 내보낸다.
+    # (백엔드 InterviewResumeOptimization.missing_keywords / 프론트 07 페이지가 같은 이름으로 대기 중)
     matched = raw.get("matched_keywords", [])
+    missing = raw.get("missing_keywords", [])
     optimizations = raw.get("optimizations", [])
 
     suggestions = []
@@ -58,7 +66,8 @@ def _normalize(raw) -> dict:
         })
 
     return {
-        "matched_keywords": matched if isinstance(matched, list) else [],
+        "matched_keywords": _keywords(matched),
+        "missing_keywords": _keywords(missing),
         "suggestions": suggestions,
     }
 

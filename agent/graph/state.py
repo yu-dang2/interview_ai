@@ -50,7 +50,11 @@ class InterviewState(MessagesState):
     report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
 
     # 이력서 자동 최적화 (resume_optimizer가 종료 직전 생성, 화면·DB 기준 키로 정규화)
-    resume_optimization: dict   # {"matched_keywords": [...], "suggestions": [{"id","section","original","improved","reason"}]}
+    # matched_keywords: JD 키워드 중 이력서에 이미 있는 것 (화면 "보유 키워드")
+    # missing_keywords: JD 키워드 중 이력서에 없는 것 (화면 "추가 추천 키워드")
+    # suggestions:      항목별 문구 개선 제안
+    resume_optimization: dict   # {"matched_keywords": [...], "missing_keywords": [...],
+                                #  "suggestions": [{"id","section","original","improved","reason"}]}
 
 
 class InterviewInput(TypedDict):
