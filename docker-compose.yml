@@ -21,13 +21,20 @@ services:
       - db_data:/var/lib/mysql
     healthcheck:
       # 앱이 DB 준비 전에 뜨면 create_all 이 실패한다.
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      #
+      # -h 127.0.0.1 로 TCP 를 확인해야 한다. localhost 는 유닉스 소켓을 쓰는데,
+      # MySQL 8 은 첫 기동 때 초기화용 임시 서버를 소켓으로만 띄운다. 그래서
+      # 소켓 검사는 TCP 포트가 열리기 전에 통과해버리고, api 가 붙으려다
+      # Connection refused 로 죽는다.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   api:
     build: .
+    # DB 가 잠깐 끊기거나 기동 순서가 어긋나도 스스로 복구하게 둔다.
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -40,13 +47,15 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       INTERVIEW_DAILY_LIMIT: ${INTERVIEW_DAILY_LIMIT:-10}
       INTERVIEW_ACTIVE_LIMIT: ${INTERVIEW_ACTIVE_LIMIT:-3}
+      INTERVIEW_TIME_LIMIT_MIN: ${INTERVIEW_TIME_LIMIT_MIN:-30}
+      INTERVIEW_STALE_AFTER_MIN: ${INTERVIEW_STALE_AFTER_MIN:-60}
     ports:
       - "8000:8000"
     volumes:
-      # 이 둘을 마운트하지 않으면 컨테이너 재시작마다
-      # 업로드된 영상과 진행 중이던 면접이 사라진다.
+      # 마운트하지 않으면 컨테이너 재시작마다 업로드된 영상과 진행 중이던
+      # 면접이 사라진다. /app/var 에는 체크포인트와 직무 지식 인덱스가 함께 남는다.
       - video_data:/app/uploads/videos
-      - checkpoint_data:/app/data
+      - app_state:/app/var
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
       interval: 15s
@@ -57,4 +66,4 @@ services:
 volumes:
   db_data:
   video_data:
-  checkpoint_data:
+  app_state:
