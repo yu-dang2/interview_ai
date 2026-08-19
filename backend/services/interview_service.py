@@ -22,6 +22,8 @@ from backend.core.config import (
     INTERVIEW_DAILY_LIMIT,
     INTERVIEW_STALE_AFTER_MIN,
     INTERVIEW_TIME_LIMIT_MIN,
+    RAPPORT_QUESTION_TYPES,
+    RAPPORT_TRANSITION_MESSAGE,
 )
 from backend.models.models import (
     JD,
@@ -252,14 +254,73 @@ class InterviewService:
 
     # ── 답변 처리 ──────────────────────────────────────
 
+    def _is_rapport_pending(self, values: dict) -> bool:
+        """
+        지금 답변을 기다리는 질문이 라포 형성 질문인지.
+
+        라포 질문은 채점하지 않기로 해서 실시간 점수가 0으로 나간다. 화면에서 그대로
+        보여주면 자기소개를 한 직후에 0점이 뜨므로, 프론트가 패널을 숨길 수 있도록
+        응답에 표시해 준다. (8/20 확정)
+
+        꼬리질문 차례면 라포가 아니다. question_generator 가 새 질문마다
+        follow_up_count 를 0으로 되돌리므로 0이 아니면 follow_up_generator 를 거친 것이다.
+        """
+        if values.get("follow_up_count", 0):
+            return False
+
+        questions = values.get("question_list") or []
+        index = values.get("current_question_index", 0)
+        if not 0 <= index < len(questions):
+            return False
+
+        question = questions[index]
+        return (
+            isinstance(question, dict)
+            and question.get("type") in RAPPORT_QUESTION_TYPES
+        )
+
+    def _asked_within_limit(self, session: InterviewSession) -> bool:
+        """
+        마지막으로 내보낸 질문이 제한 시간 안에 나갔는지.
+
+        답변을 보낸 시각이 아니라 질문이 나간 시각을 본다. 29분에 받은 질문에
+        31분에 답하는 것까지 막으면 질문을 받고도 답할 기회가 없어진다.
+        답변이 길수록 그렇게 되기 쉽다.
+
+        유예 시간 같은 값을 따로 두지 않아도 한 번만 열린다. 이 답변으로 나오는
+        다음 질문은 제한 시간을 넘긴 시각에 기록되므로 그 답변은 거절된다.
+
+        기준 시각은 assistant 메시지의 created_at 이다. 질문을 내보낼 때마다
+        _log_message 가 행을 남기므로 별도 컬럼이 필요 없다.
+        """
+        row = (
+            self.db.query(InterviewMessage.created_at)
+            .filter(
+                InterviewMessage.interview_sessions_session_id == session.session_id,
+                InterviewMessage.role == "assistant",
+            )
+            # created_at 은 같은 초에 여러 건이 찍힐 수 있어 PK 로 정렬한다.
+            .order_by(InterviewMessage.message_id.desc())
+            .first()
+        )
+        if row is None or row[0] is None:
+            return False
+
+        elapsed_min = (row[0] - session.created_at).total_seconds() / 60
+        return elapsed_min <= INTERVIEW_TIME_LIMIT_MIN
+
     async def process_answer(
         self, session_id: str, answer: str, input_type: str = "text"
     ) -> ChatResponse:
         session = self._get_session(session_id)
 
-        _, finished = await graph_runner.snapshot(session_id)
+        pending, finished = await graph_runner.snapshot(session_id)
         if finished:
             raise HTTPException(status_code=409, detail="이미 종료된 면접입니다.")
+
+        # 지금 답변하는 질문이 라포 형성 질문인지. 그래프를 재개하면 상태가 다음 질문으로
+        # 넘어가므로 재개 전에 봐둔다.
+        is_rapport = self._is_rapport_pending(pending)
 
         # 제한 시간 확인. 화면 타이머가 0이 되면 프론트가 종료를 걸어주지만, 탭을
         # 열어둔 채 계속 답변하면 서버가 막을 방법이 없다. 여기서 거절만 하고
@@ -267,7 +328,7 @@ class InterviewService:
         # 사용자가 종료 버튼을 눌렀을 때 하는 편이 낫다.
         if INTERVIEW_TIME_LIMIT_MIN > 0 and session.created_at:
             elapsed_min = (datetime.now() - session.created_at).total_seconds() / 60
-            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN:
+            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN and not self._asked_within_limit(session):
                 raise HTTPException(
                     status_code=409,
                     detail=f"면접 시간 {INTERVIEW_TIME_LIMIT_MIN}분이 지났습니다. "
@@ -291,6 +352,11 @@ class InterviewService:
             # 따라서 0이 아니라는 건 follow_up_generator 를 거쳤다는 뜻.
             question_type = "follow_up" if follow_up_count > 0 else "next"
             next_question = values["messages"][-1].content if values.get("messages") else ""
+            # 라포 질문에서 평가 질문으로 곧바로 넘어가면 흐름이 끊긴다. 화면에 나가는
+            # 문장에만 붙이고 그래프가 들고 있는 질문은 그대로 둔다. 노드에서 붙이면
+            # report_generator 가 이 문구까지 질문으로 읽는다.
+            if is_rapport and next_question:
+                next_question = f"{RAPPORT_TRANSITION_MESSAGE}\n\n{next_question}"
 
         self._log_message(session_id, "user", answer, eval_score)
         self._log_message(session_id, "assistant", next_question)
@@ -305,6 +371,7 @@ class InterviewService:
         return ChatResponse(
             next_question=next_question,
             question_type=question_type,
+            is_rapport=is_rapport,
             realtime_score=report_mapper.to_realtime_score(eval_result),
             realtime_feedback=report_mapper.to_realtime_feedback(eval_result),
         )

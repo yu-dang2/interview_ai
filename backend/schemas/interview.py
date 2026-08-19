@@ -54,6 +54,11 @@ class ChatResponse(BaseModel):
     question_type: Literal["follow_up", "next", "end"]
     realtime_score: RealtimeScore
     realtime_feedback: list[RealtimeFeedbackItem]
+    # 방금 답변한 질문이 라포 형성 질문이었는지. question_type 은 다음에 내보내는
+    # 질문을 가리키므로 여기에 담을 수 없어 필드를 따로 뒀다.
+    # true 면 화면에서 실시간 점수·피드백 패널을 숨긴다. 채점하지 않는 답변이라
+    # 점수가 0으로 내려가서, 그대로 보여주면 자기소개 직후에 0점이 뜬다.
+    is_rapport: bool = False
 
 
 # ── 결과 리포트 ────────────────────────────────────────
