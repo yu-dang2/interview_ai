@@ -143,10 +143,12 @@ async def get_resume_optimization(
 # ── 영상 분석 ──────────────────────────────────────────
 # 시선 지표는 면접 점수(5개 역량)에 반영하지 않는 보조 코칭 값이라 결과 리포트와 분리돼 있다.
 #
-# 경로가 두 벌인 이유: video/README.md 와 예진님의 webcam_recorder.html 이
-# /interview/{id}/video 를 쓰기로 합의돼 있고(그 URL 이 코드에 하드코딩돼 있다),
+# 경로가 두 벌인 이유: video/README.md 가 /interview/{id}/video 로 합의돼 있고,
 # 이 라우터의 나머지 엔드포인트는 /interview/sessions/{id}/... 컨벤션을 쓴다.
-# 둘 다 받아서 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 서로 충돌하지 않는다.
+# 둘 다 받아 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 충돌하지 않는다.
+#
+# 프론트는 조회를 짧은 쪽으로 부르고 있다. 업로드는 아직 붙지 않았다.
+# 한쪽으로 모으려면 프론트도 함께 고쳐야 해서 지금은 둘 다 둔다.
 
 @router.post("/{session_id}/video", response_model=VideoUploadResponse, status_code=202)
 @router.post("/sessions/{session_id}/video", response_model=VideoUploadResponse, status_code=202)
