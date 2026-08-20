@@ -153,21 +153,21 @@ URL 입력
 ---
 
 
-## CLI 테스트 (무료)
+## CLI 테스트
 
 
 ### 사전 준비
 
-1. https://aistudio.google.com/apikey 에서 Gemini API 키를 발급받습니다 (무료).
+1. https://platform.openai.com/api-keys 에서 OpenAI API 키를 발급받습니다.
 
-2. API 키를 환경변수로 설정합니다.
+2. API 키를 환경변수로 설정합니다. (또는 프로젝트 루트 .env 의 OPENAI_API_KEY 사용)
 
 ```bash
 # Windows PowerShell
-$env:GEMINI_API_KEY = "your-key"
+$env:OPENAI_API_KEY = "your-key"
 
 # Mac / Linux
-export GEMINI_API_KEY=your-key
+export OPENAI_API_KEY=your-key
 ```
 
 3. 필요한 패키지를 설치합니다.
