@@ -7,6 +7,20 @@ from openai import AsyncOpenAI, OpenAIError
 
 logger = logging.getLogger(__name__)
 
+# 자기소개(라포 형성) 질문의 type 값. question_generator 프롬프트가 첫 질문에 부여한다.
+# 이 질문은 지원자의 긴장을 풀어주는 것이 목적이라 채점·꼬리질문 대상이 아니다.
+INTRO_TYPE = "자기소개"
+
+
+def is_intro_question(question: dict) -> bool:
+    """라포 형성용 자기소개 질문이면 True. (채점·꼬리질문·리포트 집계에서 제외)
+
+    type 은 LLM 이 채우는 값이라 누락되거나 공백이 섞일 수 있어 방어적으로 비교한다.
+    인덱스 기반 폴백(첫 질문이면 자기소개로 간주)은 일부러 두지 않는다.
+    폴백이 있으면 프롬프트가 type 을 빠뜨려도 조용히 넘어가 회귀를 놓친다.
+    """
+    return (question.get("type") or "").strip() == INTRO_TYPE
+
 
 def get_client():
     return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
