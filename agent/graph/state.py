@@ -22,7 +22,12 @@ class InterviewState(MessagesState):
     resume_parsed: dict     # {"name", "skills", "experience", "projects", "soft_skills", ...}
     match_result: dict      # {"matching_skills", "missing_skills", "interview_topics", ...}
     match_score: int        # JD-이력서 적합도 0~100 정수 (jd_resume_matcher 산출, 백엔드 노출)
-    question_list: list     # [{"question", "intent", "good_answer_criteria", ...}]
+    question_list: list     # [{"question", "type", "intent", "good_answer_criteria", ...}]
+                            # type: "자기소개"(첫 질문, 라포 형성) / "기술" / "인성".
+                            # 그래프는 type 으로 분기한다(agent.graph.utils.is_intro_question).
+                            # 자기소개 질문은 채점 대상이 아니라서 answer_evaluator 가 LLM 호출
+                            # 없이 중립 점수를 주고, topic_router 가 꼬리질문을 붙이지 않으며,
+                            # report_generator 가 총점·항목점수·개별 피드백에서 제외한다.
 
     # 직무 지식 카드 검색 결과 (question_retriever 산출, question_generator 참고자료)
     # JD가 질문의 주재료이고 이건 관점을 보태는 보조 자료다. 검색 실패·미설치 시 [].
@@ -30,8 +35,10 @@ class InterviewState(MessagesState):
 
     # 현재 진행 상태
     current_question_index: int
-    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
-    eval_result: dict       # answer_evaluator 프롬프트 출력 그대로.
+    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단.
+                            # 단 자기소개 질문은 채점하지 않고 고정 중립 점수가 들어간다
+                            # (answer_evaluator.INTRO_NEUTRAL_SCORE) — 답변 품질과 무관하다.
+    eval_result: dict       # answer_evaluator 프롬프트 출력 그대로. 자기소개 질문은 {}.
                             # {"eval_score", "feedback", "strengths", "weaknesses", "eval_keywords",
                             #  "follow_up_needed", "follow_up_focus",
                             #  세부 점수 5종(logic/communication/expertise/attitude/problem_solving_score)}

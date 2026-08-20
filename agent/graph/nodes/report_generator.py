@@ -25,6 +25,23 @@ is_early_terminated가 true이면 면접이 중도에 종료된 것이므로, �
 "면접이 중도에 종료되어 답변한 문항만으로 평가된 결과입니다."를 반드시 포함하세요.
 """
 
+# 자기소개(라포 형성) 질문 제외 지시 (프롬프트 파일은 수정 불가 → 노드에서 이어붙임).
+#
+# question_list에서 자기소개를 코드로 걸러내는 방식은 쓰지 않는다. conversation은
+# messages 순서 그대로 나가는데 질문 하나만 빠지면 LLM의 질문-답변 정렬이 통째로 밀린다.
+# 그래서 둘 다 그대로 넘기고 "집계에서 빼라"고 지시만 한다.
+INTRO_EXCLUSION_INSTRUCTION = """
+
+[추가 지시 - 자기소개 질문 제외]
+question_list에서 type이 "자기소개"인 질문은 지원자의 긴장을 풀기 위한 라포 형성 질문이며
+평가 대상이 아닙니다. 해당 질문과 그 답변은 다음에서 완전히 제외하세요.
+- total_score 계산
+- category_scores 계산 (5개 항목 모두)
+- question_feedbacks (개별 항목으로 만들지 마세요)
+나머지 질문만으로 점수를 산출하고, 자기소개 답변이 부실하더라도 그것을 근거로
+summary나 category_comments에서 감점하듯 서술하지 마세요.
+"""
+
 
 async def report_generator(state: InterviewState):
     question_list = state.get("question_list", [])
@@ -61,8 +78,9 @@ async def report_generator(state: InterviewState):
     # (코드에서 결정해 LLM 에 명시 전달 — LLM 이 재판단하지 않도록)
     #
     # 예전에는 turn_count < MAX_TURNS 로 판정했는데, turn_count 는 주 질문에서만 +1 되고
-    # 꼬리질문은 세지 않는다. 본질문이 5개라 turn_count 가 5를 넘지 못해 MAX_TURNS(10)
-    # 미만이 항상 참이었고, 정상 완주한 면접도 전부 "중도 종료"로 표기됐다.
+    # 꼬리질문은 세지 않는다. 본질문 수가 topic_router.MAX_TURNS 보다 적어 그 조건이 항상
+    # 참이었고, 정상 완주한 면접도 전부 "중도 종료"로 표기됐다.
+    # (질문 수는 프롬프트가 정하므로 여기에 숫자로 못박지 않는다)
     #
     # question_generator 는 질문을 소진하면 current_question_index 를 len(question_list) 로
     # 올리고 is_finished 를 세운다. 그래서 정상 종료 경로에서는 index == len 이 되고,
@@ -78,7 +96,9 @@ async def report_generator(state: InterviewState):
     }, ensure_ascii=False)
 
     report_result = await call_llm(
-        REPORT_GENERATOR_SYSTEM_PROMPT + EARLY_TERMINATION_INSTRUCTION,
+        REPORT_GENERATOR_SYSTEM_PROMPT
+        + EARLY_TERMINATION_INSTRUCTION
+        + INTRO_EXCLUSION_INSTRUCTION,
         user_content,
     )
 
