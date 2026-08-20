@@ -34,22 +34,24 @@ playwright install chromium
 사용자가 채용 공고 텍스트를 복사해서 붙여넣는 방식입니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_text
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_text
 
-result = parse_jd_from_text("채용 공고 텍스트...")
+result = asyncio.run(parse_jd_from_text("채용 공고 텍스트..."))
 print(result)
 ```
 
 
 ### 2. 이미지 업로드
 
-채용 공고 스크린샷을 GPT-4o Vision 또는 Gemini로 텍스트 변환 후 파싱합니다.
+채용 공고 스크린샷을 GPT-4o Vision으로 텍스트 변환 후 파싱합니다.
 잡코리아, 사람인 등 이미지 기반 채용 공고에 사용합니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_image
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_image
 
-result = parse_jd_from_image("screenshot.png")
+result = asyncio.run(parse_jd_from_image("screenshot.png"))
 ```
 
 처리 흐름:
@@ -67,9 +69,10 @@ Playwright로 채용 공고 페이지를 크롤링하여 파싱합니다.
 "상세 정보 더 보기" 같은 동적 로딩 콘텐츠도 자동으로 처리합니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_url
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_url
 
-result = parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
+result = asyncio.run(parse_jd_from_url("https://www.wanted.co.kr/wd/328573"))
 ```
 
 처리 흐름:
@@ -178,15 +181,15 @@ pip install requests
 
 ```bash
 # 텍스트 입력 테스트
-python jd_parser_free.py text
+python jd_parser.py text
 
 # 이미지 파싱 테스트
-python jd_parser_free.py image screenshot.png
+python jd_parser.py image screenshot.png
 
 # URL 크롤링 테스트 (playwright 추가 설치 필요)
 pip install playwright
 playwright install chromium
-python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
+python jd_parser.py url https://www.wanted.co.kr/wd/328573
 ```
 
 
