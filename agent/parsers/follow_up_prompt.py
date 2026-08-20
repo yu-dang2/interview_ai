@@ -3,7 +3,6 @@
 - answer_evaluator의 follow_up_focus를 받아서 부족한 부분을 파고드는 꼬리질문 생성
 - 이전 대화 맥락을 자연스럽게 이어가면서 지원자가 더 구체적으로 답변하도록 유도
 - question_generator와의 차이: question_generator는 새 주제의 첫 질문, follow_up은 같은 주제에서 깊이 파기
-- 테스트 완료: Redis 캐싱 관련 부족한 답변 (score 3) -> 병목 분석 과정 꼬리질문 생성
 """
 
 FOLLOW_UP_GENERATOR_SYSTEM_PROMPT = """당신은 기술 면접관입니다.

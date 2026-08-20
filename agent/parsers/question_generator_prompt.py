@@ -2,9 +2,10 @@
 면접 질문 생성 프롬프트 v1
 - JD-이력서 매칭 결과의 interview_topics + 지원자 정보 + 페르소나를 받아서
   실제 면접에서 사용할 질문 목록을 생성
+- 맨 앞에 라포 형성 질문(자기소개·지원 동기, type "라포") 1개를 넣고,
+  그 뒤에 평가용 질문 5개를 생성 (총 6개)
 - 각 질문에 intent(검증 의도)와 good_answer_criteria(좋은 답변 기준) 포함
 - answer_evaluator가 good_answer_criteria를 참고하여 답변을 평가하는 데 활용
-- 테스트 완료: 배민 JD + 김서준 이력서 매칭 결과 + 깐깐한 기술 면접관 페르소나
 """
 
 QUESTION_GENERATOR_SYSTEM_PROMPT = """당신은 기술 면접관입니다.
