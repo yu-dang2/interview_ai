@@ -2,6 +2,7 @@ import math
 import time
 import base64
 import json
+import threading
 import html as htmlmod
 import requests
 import streamlit as st
@@ -9,6 +10,7 @@ import streamlit.components.v1 as components
 from utils.paths import resource
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
+from utils.ui import show_error
 from utils import api
 
 st.set_page_config(
@@ -18,6 +20,7 @@ st.set_page_config(
 )
 
 init_session()
+render_sidebar(active="면접 시작")
 
 if st.session_state.pop("_iv_nav_ready_consumed", False):
     st.session_state["_iv_nav_ready"] = ""
@@ -43,31 +46,110 @@ if "iv_messages" not in st.session_state:
         resume_id = get("resume_id") or 0
         jd_id     = get("jd_id") or 0
         persona   = get("interviewer_style") or "기술 리드"
-        try:
-            with st.spinner("면접을 준비하는 중..."):
-                resp = api.start_interview(resume_id, jd_id, persona)
+        st.markdown("""<style>
+        [data-testid="stAppViewContainer"] { background: #f3f4f6 !important; }
+        [data-testid="stMain"]             { background: #f3f4f6 !important; }
+        [data-testid="stMainBlockContainer"] { padding: 0 !important; }
+        [data-testid="stVerticalBlock"]    { gap: 0 !important; }
+        header, footer, [data-testid="stSidebar"] { display: none !important; }
+        @keyframes iv_spin { to { transform: rotate(360deg); } }
+        .iv-prep-spinner {
+          width: 52px; height: 52px;
+          border: 4px solid #e5e7eb;
+          border-top-color: #3b6def;
+          border-radius: 50%;
+          animation: iv_spin 0.9s linear infinite;
+          margin: 0 auto 28px;
+        }
+        </style>""", unsafe_allow_html=True)
+        _IV_PREP_STAGES = ["이력서 분석 중...", "채용공고 분석 중...", "질문 생성 중..."]
+        _IV_STAGE_AT = [0.0, 2.2, 4.4] 
+
+        def _iv_prep_html(stage_idx: int) -> str:
+            rows = ""
+            for i, label in enumerate(_IV_PREP_STAGES):
+                if i < stage_idx:
+                    dot = ('<span style="display:inline-flex;align-items:center;justify-content:center;'
+                           'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;'
+                           'font-size:9px;flex-shrink:0;">✓</span>')
+                    text_style = "color:#9ca3af;"
+                elif i == stage_idx:
+                    dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
+                           'background:#3b6def;flex-shrink:0;"></span>')
+                    text_style = "color:#3b6def;font-weight:700;"
+                else:
+                    dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
+                           'background:#d1d5db;flex-shrink:0;"></span>')
+                    text_style = "color:#9ca3af;"
+                rows += (
+                    f'<div style="font-size:13px;margin-bottom:10px;display:flex;align-items:center;'
+                    f'gap:10px;{text_style}">{dot}{label}</div>'
+                )
+            heading = _IV_PREP_STAGES[stage_idx]
+            return (
+                '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f3f4f6;">'
+                '<div style="background:white;border-radius:20px;padding:52px 56px;'
+                'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">'
+                '<div class="iv-prep-spinner"></div>'
+                f'<div style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">{heading}</div>'
+                '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">'
+                '이력서와 채용공고를 분석해 맞춤 질문을 만들고 있어요.<br>잠시만 기다려 주세요.</div>'
+                f'<div style="text-align:left;display:inline-block;">{rows}</div>'
+                '</div></div>'
+            )
+
+        _iv_result: dict = {}
+        _iv_access_token = st.session_state.get("access_token", "")
+
+        def _iv_start_worker():
+            try:
+                _iv_result["resp"] = api.start_interview(
+                    resume_id, jd_id, persona, access_token=_iv_access_token
+                )
+            except Exception as e:
+                _iv_result["error"] = e
+
+        _iv_thread = threading.Thread(target=_iv_start_worker, daemon=True)
+        _iv_thread.start()
+
+        _iv_placeholder = st.empty()
+        _iv_t0 = time.time()
+        while _iv_thread.is_alive():
+            _elapsed = time.time() - _iv_t0
+            _stage = 0
+            for i, at in enumerate(_IV_STAGE_AT):
+                if _elapsed >= at:
+                    _stage = i
+            _iv_placeholder.markdown(_iv_prep_html(_stage), unsafe_allow_html=True)
+            time.sleep(0.2)
+        _iv_thread.join()
+        _iv_placeholder.empty()
+
+        _iv_error = _iv_result.get("error")
+        if _iv_error is None:
+            resp = _iv_result["resp"]
             state_set("session_id", resp["session_id"])
             first_q = resp["first_question"]
             state_set("first_question", first_q)
-        except api.SessionExpiredError:
+        elif isinstance(_iv_error, api.SessionExpiredError):
             mark_session_expired()
-        except requests.exceptions.ConnectionError:
-            st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+        elif isinstance(_iv_error, requests.exceptions.ConnectionError):
+            show_error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
             st.stop()
-        except requests.exceptions.Timeout:
-            st.error("면접 준비 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
+        elif isinstance(_iv_error, requests.exceptions.Timeout):
+            show_error("면접 준비 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
             st.stop()
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else "?"
-            st.error(f"면접 준비에 실패했습니다. (서버 오류: {status})")
+        elif isinstance(_iv_error, requests.exceptions.HTTPError):
+            show_error(api.error_detail(_iv_error, "면접 준비에 실패했습니다."))
             st.stop()
-        except Exception as e:
-            st.error(f"면접 준비 중 알 수 없는 오류가 발생했습니다: {e}")
+        else:
+            show_error(f"면접 준비 중 알 수 없는 오류가 발생했습니다: {_iv_error}")
             st.stop()
 
     st.session_state.iv_messages = [
         {"role": "ai", "tag": None, "text": first_q or "안녕하세요, 면접을 시작하겠습니다."},
     ]
+    st.session_state["realtime_is_rapport"] = True
 
 _ai_indices  = [i for i, m in enumerate(st.session_state.iv_messages) if m["role"] == "ai"]
 _last_ai_idx = _ai_indices[-1] if _ai_indices else None
@@ -99,7 +181,10 @@ try:
 except Exception:
     _avatar_src = ""
 
-render_sidebar(active="면접 시작")
+st.markdown(
+    "<style>.intro-account-menu { display:none !important; }</style>",
+    unsafe_allow_html=True,
+)
 
 # ── 레이아웃 ──────────────────────────────────────────────────────────────
 FEEDBACK_W = 288
@@ -111,9 +196,10 @@ remaining = max(0, 30 * 60 - elapsed)
 timer_str = f"{remaining // 60:02d}:{remaining % 60:02d}"
 
 # ── 실시간 피드백 데이터 ───────────────────────────────────────────────────
-_rt_pending  = bool(st.session_state.get("_pending_answer"))
-_rt_score    = None if _rt_pending else st.session_state.get("realtime_score")
-_rt_feedback = [] if _rt_pending else (st.session_state.get("realtime_feedback") or [])
+_rt_pending    = bool(st.session_state.get("_pending_answer"))
+_rt_is_rapport = False if _rt_pending else bool(st.session_state.get("realtime_is_rapport"))
+_rt_score    = None if (_rt_pending or _rt_is_rapport) else st.session_state.get("realtime_score")
+_rt_feedback = [] if (_rt_pending or _rt_is_rapport) else (st.session_state.get("realtime_feedback") or [])
 
 TOTAL = _rt_score.get("total") if _rt_score else None
 SCORES = [
@@ -131,7 +217,8 @@ if TOTAL is None:
         f'<svg width="108" height="108" viewBox="0 0 104 104">'
         f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="#e5e7eb" stroke-width="10"/>'
         f'<text x="{cx}" y="{cy + 5}" text-anchor="middle" font-size="12"'
-        f' fill="#9ca3af" font-family="sans-serif">{"분석 중" if _rt_pending else "대기 중"}</text>'
+        f' fill="#9ca3af" font-family="sans-serif">'
+        f'{"분석 중" if _rt_pending else ("채점 제외" if _rt_is_rapport else "대기 중")}</text>'
         f'</svg>'
     )
 else:
@@ -160,6 +247,11 @@ if SCORES:
             f'<div style="background:#edeef0;border-radius:3px;height:5px;margin-bottom:14px;">'
             f'<div style="width:{score}%;background:#3b6def;height:5px;border-radius:3px;"></div></div>'
         )
+elif _rt_is_rapport:
+    scores_html = (
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
+        '자기소개 답변은 점수에 반영되지 않아요</div>'
+    )
 else:
     scores_html = (
         '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
@@ -184,6 +276,11 @@ elif _rt_pending:
         '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
         '분석 중입니다...</div>'
     )
+elif _rt_is_rapport:
+    feedback_html = (
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
+        '다음 답변부터 채점이 시작돼요</div>'
+    )
 else:
     feedback_html = (
         '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
@@ -193,7 +290,7 @@ else:
 # ── CSS ──────────────────────────────────────────────────────────────────
 st.markdown(f"""<style>
 [data-testid="stMain"] {{ padding-right: {right_px}px !important; }}
-[data-testid="stMainBlockContainer"] {{ padding: 20px {right_px + 24}px 140px 240px !important; }}
+[data-testid="stMainBlockContainer"] {{ padding: 20px {right_px + 24}px 140px 40px !important; }}
 [data-testid="stVerticalBlock"] {{ gap: 0 !important; }}
 
 [data-testid="stBottom"] {{
@@ -296,22 +393,35 @@ webcam_html = (
     f'<div id="webcam-preview-divider" style="height:1px;background:#e5e8ec;margin-bottom:16px;{_webcam_display}"></div>'
 )
 
+if _rt_is_rapport:
+    _panel_body = (
+        '<div style="font-size:14px;font-weight:600;color:#1f1f1f;margin-bottom:2px;">실시간 피드백</div>'
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">자기소개 답변은 채점하지 않아요</div>'
+        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:40px 0;">'
+        '다음 답변부터 점수와 피드백이 표시돼요</div>'
+    )
+else:
+    _panel_body = (
+        '<div style="font-size:14px;font-weight:600;color:#1f1f1f;margin-bottom:2px;">실시간 피드백</div>'
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">AI가 분석 중입니다</div>'
+        '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
+        + donut_svg
+        + '<div style="font-size:12px;font-weight:500;color:#1f1f1f;margin-top:4px;">현재 점수</div>'
+        '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">※ 영상은 점수에 반영되지 않습니다</div>'
+        '</div>'
+        '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
+        + scores_html
+        + '<div style="font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:10px;">AI 실시간 피드백</div>'
+        + feedback_html
+    )
+
 st.markdown(
     '<div style="position:fixed;top:60px;right:0;width:288px;'
     'height:calc(100vh - 60px);background:white;border-left:1px solid #e5e8ec;'
     'overflow-y:auto;z-index:300;box-sizing:border-box;">'
     + webcam_html
     + '<div style="padding:16px 18px 20px;">'
-    '<div style="font-size:14px;font-weight:600;color:#1f1f1f;margin-bottom:2px;">실시간 피드백</div>'
-    '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">AI가 분석 중입니다</div>'
-    '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
-    + donut_svg
-    + '<div style="font-size:12px;font-weight:500;color:#1f1f1f;margin-top:4px;">현재 점수</div>'
-    '</div>'
-    '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
-    + scores_html
-    + '<div style="font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:10px;">AI 실시간 피드백</div>'
-    + feedback_html
+    + _panel_body
     + '</div>'
     '</div>',
     unsafe_allow_html=True,
@@ -355,6 +465,14 @@ body{{
 #note-row{{
   display:none;text-align:center;font-size:11px;color:#9ca3af;
   padding:0 20px 6px;
+}}
+#speech-rate-row{{
+  display:none;align-items:center;justify-content:center;gap:6px;
+  text-align:center;font-size:11px;color:#6b7280;
+  padding:0 20px 8px;
+}}
+#speech-rate-row .srr-badge{{
+  font-weight:700;padding:1px 8px;border-radius:10px;font-size:10px;
 }}
 #controls-row{{
   display:flex;align-items:center;padding:16px 20px;
@@ -402,16 +520,33 @@ body{{
 </div>
 </div>
 <div id="note-row">전사된 텍스트는 전송 전에 직접 수정할 수 있습니다</div>
+<div id="speech-rate-row"></div>
 <script>
 (function(){{
   // ── 실시간 타이머 ────────────────────────────────────────────────
   var _startSec = {int(st.session_state.iv_start)};
+  var _ivAutoEnded = false;
+  // 이 값은 이 iframe이 그려질 당시(리런 시작 시점)의 스냅샷이다 — 답변을 보낸 직후의
+  // 리런에서는 이미 _pending_answer가 true인 상태로 이 iframe이 그려지고, 그 뒤 같은
+  // 리런 안에서 api.send_answer() 블로킹 호출이 이어지므로, 그동안 이 iframe은 그대로
+  // 남아 있고 이 플래그도 계속 유효하다 — 답변이 서버에 도착하기 전에 타이머가
+  // 면접을 끊어버리는 걸 막는다.
+  var _answerPending = {str(bool(st.session_state.get("_pending_answer"))).lower()};
   function _tick() {{
     var rem = Math.max(0, 30*60 - Math.floor(Date.now()/1000 - _startSec));
     var el  = window.parent.document.getElementById('iv-timer');
     if (el) el.textContent =
       String(Math.floor(rem/60)).padStart(2,'0') + ':' +
       String(rem%60).padStart(2,'0');
+    // 타이머가 0초가 되면 자동으로 면접을 종료한다("면접 종료" 버튼과 동일한 동작).
+    // 단, 방금 제출한 답변이 아직 서버 응답을 기다리는 중이면 그 답변이 반영될 때까지
+    // 기다렸다가 다음 리런에서 다시 판단한다(여기서 억지로 끊지 않는다).
+    if (rem <= 0 && !_ivAutoEnded && !_answerPending) {{
+      _ivAutoEnded = true;
+      if (typeof showLoadingAndEnd === 'function') {{
+        showLoadingAndEnd();
+      }}
+    }}
   }}
   _tick();
   setInterval(_tick, 1000);
@@ -422,8 +557,8 @@ body{{
     if (!fr) return;
     fr.style.position = 'fixed';
     fr.style.bottom   = '0';
-    fr.style.left     = '220px';
-    fr.style.width    = 'calc(100vw - 220px - {right_px}px)';
+    fr.style.left     = '0px';
+    fr.style.width    = 'calc(100vw - {right_px}px)';
     fr.style.height   = barHeight + 'px';
     fr.style.zIndex   = '500';
     fr.style.border   = 'none';
@@ -445,11 +580,13 @@ body{{
   var controlsRowEl = document.getElementById('controls-row');
   var hintRowEl = document.getElementById('hint-row');
   var noteRowEl = document.getElementById('note-row');
+  var speechRateRowEl = document.getElementById('speech-rate-row');
   function recomputeBarHeight() {{
     requestAnimationFrame(function() {{
       var h = controlsRowEl.offsetHeight;
       if (hintRowEl.style.display !== 'none') h += hintRowEl.offsetHeight;
       if (noteRowEl.style.display !== 'none') h += noteRowEl.offsetHeight;
+      if (speechRateRowEl.style.display !== 'none') h += speechRateRowEl.offsetHeight;
       barHeight = h;
       applyFixed();
     }});
@@ -814,25 +951,59 @@ body{{
         'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">' +
         '<div id="_iv_sp" style="width:52px;height:52px;border:4px solid #e5e7eb;' +
         'border-top-color:#3b6def;border-radius:50%;margin:0 auto 28px;"></div>' +
-        '<div style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">' +
-        '결과를 분석하고 있습니다</div>' +
+        '<div id="_iv_ov_heading" style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">' +
+        '면접을 마무리하고 있습니다</div>' +
         '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">' +
-        '면접 답변을 AI가 종합 분석 중입니다.<br>잠시만 기다려 주세요.</div>' +
+        '결과 리포트로 이동할 준비를 하고 있어요.<br>잠시만 기다려 주세요.</div>' +
         '<div style="text-align:left;display:inline-block;">' +
-        '<div style="font-size:13px;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
+        '<div id="_iv_ov_row_end" style="font-size:13px;color:#3b6def;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
-        '답변 내용 분석 중...</div>' +
-        '<div style="font-size:13px;color:#374151;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
-        '역량 점수 산출 중...</div>' +
-        '<div style="font-size:13px;color:#374151;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
-        '개선 피드백 생성 중...</div>' +
+        '면접 종료 처리 중...</div>' +
+        '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#d1d5db;flex-shrink:0;"></span>' +
+        '영상 저장 중...</div>' +
         '</div>' +
         '</div>';
       doc.body.appendChild(ov);
     }}
+
+    function markDone(rowId, label) {{
+      var row = doc.getElementById(rowId);
+      if (!row) return;
+      row.style.color = '#9ca3af';
+      row.style.fontWeight = '400';
+      row.innerHTML =
+        '<span style="display:inline-flex;align-items:center;justify-content:center;' +
+        'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;' +
+        'font-size:9px;flex-shrink:0;">✓</span>' + label;
+    }}
+    function markActive(rowId, label) {{
+      var row = doc.getElementById(rowId);
+      if (!row) return;
+      row.style.color = '#3b6def';
+      row.style.fontWeight = '700';
+      row.innerHTML =
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;' +
+        'background:#3b6def;flex-shrink:0;"></span>' + label;
+    }}
+
+    var endResolved = false, videoResolved = false;
+    function updateHeading() {{
+      var h = doc.getElementById('_iv_ov_heading');
+      if (!h) return;
+      if (endResolved && videoResolved) {{
+        h.textContent = '결과 화면으로 이동합니다';
+      }} else if (endResolved) {{
+        h.textContent = '영상을 저장하고 있습니다';
+      }} else {{
+        h.textContent = '면접을 마무리하고 있습니다';
+      }}
+    }}
+
     function navigate() {{
+      markDone('_iv_ov_row_end', '면접 종료 처리 완료');
+      markDone('_iv_ov_row_video', '영상 저장 완료');
+      updateHeading();
 
       var vr = window.parent.__ivVideoRec;
       var wc = (vr && vr.stream) ? '1' : '0';
@@ -855,10 +1026,20 @@ body{{
         '}}, 800);'
       );
     }}
-    var videoDone = new Promise(function(res) {{ stopAndUploadVideo(res); }});
+    var videoDone = new Promise(function(res) {{
+      stopAndUploadVideo(function() {{
+        videoResolved = true;
+        markDone('_iv_ov_row_video', '영상 저장 완료');
+        updateHeading();
+        res();
+      }});
+    }});
     var videoTimeout = new Promise(function(res) {{
       setTimeout(function() {{
         console.warn('[영상] 업로드 대기 시간 초과(20초) — 결과 화면으로 진행합니다.');
+        videoResolved = true;
+        markDone('_iv_ov_row_video', '영상 저장 완료');
+        updateHeading();
         res();
       }}, 20000);
     }});
@@ -867,6 +1048,12 @@ body{{
       headers: {{ 'Authorization': 'Bearer ' + _accessToken }}
     }}).catch(function(err) {{
       console.warn('[면접 종료] 서버에 종료 알림 실패:', err);
+    }}).then(function(v) {{
+      endResolved = true;
+      markDone('_iv_ov_row_end', '면접 종료 처리 완료');
+      markActive('_iv_ov_row_video', '영상 저장 중...');
+      updateHeading();
+      return v;
     }});
     Promise.all([endDone, Promise.race([videoDone, videoTimeout])]).then(navigate);
   }}
@@ -882,6 +1069,12 @@ body{{
   // ── 마이크 (녹음 → 백엔드 STT: gpt-4o-transcribe) ──────────────────
   var hintRow  = document.getElementById('hint-row');
   var noteRow  = document.getElementById('note-row');
+  var speechRateRow = document.getElementById('speech-rate-row');
+  var SPEECH_LEVEL_COLOR = {{
+    '빠름': {{ bg: '#fef3c7', fg: '#92400e' }},
+    '적정': {{ bg: '#dcfce7', fg: '#16a34a' }},
+    '느림': {{ bg: '#dbeafe', fg: '#1d4ed8' }}
+  }};
   var MIC_OUTLINE =
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -923,6 +1116,7 @@ body{{
     hintRow.textContent = '녹음 중... 다시 누르면 텍스트로 변환됩니다';
     hintRow.style.display = 'block';
     noteRow.style.display = 'block';
+    speechRateRow.style.display = 'none';  // 새로 녹음을 시작하면 이전 답변의 발화 속도 표시는 지운다
     recomputeBarHeight();
   }}
 
@@ -977,6 +1171,18 @@ body{{
             syncSt(joined);
             autosize();
             setMicIdle();
+            // 발화 속도(분당 글자수) — 서버가 duration을 받아 계산해 돌려준 값을 표시한다.
+            if (data.speech_cpm && data.speech) {{
+              var lv = SPEECH_LEVEL_COLOR[data.speech.level] || {{ bg: '#f3f4f6', fg: '#6b7280' }};
+              speechRateRow.innerHTML =
+                '<span class="srr-badge" style="background:' + lv.bg + ';color:' + lv.fg + ';">' +
+                data.speech.level + '</span><span>' + data.speech.message +
+                ' (분당 ' + Math.round(data.speech_cpm) + '자)</span>';
+              speechRateRow.style.display = 'flex';
+            }} else {{
+              speechRateRow.style.display = 'none';
+            }}
+            recomputeBarHeight();
           }})
           .catch(function(err) {{
             alert('음성 변환에 실패했습니다. 다시 시도해주세요.');
@@ -1031,7 +1237,7 @@ for i, msg in enumerate(st.session_state.iv_messages):
             if _avatar_src else ""
         )
 
-        tts_text = htmlmod.escape(text)
+        tts_text = htmlmod.escape(text.replace("\n", " "))
         playback_html = (
             f'<div class="iv-playback-block" style="{"" if voice_guide_on else "display:none;"}">'
             '<div class="iv-playback-divider"></div>'
@@ -1072,7 +1278,7 @@ if _pending:
     if not session_id:
         st.session_state.iv_messages.pop()
         st.session_state["_pending_answer"] = None
-        st.error("면접 세션이 없습니다. 처음부터 다시 시작해주세요.")
+        show_error("면접 세션이 없습니다. 처음부터 다시 시작해주세요.")
     else:
         try:
             with st.spinner("AI가 답변을 분석하고 있습니다..."):
@@ -1082,6 +1288,7 @@ if _pending:
             st.session_state["_pending_answer"] = None
             st.session_state["realtime_score"] = resp.get("realtime_score")
             st.session_state["realtime_feedback"] = resp.get("realtime_feedback")
+            st.session_state["realtime_is_rapport"] = bool(resp.get("is_rapport"))
             if resp.get("question_type") == "end":
                 try:
                     api.end_session(session_id)
@@ -1130,20 +1337,19 @@ if _pending:
         except requests.exceptions.ConnectionError:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
-            st.error("서버에 연결할 수 없습니다. 답변이 전송되지 않았습니다.")
+            show_error("서버에 연결할 수 없습니다. 답변이 전송되지 않았습니다.")
         except requests.exceptions.Timeout:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
-            st.error("응답 생성이 시간 초과되었습니다. 다시 시도해주세요.")
+            show_error("응답 생성이 시간 초과되었습니다. 다시 시도해주세요.")
         except requests.exceptions.HTTPError as e:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
-            status = e.response.status_code if e.response is not None else "?"
-            st.error(f"답변 전송에 실패했습니다. (서버 오류: {status})")
+            show_error(api.error_detail(e, "답변 전송에 실패했습니다."))
         except Exception as e:
             st.session_state.iv_messages.pop()
             st.session_state["_pending_answer"] = None
-            st.error(f"알 수 없는 오류가 발생했습니다: {e}")
+            show_error(f"알 수 없는 오류가 발생했습니다: {e}")
 
 _pending_q = st.session_state.get("_pending_next_question")
 if _pending_q:
