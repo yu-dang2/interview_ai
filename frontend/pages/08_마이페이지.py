@@ -76,10 +76,6 @@ st.markdown("""<style>
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
 [data-testid="stColumn"] { padding: 0 !important; }
-/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링.
-   .st-key-chart_ver_row로 범위를 좁혀야 한다 — 안 그러면 이 페이지의 다른
-   st.columns(세션 만료 배너의 st.columns([1,2,1])까지 포함)의 첫 번째 칸에도
-   흰 카드 테두리가 씌워져서 레이아웃이 깨진다. */
 .st-key-chart_ver_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
     background: white !important;
     border: 1px solid #e5e7eb !important;
@@ -182,225 +178,332 @@ for s in STAT_CARDS:
 stat_html += '</div>'
 st.markdown(stat_html, unsafe_allow_html=True)
 
-# ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
-_chart_ver_row = st.container(key="chart_ver_row")
-col_chart, _gap, col_ver = _chart_ver_row.columns([35, 1, 21])
+st.markdown(
+    "<style>.st-key-_mypage_tab_restore { position:absolute; width:0; height:0; "
+    "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+    unsafe_allow_html=True,
+)
+_mypage_tab_restored = st.text_input(
+    "_mypage_tab_restore", key="_mypage_tab_restore", label_visibility="collapsed"
+)
+if st.session_state.get("mypage_tab"):
+    _mypage_tab = st.session_state["mypage_tab"]
+    components.html(
+        f"<script>localStorage.setItem('iv_mypage_tab', {json.dumps(_mypage_tab)});</script>",
+        height=0,
+    )
+elif _mypage_tab_restored:
+    st.session_state["mypage_tab"] = _mypage_tab_restored
+    st.rerun()
+else:
+    _mypage_tab = "overview"
+    components.html("""
+    <script>
+    (function() {
+      var doc = window.parent.document;
+      var tries = 0;
+      function attempt() {
+        var input = doc.querySelector('.st-key-_mypage_tab_restore input');
+        if (!input) {
+          tries++;
+          if (tries < 20) setTimeout(attempt, 50);
+          return;
+        }
+        var saved = localStorage.getItem('iv_mypage_tab');
+        if (!saved) return;
+        var setter = Object.getOwnPropertyDescriptor(
+          window.parent.HTMLInputElement.prototype, 'value'
+        ).set;
+        setter.call(input, saved);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      }
+      attempt();
+    })();
+    </script>
+    """, height=0)
 
-_SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
+_MYPAGE_TABS = [("overview", "점수 · 이력서"), ("history", "면접 히스토리"), ("video", "영상 확인")]
+st.markdown(
+    '<style>'
+    '.st-key-mypage_tabs_row { border-bottom:1px solid #e5e7eb !important; margin-bottom:20px !important; }'
+    '.st-key-mypage_tabs_row [data-testid="stHorizontalBlock"] { gap:4px !important; }'
+    '.st-key-mypage_tabs_row [data-testid="stColumn"] { width:auto !important; flex:0 0 auto !important; }'
+    '.st-key-mypage_tabs_row button { background:transparent !important; border:none !important; border-radius:0 !important; '
+    'border-bottom:2px solid transparent !important; padding:10px 4px !important; font-size:14px !important; }'
+    + ''.join(
+        f'.st-key-mypage_tab_btn_{key} button {{ color:{"#3b6def" if key == _mypage_tab else "#6b7280"} !important; '
+        f'font-weight:{"700" if key == _mypage_tab else "500"} !important; '
+        f'border-bottom-color:{"#3b6def" if key == _mypage_tab else "transparent"} !important; }}'
+        for key, _ in _MYPAGE_TABS
+    )
+    + '</style>',
+    unsafe_allow_html=True,
+)
+with st.container(key="mypage_tabs_row"):
+    _tab_cols = st.columns(len(_MYPAGE_TABS))
+    for _col, (_key, _label) in zip(_tab_cols, _MYPAGE_TABS):
+        with _col:
+            if st.button(_label, key=f"mypage_tab_btn_{_key}"):
+                st.session_state["mypage_tab"] = _key
+                st.rerun()
 
-with col_chart:
-    if not _SCORED_HISTORY:
-        st.info("완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.")
-    elif HAS_PLOTLY:
-        CHART_HISTORY = _SCORED_HISTORY[:5]
-        x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
-        iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
+if _mypage_tab == "overview":
+    # ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
+    _chart_ver_row = st.container(key="chart_ver_row")
+    col_chart, _gap, col_ver = _chart_ver_row.columns([35, 1, 21])
 
-        def ann_style(s):
-            if s >= 80: return {"color": "#16a34a", "size": 11}
-            if s < 65:  return {"color": "#dc2626", "size": 11}
-            return {"color": "#374151", "size": 9}
+    _SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
 
-        def dot_color(s):
-            if s >= 80: return "#16a34a"
-            if s < 65:  return "#dc2626"
-            return "#3b6def"
+    with col_chart:
+        if not _SCORED_HISTORY:
+            st.info("완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.")
+        elif HAS_PLOTLY:
+            CHART_HISTORY = _SCORED_HISTORY[:5]
+            x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
+            iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
 
-        fig = go.Figure()
+            def ann_style(s):
+                if s >= 80: return {"color": "#16a34a", "size": 11}
+                if s < 65:  return {"color": "#dc2626", "size": 11}
+                return {"color": "#374151", "size": 9}
 
-        fig.add_trace(go.Scatter(
-            x=x_labels, y=iv_scores,
-            fill="tozeroy", fillcolor="rgba(59,109,239,0.07)",
-            line=dict(color="#3b6def", width=2),
-            mode="lines+markers",
-            marker=dict(
-                size=[14 if (s >= 80 or s < 65) else 10 for s in iv_scores],
-                color=[dot_color(s) for s in iv_scores],
-                line=dict(color="white", width=2),
-            ),
-            showlegend=False,
-        ))
+            def dot_color(s):
+                if s >= 80: return "#16a34a"
+                if s < 65:  return "#dc2626"
+                return "#3b6def"
 
-        _last_idx = len(CHART_HISTORY) - 1
-        fig.add_shape(type="line", x0=-0.45, x1=_last_idx + 0.45, y0=70, y1=70,
-                      line=dict(color="#94a3b8", width=1))
-        fig.add_annotation(
-            x=_last_idx + 0.55, y=70, text="기준<br>70",
-            showarrow=False, xanchor="left", yanchor="middle",
-            font=dict(size=8, color="#94a3b8", family="Pretendard"),
-            align="center",
-        )
+            fig = go.Figure()
 
-        fig.add_trace(go.Scatter(
-            x=x_labels,
-            y=[s + 4 for s in iv_scores],
-            mode="text",
-            text=[str(s) for s in iv_scores],
-            textposition="top center",
-            textfont=dict(
-                size=[ann_style(s)["size"] for s in iv_scores],
-                color=[ann_style(s)["color"] for s in iv_scores],
-                family="Pretendard",
-            ),
-            showlegend=False,
-        ))
+            fig.add_trace(go.Scatter(
+                x=x_labels, y=iv_scores,
+                fill="tozeroy", fillcolor="rgba(59,109,239,0.07)",
+                line=dict(color="#3b6def", width=2),
+                mode="lines+markers",
+                marker=dict(
+                    size=[14 if (s >= 80 or s < 65) else 10 for s in iv_scores],
+                    color=[dot_color(s) for s in iv_scores],
+                    line=dict(color="white", width=2),
+                ),
+                showlegend=False,
+            ))
 
-        fig.update_layout(
-            title=dict(
-                text="<b>점수 추이</b>",
-                x=0, xanchor="left",
-                font=dict(size=13, color="#374151",
-                          family="Pretendard,-apple-system,sans-serif"),
-                pad=dict(l=2, t=0, b=4),
-            ),
-            margin=dict(l=28, r=38, t=36, b=28),
-            height=258,
-            paper_bgcolor="white", plot_bgcolor="white",
-            yaxis=dict(
-                range=[35, 112],
-                tickvals=[40, 60, 80, 100],
-                gridcolor="#f3f4f6",
-                tickfont=dict(size=9, color="#9ca3af", family="Pretendard"),
-                showgrid=True, zeroline=False, showline=False,
-            ),
-            xaxis=dict(
-                type="category",
-                tickfont=dict(size=8, color="#9ca3af", family="Pretendard"),
-                showgrid=False, zeroline=False, showline=False,
-            ),
-            font=dict(family="Pretendard, sans-serif"),
-        )
-        chart_html = pio.to_html(
-            fig, include_plotlyjs="cdn", full_html=False,
-            config={"displayModeBar": False},
-        )
-        components.html(
-            f"""
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
-            <style>* {{ margin:0; padding:0; font-family:'Pretendard',-apple-system,sans-serif !important; }}</style>
-            {chart_html}
-            """,
-            height=275,
-            scrolling=False,
-        )
-    else:
-        st.info("pip install plotly 후 차트를 확인할 수 있습니다.")
+            _last_idx = len(CHART_HISTORY) - 1
+            fig.add_shape(type="line", x0=-0.45, x1=_last_idx + 0.45, y0=70, y1=70,
+                          line=dict(color="#94a3b8", width=1))
+            fig.add_annotation(
+                x=_last_idx + 0.55, y=70, text="기준<br>70",
+                showarrow=False, xanchor="left", yanchor="middle",
+                font=dict(size=8, color="#94a3b8", family="Pretendard"),
+                align="center",
+            )
 
-with col_ver:
-    ver_rows = ""
-    for v in VERSIONS:
-        if v["active"]:
-            row_bg = "background:#eef3ff;border:1.5px solid #3b6def;"
-            v_color = "#3b6def"
-            s_color = "#3b6def"
+            fig.add_trace(go.Scatter(
+                x=x_labels,
+                y=[s + 4 for s in iv_scores],
+                mode="text",
+                text=[str(s) for s in iv_scores],
+                textposition="top center",
+                textfont=dict(
+                    size=[ann_style(s)["size"] for s in iv_scores],
+                    color=[ann_style(s)["color"] for s in iv_scores],
+                    family="Pretendard",
+                ),
+                showlegend=False,
+            ))
+
+            fig.update_layout(
+                title=dict(
+                    text="<b>점수 추이</b>",
+                    x=0, xanchor="left",
+                    font=dict(size=13, color="#374151",
+                              family="Pretendard,-apple-system,sans-serif"),
+                    pad=dict(l=2, t=0, b=4),
+                ),
+                margin=dict(l=28, r=38, t=36, b=28),
+                height=258,
+                paper_bgcolor="white", plot_bgcolor="white",
+                yaxis=dict(
+                    range=[35, 112],
+                    tickvals=[40, 60, 80, 100],
+                    gridcolor="#f3f4f6",
+                    tickfont=dict(size=9, color="#9ca3af", family="Pretendard"),
+                    showgrid=True, zeroline=False, showline=False,
+                ),
+                xaxis=dict(
+                    type="category",
+                    tickfont=dict(size=8, color="#9ca3af", family="Pretendard"),
+                    showgrid=False, zeroline=False, showline=False,
+                ),
+                font=dict(family="Pretendard, sans-serif"),
+            )
+            chart_html = pio.to_html(
+                fig, include_plotlyjs="cdn", full_html=False,
+                config={"displayModeBar": False},
+            )
+            components.html(
+                f"""
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+                <style>* {{ margin:0; padding:0; font-family:'Pretendard',-apple-system,sans-serif !important; }}</style>
+                {chart_html}
+                """,
+                height=275,
+                scrolling=False,
+            )
         else:
-            row_bg = "background:#f9fafb;border:1px solid #e5e7eb;"
-            v_color = "#374151"
-            s_color = "#6b7280"
-        ver_rows += (
-            f'<div style="{row_bg}border-radius:6px;height:36px;'
-            f'display:flex;align-items:center;padding:0 16px;margin-bottom:8px;">'
-            f'<span style="font-size:12px;font-weight:700;color:{v_color};'
-            f'min-width:36px;font-family:Pretendard,-apple-system,sans-serif;">{v["v"]}</span>'
-            f'<span style="font-size:10px;color:#6b7280;flex:1;margin-left:18px;'
-            f'font-family:Pretendard,-apple-system,sans-serif;">{v["date"]}</span>'
-            f'<span style="font-size:11px;font-weight:700;color:{s_color};'
-            f'font-family:Pretendard,-apple-system,sans-serif;">{v["score"]}점</span>'
-            f'</div>'
+            st.info("pip install plotly 후 차트를 확인할 수 있습니다.")
+
+    with col_ver:
+        ver_rows = ""
+        for v in VERSIONS:
+            if v["active"]:
+                row_bg = "background:#eef3ff;border:1.5px solid #3b6def;"
+                v_color = "#3b6def"
+                s_color = "#3b6def"
+            else:
+                row_bg = "background:#f9fafb;border:1px solid #e5e7eb;"
+                v_color = "#374151"
+                s_color = "#6b7280"
+            ver_rows += (
+                f'<div style="{row_bg}border-radius:6px;height:36px;'
+                f'display:flex;align-items:center;padding:0 16px;margin-bottom:8px;">'
+                f'<span style="font-size:12px;font-weight:700;color:{v_color};'
+                f'min-width:36px;font-family:Pretendard,-apple-system,sans-serif;">{v["v"]}</span>'
+                f'<span style="font-size:10px;color:#6b7280;flex:1;margin-left:18px;'
+                f'font-family:Pretendard,-apple-system,sans-serif;">{v["date"]}</span>'
+                f'<span style="font-size:11px;font-weight:700;color:{s_color};'
+                f'font-family:Pretendard,-apple-system,sans-serif;">{v["score"]}점</span>'
+                f'</div>'
+            )
+        st.markdown(
+            '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
+            'padding:15px 19px;">'
+            '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 14px;'
+            'font-family:Pretendard,-apple-system,sans-serif;">이력서 버전 관리</p>'
+            + ver_rows +
+            '</div>',
+            unsafe_allow_html=True,
         )
+
+
+elif _mypage_tab == "history":
+    # ── 면접 히스토리 ──────────────────────────────────────────────────────────
+    COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(150px,1.6fr)"
+
+    def _play_btn(video_url: str) -> str:
+        full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
+        return (
+            f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
+            'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
+            'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
+            '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
+            'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
+            '<span style="font-size:11px;font-weight:600;color:#3b6def;'
+            'font-family:Pretendard,-apple-system,sans-serif;line-height:1;">영상</span>'
+            '</div>'
+        )
+
+    _HDR_STYLE = (
+        'font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;'
+        'font-family:Pretendard,-apple-system,sans-serif;'
+    )
+
+    header_html = (
+        f'<div style="display:grid;grid-template-columns:{COLS};'
+        f'align-items:center;padding:0 0 10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:0;">'
+        f'<span style="{_HDR_STYLE}padding-left:16px;">날짜</span>'
+        f'<span style="{_HDR_STYLE}padding-left:16px;">면접관 스타일</span>'
+        f'<span style="{_HDR_STYLE}text-align:center;">이력서</span>'
+        f'<span style="{_HDR_STYLE}text-align:center;">면접</span>'
+        f'<span style="{_HDR_STYLE}text-align:center;">종합</span>'
+        f'<span style="{_HDR_STYLE}text-align:center;">영상</span>'
+        f'<span style="{_HDR_STYLE}"></span>'
+        f'</div>'
+    )
+
+    rows_html = ""
+    for i, h in enumerate(HISTORY):
+        row_bg = "#f9fafb" if i % 2 == 0 else "white"
+        iv_c   = score_color(h["iv"])
+        tot_c  = score_color(h["total"])
+        resume_txt = h["resume"] if h["resume"] is not None else "-"
+        iv_txt     = h["iv"] if h["iv"] is not None else "-"
+        total_txt  = h["total"] if h["total"] is not None else "-"
+        rows_html += (
+            f'<div style="display:grid;grid-template-columns:{COLS};'
+            f'align-items:center;height:42px;background:{row_bg};'
+            f'margin:0 -19px;padding:0 19px;box-sizing:border-box;">'
+            f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
+            f'font-family:Pretendard,-apple-system,sans-serif;">{h["date"]}</span>'
+            f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
+            f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
+            f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
+            f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
+            f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
+            f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
+            f'<span style="font-size:11px;font-weight:700;color:{tot_c};text-align:center;'
+            f'font-family:Pretendard,-apple-system,sans-serif;">{total_txt}</span>'
+            f'<div style="display:flex;justify-content:center;">'
+            f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
+            f'</div>'
+            + (
+                (
+                    f'<div style="display:flex;justify-content:flex-end;align-items:center;gap:5px;'
+                    f'padding-right:16px;white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">'
+                    + ''.join(
+                        f'<a href="/{path}?sid={h["session_id"]}" target="_self" '
+                        f'style="font-size:11px;font-weight:600;color:#3b6def;text-decoration:none;">{label}</a>'
+                        + ('<span style="color:#d1d5db;">·</span>' if not is_last else '')
+                        for path, label, is_last in [
+                            ("결과리포트", "결과", False),
+                            ("피드백보고서", "피드백", False),
+                            ("이력서최적화", "최적화", True),
+                        ]
+                    )
+                    + '</div>'
+                )
+                if h["iv"] is not None and h["session_id"] else
+                '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
+                'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
+            )
+            + '</div>'
+        )
+
     st.markdown(
         '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
-        'padding:15px 19px;">'
-        '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 14px;'
-        'font-family:Pretendard,-apple-system,sans-serif;">이력서 버전 관리</p>'
-        + ver_rows +
+        'padding:15px 19px;margin-top:20px;">'
+        '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;'
+        'font-family:Pretendard,-apple-system,sans-serif;">면접 히스토리</p>'
+        '<div style="overflow-x:auto;">'
+        f'<div>{header_html}{rows_html}</div>'
+        '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
 
-# ── 면접 히스토리 ──────────────────────────────────────────────────────────
-COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(90px,1fr)"
-
-def _play_btn(video_url: str) -> str:
-    full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
-    return (
-        f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
-        'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
-        'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
-        '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
-        'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
-        '<span style="font-size:11px;font-weight:600;color:#3b6def;'
-        'font-family:Pretendard,-apple-system,sans-serif;line-height:1;">영상</span>'
-        '</div>'
-    )
-
-_HDR_STYLE = (
-    'font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;'
-    'font-family:Pretendard,-apple-system,sans-serif;'
-)
-
-header_html = (
-    f'<div style="display:grid;grid-template-columns:{COLS};'
-    f'align-items:center;padding:0 0 10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:0;">'
-    f'<span style="{_HDR_STYLE}padding-left:16px;">날짜</span>'
-    f'<span style="{_HDR_STYLE}padding-left:16px;">면접관 스타일</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">이력서</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">면접</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">종합</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">영상</span>'
-    f'<span style="{_HDR_STYLE}"></span>'
-    f'</div>'
-)
-
-rows_html = ""
-for i, h in enumerate(HISTORY):
-    row_bg = "#f9fafb" if i % 2 == 0 else "white"
-    iv_c   = score_color(h["iv"])
-    tot_c  = score_color(h["total"])
-    resume_txt = h["resume"] if h["resume"] is not None else "-"
-    iv_txt     = h["iv"] if h["iv"] is not None else "-"
-    total_txt  = h["total"] if h["total"] is not None else "-"
-    rows_html += (
-        f'<div style="display:grid;grid-template-columns:{COLS};'
-        f'align-items:center;height:42px;background:{row_bg};'
-        f'margin:0 -19px;padding:0 19px;box-sizing:border-box;">'
-        f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["date"]}</span>'
-        f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:{tot_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{total_txt}</span>'
-        f'<div style="display:flex;justify-content:center;">'
-        f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
-        f'</div>'
-        + (
-            f'<a href="/결과리포트?sid={h["session_id"]}" target="_self" style="font-size:11px;font-weight:600;'
-            f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
-            f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
-            if h["iv"] is not None and h["session_id"] else
-            '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
-            'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
+elif _mypage_tab == "video":
+    _video_items = [h for h in HISTORY if h["has_video"]]
+    if not _video_items:
+        st.info("저장된 면접 영상이 없어요. 웹캠을 켜고 면접을 진행하면 여기에서 다시 볼 수 있어요.")
+    else:
+        _video_rows = ""
+        for h in _video_items:
+            _video_rows += (
+                '<div style="display:flex;align-items:center;justify-content:space-between;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;'
+                f'padding:14px 18px;margin-bottom:10px;">'
+                f'<div><span style="font-size:12px;font-weight:600;color:#374151;">{h["date"]}</span>'
+                f'<span style="font-size:12px;color:#9ca3af;margin-left:10px;">{h["style"]} 면접관</span></div>'
+                + _play_btn(h["video_url"])
+                + '</div>'
+            )
+        st.markdown(
+            '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:15px 19px;">'
+            '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 14px;">저장된 면접 영상</p>'
+            + _video_rows + '</div>',
+            unsafe_allow_html=True,
         )
-        + '</div>'
-    )
-
-st.markdown(
-    '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
-    'padding:15px 19px;margin-top:20px;">'
-    '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;'
-    'font-family:Pretendard,-apple-system,sans-serif;">면접 히스토리</p>'
-    '<div style="overflow-x:auto;">'
-    f'<div>{header_html}{rows_html}</div>'
-    '</div>'
-    '</div>',
-    unsafe_allow_html=True,
-)
-
 
 _access_token = st.session_state.get("access_token", "")
 

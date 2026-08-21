@@ -2,6 +2,7 @@ import requests
 import streamlit as st
 from utils.paths import resource
 from utils.state import init_session, set as state_set
+from utils.ui import show_error
 from utils import api
 
 st.set_page_config(
@@ -24,16 +25,16 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 [data-testid="collapsedControl"],
 [data-testid="stExpandSidebarButton"] { display:none !important; }
 
-html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
+html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 [data-testid="stAppViewContainer"],
-[data-testid="stMain"] { height:100vh !important; overflow:hidden !important; }
+[data-testid="stMain"] { min-height:100vh !important; overflow-y:auto !important; overflow-x:hidden !important; }
 
 .main .block-container,
 [data-testid="stMainBlockContainer"] {
     margin-left: 43% !important;
     width: 57% !important;
     max-width: 57% !important;
-    height: 100vh !important;
+    min-height: 100vh !important;
     padding: 0 !important;
     background: white !important;
     box-sizing: border-box !important;
@@ -181,9 +182,9 @@ with form_col:
 
     if submitted:
         if not name or not email or not password or not password_confirm:
-            st.error("모든 항목을 입력해주세요.")
+            show_error("모든 항목을 입력해주세요.")
         elif password != password_confirm:
-            st.error("비밀번호가 일치하지 않습니다.")
+            show_error("비밀번호가 일치하지 않습니다.")
         else:
             try:
                 api.register(name, email, password)
@@ -195,12 +196,11 @@ with form_col:
                 st.switch_page("pages/03_면접_환경설정.py")
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 409:
-                    st.error("이미 가입된 이메일입니다.")
+                    show_error("이미 가입된 이메일입니다.")
                 else:
-                    status = e.response.status_code if e.response is not None else "?"
-                    st.error(f"회원가입에 실패했습니다. (서버 오류: {status})")
+                    show_error(api.error_detail(e, "회원가입에 실패했습니다."))
             except Exception:
-                st.error("회원가입에 실패했습니다. 다시 시도해주세요.")
+                show_error("회원가입에 실패했습니다. 다시 시도해주세요.")
 
     st.markdown("""
     <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
