@@ -5,6 +5,7 @@ from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
+from utils.ui import show_error
 from utils import api
 
 try:
@@ -77,7 +78,7 @@ if result_data:
     AVG_SCORES   = [0] * 5
 
     _CAT_KEYS = ["logic", "communication", "expertise", "attitude", "problem_solving"]
-    _cat_comments = result_data.get("category_comments") or {}
+    _cat_comments = result_data.get("radar_comments") or {}
     COMPETENCIES = [
         (cat, s, 0, _cat_comments.get(key) or "")
         for cat, s, key in zip(CATEGORIES, MY_SCORES, _CAT_KEYS)
@@ -95,7 +96,7 @@ if result_data:
     total_score_val     = result_data.get("total_score", 0)
     grade_val           = result_data.get("grade") or "-"
 else:
-    st.error("결과를 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
+    show_error("결과를 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
     CATEGORIES   = ["논리성", "커뮤니케이션", "전문지식", "태도", "문제해결력"]
     MY_SCORES    = [0, 0, 0, 0, 0]
     AVG_SCORES   = [0, 0, 0, 0, 0]
@@ -195,185 +196,203 @@ def _grade_badge(score: int) -> str:
 st.markdown(
     '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
     '<div style="display:flex;min-height:148px;">'
-    + _score_section('#d97706','#fffbeb','rgba(217,119,6,0.3)','1차 서류 전형',icon_resume,'이력서 분석',
+    + _score_section('#d97706','#fffbeb','#d97706','1차 서류 전형',icon_resume,'이력서 분석',
                       resume_score_val, resume_score_val, _grade_badge(resume_score_val), '이력서 분석 결과')
     + _div
-    + _score_section('#3b6def','#eef3ff','rgba(59,109,239,0.3)','2차 면접 전형',icon_mic,'AI 면접 코칭',
+    + _score_section('#3b6def','#eef3ff','#3b6def','2차 면접 전형',icon_mic,'AI 면접 코칭',
                       interview_score_val, interview_score_val, _grade_badge(interview_score_val), '면접 답변 분석 결과')
     + _div
-    + _score_section('#16a34a','#f0fdf4','rgba(22,163,74,0.3)','최종 종합 평가',icon_trophy,'합산 결과',
+    + _score_section('#16a34a','#f0fdf4','#16a34a','최종 종합 평가',icon_trophy,'합산 결과',
                       total_score_val, total_score_val, grade_val, '이력서·면접 종합 점수')
     + '</div></div><div style="height:32px"></div>',
     unsafe_allow_html=True
 )
 
-# ── 레이더 차트 + 종합 총평 ───────────────────────────────────────────────
-col_l, col_r = st.columns([485, 635])
+tab_detail, tab_video = st.tabs(["역량 상세 리포트", "영상 분석 코멘트"])
 
-with col_l:
-    st.markdown(
-        '<div style="background:white;border:1px solid #dedede;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
-        '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
-        '</div>',
-        unsafe_allow_html=True
-    )
-    if HAS_PLOTLY:
-        cats     = CATEGORIES + [CATEGORIES[0]]
-        vals     = MY_SCORES  + [MY_SCORES[0]]
-        avg_vals = AVG_SCORES + [AVG_SCORES[0]]
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=avg_vals, theta=cats, fill="none",
-            line=dict(color="#d1d5db", width=1.5, dash="dot"),
-            name="평균", showlegend=False,
-        ))
-        fig.add_trace(go.Scatterpolar(
-            r=vals, theta=cats, fill="toself",
-            fillcolor="rgba(59,109,239,0.12)",
-            line=dict(color="#3b6def", width=2),
-            name="내 점수", showlegend=False,
-        ))
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100],
-                                tickfont=dict(size=9), gridcolor="#f1f5f9"),
-                angularaxis=dict(tickfont=dict(size=11, color="#a6a6a6")),
-                bgcolor="white",
-            ),
-            margin=dict(l=90, r=90, t=55, b=70),
-            paper_bgcolor="white", height=380,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown(
-        '<div style="background:white;border:1px solid #dedede;border-top:none;border-radius:0 0 12px 12px;height:20px;margin-right:10px;"></div>',
-        unsafe_allow_html=True
-    )
+with tab_detail:
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    # ── 레이더 차트 + 종합 총평 ───────────────────────────────────────────
+    col_l, col_r = st.columns([485, 635])
 
-with col_r:
-    if summary_text:
+    with col_l:
         st.markdown(
-            '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
-            f'<div style="font-size:13px;color:#374151;line-height:1.8;white-space:pre-wrap;">{summary_text}</div>'
+            '<div style="background:white;border:1px solid #dedede;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
             '</div>',
             unsafe_allow_html=True
         )
-    else:
-        st.markdown(
-            '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;'
-            'display:flex;align-items:center;justify-content:center;text-align:center;">'
-            '<div style="font-size:13px;color:#9ca3af;">종합 총평을 불러오지 못했습니다.</div>'
-            '</div>',
-            unsafe_allow_html=True
-        )
-
-# ── 면접 역량 평가 ────────────────────────────────────────────────────────
-comp_rows = ""
-for label, score, avg, comment in COMPETENCIES:
-    s = min(max(score, 0), 100)
-    a = min(max(avg, 0), 100)
-    comp_rows += (
-        '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
-        '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
-        f'<div data-comp-label style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
-        f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
-        f'<span data-comp-score style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
-        '</div>'
-        '<div style="flex:1;padding:0 16px;position:relative;">'
-        f'<div style="font-size:10px;color:#3b6ef0;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
-        '<div style="background:#e5e8eb;height:5px;border-radius:3px;position:relative;">'
-        f'<div style="background:#3b6ef0;height:5px;border-radius:3px;width:{s}%;"></div>'
-        f'<div style="position:absolute;left:{a}%;top:-4px;width:2px;height:13px;background:rgba(191,196,204,0.8);transform:translateX(-50%);border-radius:1px;"></div>'
-        '</div>'
-        '</div>'
-        '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e8eb;flex-shrink:0;"></div>'
-        f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
-        '</div>'
-    )
-
-st.markdown(
-    '<div style="height:32px"></div>'
-    '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:19px 23px 12px;">'
-    '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px;">면접 역량 평가</div>'
-    '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e8eb;">AI 면접관이 분석한 5가지 역량 — 점수 및 개선 코멘트</div>'
-    + comp_rows
-    + '</div><div style="height:32px"></div>',
-    unsafe_allow_html=True
-)
-
-# ── AI 영상 분석 코멘트 (영상이 있는 세션만) ─────────────────────────────
-if session_id:
-    try:
-        video_metrics = api.get_video_metrics(session_id)
-    except api.SessionExpiredError:
-        video_metrics = None
-        mark_session_expired()
-    except requests.exceptions.HTTPError as e:
-        video_metrics = None
-        if e.response is not None and e.response.status_code == 404:
-            pass 
-        else:
-            st.warning("영상 분석 결과를 불러오지 못했습니다.")
-    except Exception:
-        video_metrics = None
-        st.warning("영상 분석 결과를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
-
-    if video_metrics and video_metrics.get("status") == "analyzing":
-        st.markdown(
-            '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
-            'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
-            '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 10px;">영상 분석 중입니다...</p>'
-            '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
-            '면접 영상을 바탕으로 AI가 시선 처리를 분석하고 있습니다.<br>'
-            '분석이 완료되면 결과가 자동으로 표시됩니다.<br>'
-            '잠시만 기다려 주세요.'
-            '</p>'
-            '</div><div style="height:32px"></div>',
-            unsafe_allow_html=True
-        )
-        time.sleep(3.0)
-        st.rerun()
-
-    elif video_metrics and video_metrics.get("status") == "failed":
-        error_msg = video_metrics.get("error") or "영상 분석 중 문제가 발생했습니다."
-        st.markdown(
-            '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
-            'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:120px;box-sizing:border-box;">'
-            '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
-            f'<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">{error_msg}</p>'
-            '</div><div style="height:32px"></div>',
-            unsafe_allow_html=True
-        )
-
-    elif video_metrics and video_metrics.get("status") == "done":
-        WEBCAM_RESULTS = []
-        gaze = video_metrics.get("gaze")
-        if gaze:
-            WEBCAM_RESULTS.append(("시선 처리", gaze.get("message", "")))
-        speech = video_metrics.get("speech")
-        if speech:
-            WEBCAM_RESULTS.append(("발화 속도", speech.get("message", "")))
-
-        webcam_rows = ""
-        for i, (metric, comment) in enumerate(WEBCAM_RESULTS):
-            top_border = "" if i == 0 else "padding-top:20px;"
-            webcam_rows += (
-                f'<div style="display:flex;align-items:center;gap:0;{top_border}">'
-                f'<span style="font-size:12px;font-weight:600;color:#3b6def;white-space:nowrap;min-width:48px;">{metric}</span>'
-                '<div style="width:1px;height:22px;background:#cbd2da;flex-shrink:0;margin:0 10px;"></div>'
-                f'<span style="font-size:12px;color:#5e6673;">{comment}</span>'
-                '</div>'
+        if HAS_PLOTLY:
+            cats     = CATEGORIES + [CATEGORIES[0]]
+            vals     = MY_SCORES  + [MY_SCORES[0]]
+            avg_vals = AVG_SCORES + [AVG_SCORES[0]]
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=avg_vals, theta=cats, fill="none",
+                line=dict(color="#d1d5db", width=1.5, dash="dot"),
+                name="평균", showlegend=False,
+            ))
+            fig.add_trace(go.Scatterpolar(
+                r=vals, theta=cats, fill="toself",
+                fillcolor="rgba(59,109,239,0.12)",
+                line=dict(color="#3b6def", width=2),
+                name="내 점수", showlegend=False,
+            ))
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100],
+                                    tickfont=dict(size=9), gridcolor="#f1f5f9"),
+                    angularaxis=dict(tickfont=dict(size=11, color="#a6a6a6")),
+                    bgcolor="white",
+                ),
+                margin=dict(l=90, r=90, t=55, b=70),
+                paper_bgcolor="white", height=380,
             )
-        if webcam_rows:
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            '<div style="background:white;border:1px solid #dedede;border-top:none;border-radius:0 0 12px 12px;height:20px;margin-right:10px;"></div>',
+            unsafe_allow_html=True
+        )
+
+    with col_r:
+        if summary_text:
             st.markdown(
-                '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
-                '<div style="padding:16px 19px 0;">'
-                '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
-                '</div>'
-                f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
+                '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
+                '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
+                f'<div style="font-size:13px;color:#374151;line-height:1.8;white-space:pre-wrap;">{summary_text}</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;'
+                'display:flex;align-items:center;justify-content:center;text-align:center;">'
+                '<div style="font-size:13px;color:#9ca3af;">종합 총평을 불러오지 못했습니다.</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+    # ── 면접 역량 평가 ────────────────────────────────────────────────────────
+    comp_rows = ""
+    for label, score, avg, comment in COMPETENCIES:
+        s = min(max(score, 0), 100)
+        a = min(max(avg, 0), 100)
+        comp_rows += (
+            '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
+            '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
+            f'<div data-comp-label style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
+            f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
+            f'<span data-comp-score style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
+            '</div>'
+            '<div style="flex:1;padding:0 16px;position:relative;">'
+            f'<div style="font-size:10px;color:#3b6ef0;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
+            '<div style="background:#e5e8eb;height:5px;border-radius:3px;position:relative;">'
+            f'<div style="background:#3b6ef0;height:5px;border-radius:3px;width:{s}%;"></div>'
+            f'<div style="position:absolute;left:{a}%;top:-4px;width:2px;height:13px;background:rgba(191,196,204,0.8);transform:translateX(-50%);border-radius:1px;"></div>'
+            '</div>'
+            '</div>'
+            '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e8eb;flex-shrink:0;"></div>'
+            f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
+            '</div>'
+        )
+
+    st.markdown(
+        '<div style="height:32px"></div>'
+        '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:19px 23px 12px;">'
+        '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px;">면접 역량 평가</div>'
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e8eb;">AI 면접관이 분석한 5가지 역량 — 점수 및 개선 코멘트</div>'
+        + comp_rows
+        + '</div><div style="height:32px"></div>',
+        unsafe_allow_html=True
+    )
+
+with tab_video:
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    # ── AI 영상 분석 코멘트 (영상이 있는 세션만) ─────────────────────────────
+    if session_id:
+        try:
+            video_metrics = api.get_video_metrics(session_id)
+        except api.SessionExpiredError:
+            video_metrics = None
+            mark_session_expired()
+        except requests.exceptions.HTTPError as e:
+            video_metrics = None
+            if e.response is not None and e.response.status_code == 404:
+                pass 
+            else:
+                st.warning("영상 분석 결과를 불러오지 못했습니다.")
+        except Exception:
+            video_metrics = None
+            st.warning("영상 분석 결과를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
+
+        if video_metrics and video_metrics.get("status") == "analyzing":
+            st.markdown(
+                '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
+                'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
+                '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 10px;">영상 분석 중입니다...</p>'
+                '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
+                '면접 영상을 바탕으로 AI가 시선 처리를 분석하고 있습니다.<br>'
+                '분석이 완료되면 결과가 자동으로 표시됩니다.<br>'
+                '잠시만 기다려 주세요.'
+                '</p>'
                 '</div><div style="height:32px"></div>',
                 unsafe_allow_html=True
             )
+            time.sleep(3.0)
+            st.rerun()
+
+        elif video_metrics and video_metrics.get("status") == "failed":
+            _video_fail_retry_key = f"_video_fail_retries_{session_id}"
+            _video_fail_retries = st.session_state.get(_video_fail_retry_key, 0)
+            if _video_fail_retries < 2:
+                st.session_state[_video_fail_retry_key] = _video_fail_retries + 1
+                time.sleep(3.0)
+                st.rerun()
+
+            st.markdown(
+                '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
+                'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:120px;box-sizing:border-box;">'
+                '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
+                '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
+                '일시적인 문제로 영상 분석을 완료하지 못했습니다.<br>'
+                '답변 내용과 점수에는 영향이 없으니 안심하세요.'
+                '</p>'
+                '</div><div style="height:32px"></div>',
+                unsafe_allow_html=True
+            )
+
+        elif video_metrics and video_metrics.get("status") == "done":
+            WEBCAM_RESULTS = []
+            gaze = video_metrics.get("gaze")
+            if gaze:
+                WEBCAM_RESULTS.append(("시선 처리", gaze.get("message", "")))
+            speech = video_metrics.get("speech")
+            if speech:
+                WEBCAM_RESULTS.append(("발화 속도", speech.get("message", "")))
+
+            webcam_rows = ""
+            for i, (metric, comment) in enumerate(WEBCAM_RESULTS):
+                top_border = "" if i == 0 else "padding-top:20px;"
+                webcam_rows += (
+                    f'<div style="display:flex;align-items:center;gap:0;{top_border}">'
+                    f'<span style="font-size:12px;font-weight:600;color:#3b6def;white-space:nowrap;min-width:48px;">{metric}</span>'
+                    '<div style="width:1px;height:22px;background:#cbd2da;flex-shrink:0;margin:0 10px;"></div>'
+                    f'<span style="font-size:12px;color:#5e6673;">{comment}</span>'
+                    '</div>'
+                )
+            if webcam_rows:
+                st.markdown(
+                    '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
+                    '<div style="padding:16px 19px 0;">'
+                    '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
+                    '</div>'
+                    f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
+                    '</div><div style="height:32px"></div>',
+                    unsafe_allow_html=True
+                )
+
+    if not session_id:
+        st.info("영상 분석 결과가 없습니다.")
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
 with st.container(key="bottom_actions"):
