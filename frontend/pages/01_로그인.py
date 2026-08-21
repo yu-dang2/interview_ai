@@ -2,6 +2,7 @@ import requests
 import streamlit as st
 from utils.paths import resource
 from utils.state import init_session, set as state_set
+from utils.ui import show_error
 from utils import api
 
 st.set_page_config(
@@ -25,16 +26,16 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 [data-testid="collapsedControl"],
 [data-testid="stExpandSidebarButton"] { display:none !important; }
 
-html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
+html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 [data-testid="stAppViewContainer"],
-[data-testid="stMain"] { height:100vh !important; overflow:hidden !important; }
+[data-testid="stMain"] { min-height:100vh !important; overflow-y:auto !important; overflow-x:hidden !important; }
 
 .main .block-container,
 [data-testid="stMainBlockContainer"] {
     margin-left: 43% !important;
     width: 57% !important;
     max-width: 57% !important;
-    height: 100vh !important;
+    min-height: 100vh !important;
     padding: 0 !important;
     background: white !important;
     box-sizing: border-box !important;
@@ -179,7 +180,7 @@ with form_col:
 
     if submitted:
         if not email or not password:
-            st.error("이메일과 비밀번호를 입력해주세요.")
+            show_error("이메일과 비밀번호를 입력해주세요.")
         else:
             try:
                 resp = api.login(email, password)
@@ -189,14 +190,13 @@ with form_col:
                 st.switch_page("pages/03_면접_환경설정.py")
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 401:
-                    st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
+                    show_error("이메일 또는 비밀번호가 올바르지 않습니다.")
                 else:
-                    status = e.response.status_code if e.response is not None else "?"
-                    st.error(f"로그인에 실패했습니다. (서버 오류: {status})")
+                    show_error(api.error_detail(e, "로그인에 실패했습니다."))
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-                st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+                show_error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
             except Exception as e:
-                st.error(f"알 수 없는 오류가 발생했습니다: {e}")
+                show_error(f"알 수 없는 오류가 발생했습니다: {e}")
 
     st.markdown("""
     <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
