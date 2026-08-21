@@ -5,12 +5,13 @@ BASE_URL = "http://127.0.0.1:8000"
 
 
 class SessionExpiredError(Exception):
-    """토큰이 만료·무효(401)일 때 — 호출부에서 재로그인 유도용으로 구분해서 잡는다."""
     pass
 
 
-def _headers() -> dict:
-    token = st.session_state.get("access_token", "")
+def _headers(token: str | None = None) -> dict:
+
+    if token is None:
+        token = st.session_state.get("access_token", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
@@ -19,6 +20,18 @@ def _check(res: requests.Response) -> requests.Response:
         raise SessionExpiredError()
     res.raise_for_status()
     return res
+
+
+def error_detail(e: requests.exceptions.HTTPError, fallback: str) -> str:
+    if e.response is not None:
+        try:
+            detail = e.response.json().get("detail")
+            if detail:
+                return str(detail)
+        except Exception:
+            pass
+    status = e.response.status_code if e.response is not None else "?"
+    return f"{fallback} (서버 오류: {status})"
 
 
 # ── 인증 ────────────────────────────────────────────────────────────────────
@@ -69,11 +82,11 @@ def upload_jd(file_bytes: bytes, filename: str) -> int:
 
 # ── 면접 ────────────────────────────────────────────────────────────────────
 
-def start_interview(resume_id: int, jd_id: int, persona: str) -> dict:
+def start_interview(resume_id: int, jd_id: int, persona: str, access_token: str | None = None) -> dict:
     res = requests.post(
         f"{BASE_URL}/interview/sessions",
         json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
-        headers=_headers(),
+        headers=_headers(access_token),
         timeout=180,
     )
     _check(res)
@@ -103,10 +116,10 @@ def end_session(session_id: str) -> None:
     _check(res)
 
 
-def get_result(session_id: str) -> dict:
+def get_result(session_id: str, access_token: str | None = None) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/result",
-        headers=_headers(),
+        headers=_headers(access_token),
         timeout=90,
     )
     _check(res)
@@ -184,13 +197,3 @@ def apply_resume_optimization(
     )
     _check(res)
     return res.json()
-
-
-def download_resume(resume_id: int) -> bytes:
-    res = requests.get(
-        f"{BASE_URL}/resume/{resume_id}/download",
-        headers=_headers(),
-        timeout=30,
-    )
-    _check(res)
-    return res.content
