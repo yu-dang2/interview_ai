@@ -1,7 +1,8 @@
 import requests
 import streamlit as st
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
+from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
+from utils.ui import show_error
 from utils import api
 
 st.set_page_config(
@@ -12,6 +13,10 @@ st.set_page_config(
 
 init_session()
 render_sidebar(active="이력서 최적화")
+
+_sid_param = st.query_params.get("sid")
+if _sid_param and _sid_param != get("session_id"):
+    state_set("session_id", _sid_param)
 
 ensure_latest_session_id()
 
@@ -91,9 +96,9 @@ st.markdown(
 )
 
 if not session_id:
-    st.error("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.")
+    show_error("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.")
 elif optimization is None:
-    st.error("최적화 제안을 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
+    show_error("최적화 제안을 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
 elif not SUGGESTIONS:
     st.info("이 면접에서는 아직 생성된 최적화 제안이 없습니다.")
 else:
@@ -163,19 +168,6 @@ else:
     applied = st.session_state.resume_applied_result
     if applied:
         st.success(f"{applied['applied_count']}개 제안을 적용해 새 이력서를 만들었습니다.")
-        try:
-            docx_bytes = api.download_resume(applied["resume_id"])
-            st.download_button(
-                "최적화 이력서 다운로드 (docx)",
-                data=docx_bytes,
-                file_name=f"resume_{applied['resume_id']}.docx",
-                key="dl_real_btn",
-                type="primary",
-            )
-        except api.SessionExpiredError:
-            mark_session_expired()
-        except Exception as e:
-            st.error(f"다운로드 파일을 만들지 못했습니다: {e}")
 
     with st.container(key="bottom_row"):
         if st.button("건너뛰기", key="skip_btn"):
