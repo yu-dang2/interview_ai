@@ -837,7 +837,7 @@ body{{
 
   function stopAndUploadVideo(onDone) {{
     if (window.parent.__ivStopAndUploadVideo) {{
-      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.PUBLIC_BASE_URL}', onDone);
+      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.BASE_URL}', onDone);
     }} else {{
       console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
       onDone();
@@ -1051,7 +1051,7 @@ body{{
         res();
       }}, 20000);
     }});
-    var endDone = fetch('{api.PUBLIC_BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
+    var endDone = fetch('{api.BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
       method: 'POST',
       headers: {{ 'Authorization': 'Bearer ' + _accessToken }}
     }}).catch(function(err) {{
@@ -1161,7 +1161,7 @@ body{{
         formData.append('audio', blob, 'recording.' + ext);
         var durationSec = _recordStartedAt ? (Date.now() - _recordStartedAt) / 1000 : 0;
         formData.append('duration', String(durationSec));
-        fetch('{api.PUBLIC_BASE_URL}/voice/transcribe', {{
+        fetch('{api.BASE_URL}/voice/transcribe', {{
           method: 'POST',
           headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
           body: formData
