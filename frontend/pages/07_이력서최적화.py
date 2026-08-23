@@ -2,7 +2,7 @@ import requests
 import streamlit as st
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error
+from utils.ui import show_error, show_error_once
 from utils import api
 
 st.set_page_config(
@@ -96,9 +96,9 @@ st.markdown(
 )
 
 if not session_id:
-    show_error("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.")
+    show_error_once("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.", "resume_opt_no_session")
 elif optimization is None:
-    show_error("최적화 제안을 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
+    show_error_once("최적화 제안을 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.", "resume_opt_fetch_failed")
 elif not SUGGESTIONS:
     st.info("이 면접에서는 아직 생성된 최적화 제안이 없습니다.")
 else:
@@ -175,7 +175,8 @@ else:
 
         if st.session_state.get("resume_apply_msg"):
             _level, _text = st.session_state.resume_apply_msg
-            getattr(st, _level)(_text)
+            st.session_state.resume_apply_msg = None
+            show_error(_text)
 
         if st.button("선택한 제안 적용하기", key="apply_btn", type="primary"):
             selected_ids = [
