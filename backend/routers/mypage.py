@@ -5,8 +5,8 @@
     GET /mypage/videos             - 보관 중인 면접 영상 목록
     GET /mypage/videos/{id}/file   - 영상 파일 (재생용)
 
-면접 기록 목록(GET /interview/sessions)은 아직 없어서 마이페이지의 점수 표는 목업이다.
-그건 별도 작업으로 붙인다.
+마이페이지 점수 표는 GET /interview/sessions 가 담당한다. 세션·결과·통계를 한 번에
+내려주므로 여기서 다시 만들지 않는다. 이 라우터는 영상만 다룬다.
 """
 
 from fastapi import APIRouter, Depends

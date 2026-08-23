@@ -22,19 +22,34 @@ class InterviewState(MessagesState):
     resume_parsed: dict     # {"name", "skills", "experience", "projects", "soft_skills", ...}
     match_result: dict      # {"matching_skills", "missing_skills", "interview_topics", ...}
     match_score: int        # JD-이력서 적합도 0~100 정수 (jd_resume_matcher 산출, 백엔드 노출)
-    question_list: list     # [{"question", "intent", "good_answer_criteria", ...}]
+    question_list: list     # [{"question", "type", "intent", "good_answer_criteria", ...}]
+                            # type: "자기소개"(첫 질문, 라포 형성) / "기술" / "인성".
+                            # 그래프는 type 으로 분기한다(agent.graph.utils.is_intro_question).
+                            # 자기소개 질문은 채점 대상이 아니라서 answer_evaluator 가 LLM 호출
+                            # 없이 중립 점수를 주고, topic_router 가 꼬리질문을 붙이지 않으며,
+                            # report_generator 가 총점·항목점수·개별 피드백에서 제외한다.
+
+    # 직무 지식 카드 검색 결과 (question_retriever 산출, question_generator 참고자료)
+    # JD가 질문의 주재료이고 이건 관점을 보태는 보조 자료다. 검색 실패·미설치 시 [].
+    retrieved_knowledge: list
 
     # 현재 진행 상태
     current_question_index: int
-    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단
-    eval_result: dict       # {"score", "feedback", "follow_up_needed", "follow_up_focus", ...}
+    eval_score: int         # 0~100점. topic_router가 THRESHOLD 기준으로 분기 판단.
+                            # 단 자기소개 질문은 채점하지 않고 고정 중립 점수가 들어간다
+                            # (answer_evaluator.INTRO_NEUTRAL_SCORE) — 답변 품질과 무관하다.
+    eval_result: dict       # answer_evaluator 프롬프트 출력 그대로. 자기소개 질문은 {}.
+                            # {"eval_score", "feedback", "strengths", "weaknesses", "eval_keywords",
+                            #  "follow_up_needed", "follow_up_focus",
+                            #  세부 점수 5종(logic/communication/expertise/attitude/problem_solving_score)}
+                            # 종합 점수 키는 "score"가 아니라 "eval_score"다.
 
     # 누적값 (면접 전체에서 쌓임)
     eval_keywords: Annotated[list, add]
     weakness_areas: Annotated[list, add]
 
     # 흐름 제어 (이현주 관리)
-    follow_up_count: int    # 꼬리질문 횟수. 3회 초과 시 다음 주제로 강제 이동
+    follow_up_count: int    # 꼬리질문 횟수. topic_router.MAX_FOLLOW_UPS 도달 시 다음 주제로 이동
     turn_count: int         # 전체 턴 수. MAX_TURNS 초과 시 종료
     is_finished: bool
 
@@ -43,10 +58,17 @@ class InterviewState(MessagesState):
                              # "voice"면 answer_evaluator가 음성 말버릇을 감점하지 않도록 안내를 덧붙임.
 
     # 최종 결과 (report_generator가 생성)
-    report_result: dict     # {"total_score", "grade", "category_scores", "summary", "keywords", "question_feedbacks"}
+    report_result: dict     # {"total_score", "grade", "is_early_terminated", "category_scores",
+                            #  "category_comments", "summary", "keywords", "question_feedbacks"}
+                            # is_early_terminated: 중도 종료 여부. report_generator가
+                            # current_question_index < len(question_list) 로 판정해 넣는다.
 
     # 이력서 자동 최적화 (resume_optimizer가 종료 직전 생성, 화면·DB 기준 키로 정규화)
-    resume_optimization: dict   # {"matched_keywords": [...], "suggestions": [{"id","section","original","improved","reason"}]}
+    # matched_keywords: JD 키워드 중 이력서에 이미 있는 것 (화면 "보유 키워드")
+    # missing_keywords: JD 키워드 중 이력서에 없는 것 (화면 "추가 추천 키워드")
+    # suggestions:      항목별 문구 개선 제안
+    resume_optimization: dict   # {"matched_keywords": [...], "missing_keywords": [...],
+                                #  "suggestions": [{"id","section","original","improved","reason"}]}
 
 
 class InterviewInput(TypedDict):

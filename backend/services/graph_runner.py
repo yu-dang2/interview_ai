@@ -94,6 +94,26 @@ async def start(session_id: str, init_state: dict) -> dict:
     return (await graph.aget_state(config)).values
 
 
+async def start_stream(session_id: str, init_state: dict):
+    """
+    면접을 시작하면서 노드가 끝날 때마다 그 이름을 내보낸다. (화면 진행 표시용)
+
+    stream_mode="updates" 는 노드 하나가 끝날 때마다 {노드이름: 출력} 을 준다.
+    이름은 build_graph 가 add_node 로 등록한 값 그대로라 agent/ 를 고칠 필요가 없다.
+    interrupt_before 도 ainvoke 와 똑같이 걸린다(answer_evaluator 앞에서 멈추는 것 확인).
+
+    끝난 뒤의 State 는 여기서 돌려주지 않는다. 호출부가 snapshot() 으로 읽는다.
+    """
+    graph = _require_graph()
+    config = config_for(session_id)
+
+    async for chunk in graph.astream(init_state, config, stream_mode="updates"):
+        for node_name in chunk:
+            # __interrupt__ 처럼 밑줄로 시작하는 건 노드가 아니라 그래프가 내는 신호다.
+            if not node_name.startswith("__"):
+                yield node_name
+
+
 async def resume(session_id: str, answer: str, input_type: str = "text") -> dict:
     """사용자 답변을 넣고 그래프를 재개한다."""
     graph = _require_graph()

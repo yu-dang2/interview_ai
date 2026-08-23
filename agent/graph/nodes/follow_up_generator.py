@@ -4,7 +4,8 @@ follow_up_generator 노드
 
 예진님 FOLLOW_UP_GENERATOR_SYSTEM_PROMPT + 페르소나 조합하여 꼬리질문 생성.
 eval_result의 follow_up_focus를 받아서 허점 파고들기.
-최대 3회 제한은 topic_router에서 관리.
+한 주제에서 이어갈 꼬리질문 상한은 topic_router.MAX_FOLLOW_UPS가 관리한다.
+(여기서는 follow_up_count를 +1 하기만 하고 상한 판단은 하지 않는다)
 """
 
 import json

@@ -4,6 +4,10 @@
 #   docker compose down          (데이터는 볼륨에 남는다)
 #   docker compose down -v       (볼륨까지 삭제)
 #
+# 다 뜨면 화면은 http://localhost:8501, API 문서는 http://localhost:8000/docs.
+# 직무 지식 인덱스는 최초 한 번만 만들면 볼륨에 남는다.
+#   docker compose exec api python scripts/build_knowledge_index.py
+#
 # .env 파일이 필요하다. .env.example 을 복사해서 값을 채운다.
 # 특히 SECRET_KEY 는 반드시 고정값을 넣어야 재배포해도 로그인이 유지된다.
 
@@ -21,13 +25,20 @@ services:
       - db_data:/var/lib/mysql
     healthcheck:
       # 앱이 DB 준비 전에 뜨면 create_all 이 실패한다.
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      #
+      # -h 127.0.0.1 로 TCP 를 확인해야 한다. localhost 는 유닉스 소켓을 쓰는데,
+      # MySQL 8 은 첫 기동 때 초기화용 임시 서버를 소켓으로만 띄운다. 그래서
+      # 소켓 검사는 TCP 포트가 열리기 전에 통과해버리고, api 가 붙으려다
+      # Connection refused 로 죽는다.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   api:
     build: .
+    # DB 가 잠깐 끊기거나 기동 순서가 어긋나도 스스로 복구하게 둔다.
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -40,13 +51,15 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       INTERVIEW_DAILY_LIMIT: ${INTERVIEW_DAILY_LIMIT:-10}
       INTERVIEW_ACTIVE_LIMIT: ${INTERVIEW_ACTIVE_LIMIT:-3}
+      INTERVIEW_TIME_LIMIT_MIN: ${INTERVIEW_TIME_LIMIT_MIN:-30}
+      INTERVIEW_STALE_AFTER_MIN: ${INTERVIEW_STALE_AFTER_MIN:-60}
     ports:
       - "8000:8000"
     volumes:
-      # 이 둘을 마운트하지 않으면 컨테이너 재시작마다
-      # 업로드된 영상과 진행 중이던 면접이 사라진다.
+      # 마운트하지 않으면 컨테이너 재시작마다 업로드된 영상과 진행 중이던
+      # 면접이 사라진다. /app/var 에는 체크포인트와 직무 지식 인덱스가 함께 남는다.
       - video_data:/app/uploads/videos
-      - checkpoint_data:/app/data
+      - app_state:/app/var
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
       interval: 15s
@@ -54,7 +67,47 @@ services:
       retries: 5
       start_period: 30s
 
+  web:
+    # api 와 같은 이미지를 쓰고 실행 명령만 다르다. 레이어 캐시가 살아 있어
+    # 두 번째 빌드는 거의 즉시 끝난다.
+    build: .
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # 백엔드 주소가 두 벌인 이유:
+      #
+      #   API_BASE_URL         Streamlit 서버가 백엔드를 부를 때. 컨테이너끼리
+      #                        통신하므로 서비스 이름(api)을 쓴다.
+      #   PUBLIC_API_BASE_URL  화면의 자바스크립트가 부를 때. STT 업로드처럼
+      #                        사용자 브라우저에서 나가는 요청이라 밖에서 닿는
+      #                        주소여야 한다. 여기에 http://api:8000 을 넣으면
+      #                        사용자 PC 에서 그 이름을 찾지 못해 실패한다.
+      #
+      # 배포할 때는 PUBLIC_API_BASE_URL 과 CORS_ORIGINS 를 실제 주소로 바꾼다.
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "8501:8501"
+    command:
+      - streamlit
+      - run
+      - frontend/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      # 컨테이너에는 브라우저도 사용자 입력도 없다. headless 가 아니면
+      # 첫 실행에서 이메일을 물으며 멈춘다.
+      - --server.headless=true
+      - --browser.gatherUsageStats=false
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   db_data:
   video_data:
-  checkpoint_data:
+  app_state:

@@ -6,6 +6,7 @@
 
 엔드포인트:
     POST /interview/sessions           - 면접 세션 생성 (면접 시작)
+    POST /interview/sessions/stream    - 면접 세션 생성 + 준비 진행 상황 스트리밍
     GET  /interview/sessions           - 내 면접 기록 목록 (마이페이지)
     POST /interview/sessions/{id}/chat - 텍스트 답변 전송
     POST /interview/sessions/{id}/end  - 면접 종료
@@ -20,7 +21,10 @@
     GET  /interview/{id}/video-metrics
 """
 
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from backend.core.deps import current_user
 from backend.database import get_db
@@ -37,7 +41,7 @@ from backend.schemas.interview import (
 )
 from backend.schemas.video import VideoMetricsResponse, VideoUploadResponse
 from backend.services import video_service
-from backend.services.interview_service import InterviewService
+from backend.services.interview_service import InterviewService, stream_session
 from backend.services.video_service import VideoService
 
 router = APIRouter(prefix="/interview", tags=["Interview"])
@@ -52,6 +56,42 @@ async def create_session(
     """면접 세션 생성 및 첫 질문 반환"""
     service = InterviewService(db, user)
     return await service.create_session(req)
+
+
+@router.post("/sessions/stream")
+async def create_session_stream(
+    req: SessionCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """
+    면접 세션 생성 (진행 상황 스트리밍)
+
+    첫 질문까지 90~140초가 걸려 화면이 멈춰 보이는 문제 때문에 만들었다.
+    위 /sessions 와 결과는 같고, 준비 과정을 단계별로 흘려보내는 점만 다르다.
+
+    한 줄에 JSON 하나씩 내려간다.
+
+        {"type":"progress","stage":"parsing","label":"이력서·채용공고 읽는 중"}
+        {"type":"progress","stage":"matching","label":"직무 적합도 분석 중"}
+        {"type":"progress","stage":"generating","label":"맞춤 질문 만드는 중"}
+        {"type":"done","session_id":"...","first_question":"..."}
+
+    progress 는 "지금부터 이 단계" 라는 뜻이다. stage 는 고정값이고 label 은 참고용이라,
+    화면 문구를 바꾸려면 stage 로 매핑하면 된다.
+
+    거절해야 하는 요청(인증·사용량 초과·소유권)은 prepare_session 이 스트리밍 시작 전에
+    걸러내므로 지금처럼 상태 코드로 나간다. 본문이 나가기 시작한 뒤에 생긴 오류만
+    {"type":"error","detail":"..."} 로 내려간다.
+    """
+    service = InterviewService(db, user)
+    prepared = service.prepare_session(req)
+
+    async def lines():
+        async for event in stream_session(prepared):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @router.get("/sessions", response_model=SessionListResponse)
@@ -143,10 +183,12 @@ async def get_resume_optimization(
 # ── 영상 분석 ──────────────────────────────────────────
 # 시선 지표는 면접 점수(5개 역량)에 반영하지 않는 보조 코칭 값이라 결과 리포트와 분리돼 있다.
 #
-# 경로가 두 벌인 이유: video/README.md 와 예진님의 webcam_recorder.html 이
-# /interview/{id}/video 를 쓰기로 합의돼 있고(그 URL 이 코드에 하드코딩돼 있다),
+# 경로가 두 벌인 이유: video/README.md 가 /interview/{id}/video 로 합의돼 있고,
 # 이 라우터의 나머지 엔드포인트는 /interview/sessions/{id}/... 컨벤션을 쓴다.
-# 둘 다 받아서 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 서로 충돌하지 않는다.
+# 둘 다 받아 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 충돌하지 않는다.
+#
+# 프론트는 조회를 짧은 쪽으로 부르고 있다. 업로드는 아직 붙지 않았다.
+# 한쪽으로 모으려면 프론트도 함께 고쳐야 해서 지금은 둘 다 둔다.
 
 @router.post("/{session_id}/video", response_model=VideoUploadResponse, status_code=202)
 @router.post("/sessions/{session_id}/video", response_model=VideoUploadResponse, status_code=202)

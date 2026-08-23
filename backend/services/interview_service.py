@@ -8,6 +8,7 @@ DB에는 조회용 기록(세션/대화/결과)을 남긴다.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta
 
@@ -19,7 +20,13 @@ from backend.core.config import (
     CLOSING_MESSAGE,
     INTERVIEW_ACTIVE_LIMIT,
     INTERVIEW_DAILY_LIMIT,
+    INTERVIEW_STALE_AFTER_MIN,
+    INTERVIEW_START_STAGES,
+    INTERVIEW_TIME_LIMIT_MIN,
+    RAPPORT_QUESTION_TYPES,
+    RAPPORT_TRANSITION_MESSAGE,
 )
+from backend.database import SessionLocal
 from backend.models.models import (
     JD,
     InterviewMessage,
@@ -45,10 +52,100 @@ from backend.schemas.interview import (
 )
 from backend.services import graph_runner, report_mapper
 
+logger = logging.getLogger(__name__)
+
 _NO_REPORT = HTTPException(
     status_code=409,
     detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
 )
+
+
+# 이 노드들이 모두 끝나면 다음 단계로 넘어간 것으로 본다. 위에서부터 순서대로 확인한다.
+# question_retriever 는 jd_resume_matcher 와 함께 도는데 먼저 끝나므로, 둘 다 끝나야
+# 질문 생성 단계로 본다. (실측: 검색 26초 / 매칭 61초)
+_STAGE_PREREQUISITES = (
+    ("matching", {"jd_parser", "resume_parser"}),
+    ("generating", {"jd_resume_matcher", "question_retriever"}),
+)
+
+
+def _new_session_row(prepared: dict) -> InterviewSession:
+    """prepare_session 이 만든 값으로 세션 행을 만든다. 일반 생성과 스트리밍이 함께 쓴다."""
+    return InterviewSession(
+        session_id=prepared["session_id"],
+        status="active",
+        persona=prepared["persona"],
+        jd_content=prepared["jd_content"],
+        users_user_id=prepared["user_id"],
+        jds_jd_id=prepared["jd_id"],
+        resumes_resume_id=prepared["resume_id"],
+    )
+
+
+def _stage_event(stage: str) -> dict:
+    return {"type": "progress", "stage": stage, "label": INTERVIEW_START_STAGES[stage]}
+
+
+async def stream_session(prepared: dict):
+    """
+    면접을 시작하면서 진행 단계를 이벤트로 내보낸다.
+
+    첫 질문까지 90~140초가 걸려 화면이 멈춰 보이는 문제 때문에 만들었다.
+    한 줄에 JSON 하나씩(NDJSON) 나가고, 마지막 done 이 기존 세션 생성 응답과 같다.
+
+    DB 세션을 여기서 새로 연다. 요청 의존성으로 받은 세션은 응답 본문이 나가기 전에
+    닫히므로 그대로 쓰면 안 된다.
+
+    오류는 이벤트로 보낸다. 본문이 나가기 시작한 뒤에는 상태 코드를 바꿀 수 없다.
+    거절해야 하는 경우는 prepare_session 이 스트리밍 시작 전에 이미 걸러낸다.
+    """
+    session_id = prepared["session_id"]
+
+    # 첫 단계는 그래프를 돌리기 전에 보낸다. 노드 이벤트는 "끝났을 때" 오기 때문에
+    # 그것만 기다리면 첫 15초 동안 화면에 아무것도 못 띄운다.
+    yield _stage_event("parsing")
+
+    finished_nodes: set[str] = set()
+    sent_stages = {"parsing"}
+
+    try:
+        async for node_name in graph_runner.start_stream(session_id, prepared["init_state"]):
+            finished_nodes.add(node_name)
+            for stage, required in _STAGE_PREREQUISITES:
+                if stage not in sent_stages and required <= finished_nodes:
+                    sent_stages.add(stage)
+                    yield _stage_event(stage)
+
+        values, _ = await graph_runner.snapshot(session_id)
+        first_question = values["messages"][-1].content if values.get("messages") else ""
+
+        db = SessionLocal()
+        try:
+            db.add(_new_session_row(prepared))
+            db.add(
+                InterviewMessage(
+                    role="assistant",
+                    content=first_question,
+                    interview_sessions_session_id=session_id,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        yield {
+            "type": "done",
+            "session_id": session_id,
+            "first_question": first_question,
+        }
+
+    except Exception as e:
+        # 세션 행을 아직 안 만들었으므로 사용량 카운트에도 잡히지 않는다.
+        logger.exception("면접 시작 실패 (session_id=%s): %s", session_id, e)
+        yield {
+            "type": "error",
+            "detail": "면접 준비 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+        }
 
 
 class InterviewService:
@@ -66,7 +163,7 @@ class InterviewService:
         """
         session = self.db.get(InterviewSession, session_id)
         if session is None or session.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
+            raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
         return session
 
     def _get_result_row(self, session_id: str) -> InterviewResult | None:
@@ -99,6 +196,42 @@ class InterviewService:
 
     # ── 사용량 제한 ────────────────────────────────────
 
+    def _sweep_stale_sessions(self) -> int:
+        """
+        오래 방치된 active 세션을 abandoned 로 정리하고 처리한 개수를 반환한다.
+
+        브라우저를 그냥 닫으면 종료 요청이 오지 않아 세션이 계속 active 로 남는다.
+        그대로 두면 동시 진행 제한에 걸려 본인이 새 면접을 시작하지 못한다.
+        (실제로 7/29~8/11 사이 14건이 쌓여 429 가 났다)
+
+        기준은 created_at 이다. 마지막 활동 시각 컬럼을 두는 편이 정확하지만,
+        interview_sessions 에는 이미 데이터가 있어 컬럼을 더하려면 테이블을 다시
+        만들어야 한다. 면접이 제한 시간 안에 끝나므로 생성 시각만으로 충분하고,
+        그 두 배를 기다려 진행 중인 면접은 건드리지 않는다.
+        """
+        if INTERVIEW_STALE_AFTER_MIN <= 0:
+            return 0
+
+        cutoff = datetime.now() - timedelta(minutes=INTERVIEW_STALE_AFTER_MIN)
+        stale = (
+            self.db.query(InterviewSession)
+            .filter(
+                InterviewSession.users_user_id == self.user.user_id,
+                InterviewSession.status == "active",
+                InterviewSession.created_at < cutoff,
+            )
+            .all()
+        )
+        for session in stale:
+            session.status = "abandoned"
+        if stale:
+            self.db.commit()
+            logger.info(
+                "방치된 면접 %d건을 정리했습니다 (user_id=%s, %d분 초과)",
+                len(stale), self.user.user_id, INTERVIEW_STALE_AFTER_MIN,
+            )
+        return len(stale)
+
     def _check_usage_limit(self) -> None:
         """
         면접 생성 횟수를 제한한다.
@@ -110,6 +243,10 @@ class InterviewService:
         Redis 없이 DB 카운트로 센다. 사용자 수가 적어 이 정도로 충분하고,
         인프라를 늘리지 않아도 된다.
         """
+        # 세는 것보다 먼저 정리한다. 방치된 세션이 동시 제한을 차지하고 있으면
+        # 실제로는 진행 중인 게 없는데도 거절된다.
+        self._sweep_stale_sessions()
+
         if INTERVIEW_DAILY_LIMIT > 0:
             since = datetime.now() - timedelta(days=1)
             recent = (
@@ -145,61 +282,71 @@ class InterviewService:
 
     # ── 세션 생성 ──────────────────────────────────────
 
-    async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+    def prepare_session(self, req: SessionCreateRequest) -> dict:
+        """
+        세션을 만들기 전 확인을 끝내고 그래프 초기 상태를 준비한다.
+
+        스트리밍 응답은 본문이 나가기 시작하면 상태 코드를 바꿀 수 없다. 그래서
+        거절해야 하는 경우(사용량 초과·소유권)를 전부 여기서 끝내고, 스트리밍은
+        통과한 뒤에만 시작한다.
+
+        ORM 객체 대신 값만 담아 돌려준다. 스트리밍 중에는 요청 때 쓰던 DB 세션이
+        이미 닫혀 있어 ORM 객체를 그대로 들고 가면 쓸 수 없다.
+        """
         # LLM 호출 전에 막는다. 그래프를 돌린 뒤 거절하면 비용은 이미 나간 뒤다.
         self._check_usage_limit()
 
         # 남의 JD·이력서로 세션을 만들 수 없도록 소유자까지 확인한다.
         jd = self.db.get(JD, req.jd_id)
         if jd is None or jd.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"JD를 찾을 수 없습니다: {req.jd_id}")
+            raise HTTPException(status_code=404, detail="선택한 직무 기술서를 찾을 수 없습니다.")
 
         resume = self.db.get(Resume, req.resume_id)
         if resume is None or resume.users_user_id != self.user.user_id:
             raise HTTPException(
-                status_code=404, detail=f"이력서를 찾을 수 없습니다: {req.resume_id}"
+                status_code=404, detail="선택한 이력서를 찾을 수 없습니다."
             )
 
-        session_id = str(uuid.uuid4())
-
-        init_state = {
-            "messages": [],
-            "jd_raw": jd.content,
-            "resume_raw": resume.content,
-            # persona 는 agent 의 PERSONA_MAP 키를 그대로 넘긴다. 설명 문구로 변환하면
-            # persona_selector 가 인식하지 못하고 기술 리드로 폴백한다.
+        return {
+            "session_id": str(uuid.uuid4()),
+            "user_id": self.user.user_id,
+            "jd_id": jd.jd_id,
+            "resume_id": resume.resume_id,
             "persona": req.persona,
-            "jd_parsed": {},
-            "resume_parsed": {},
-            "match_result": {},
-            "question_list": [],
-            "current_question_index": 0,
-            "eval_score": 0,
-            "eval_result": {},
-            "eval_keywords": [],
-            "weakness_areas": [],
-            "follow_up_count": 0,
-            "turn_count": 0,
-            "is_finished": False,
-            # 답변마다 resume() 이 덮어쓴다. 첫 질문 생성 시점에는 답변이 없으므로 "text".
-            "input_type": "text",
-            "report_result": {},
+            "jd_content": jd.content,
+            "init_state": {
+                "messages": [],
+                "jd_raw": jd.content,
+                "resume_raw": resume.content,
+                # persona 는 agent 의 PERSONA_MAP 키를 그대로 넘긴다. 설명 문구로 변환하면
+                # persona_selector 가 인식하지 못하고 기술 리드로 폴백한다.
+                "persona": req.persona,
+                "jd_parsed": {},
+                "resume_parsed": {},
+                "match_result": {},
+                "question_list": [],
+                "current_question_index": 0,
+                "eval_score": 0,
+                "eval_result": {},
+                "eval_keywords": [],
+                "weakness_areas": [],
+                "follow_up_count": 0,
+                "turn_count": 0,
+                "is_finished": False,
+                # 답변마다 resume() 이 덮어쓴다. 첫 질문 생성 시점에는 답변이 없으므로 "text".
+                "input_type": "text",
+                "report_result": {},
+            },
         }
 
-        values = await graph_runner.start(session_id, init_state)
+    async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+        prepared = self.prepare_session(req)
+        session_id = prepared["session_id"]
+
+        values = await graph_runner.start(session_id, prepared["init_state"])
         first_question = values["messages"][-1].content if values.get("messages") else ""
 
-        self.db.add(
-            InterviewSession(
-                session_id=session_id,
-                status="active",
-                persona=req.persona,
-                jd_content=jd.content,
-                users_user_id=self.user.user_id,
-                jds_jd_id=jd.jd_id,
-                resumes_resume_id=resume.resume_id,
-            )
-        )
+        self.db.add(_new_session_row(prepared))
         self._log_message(session_id, "assistant", first_question)
         self.db.commit()
 
@@ -207,14 +354,86 @@ class InterviewService:
 
     # ── 답변 처리 ──────────────────────────────────────
 
+    def _is_rapport_pending(self, values: dict) -> bool:
+        """
+        지금 답변을 기다리는 질문이 라포 형성 질문인지.
+
+        라포 질문은 채점하지 않기로 해서 실시간 점수가 0으로 나간다. 화면에서 그대로
+        보여주면 자기소개를 한 직후에 0점이 뜨므로, 프론트가 패널을 숨길 수 있도록
+        응답에 표시해 준다. (8/20 확정)
+
+        꼬리질문 차례면 라포가 아니다. question_generator 가 새 질문마다
+        follow_up_count 를 0으로 되돌리므로 0이 아니면 follow_up_generator 를 거친 것이다.
+        """
+        if values.get("follow_up_count", 0):
+            return False
+
+        questions = values.get("question_list") or []
+        index = values.get("current_question_index", 0)
+        if not 0 <= index < len(questions):
+            return False
+
+        question = questions[index]
+        return (
+            isinstance(question, dict)
+            and question.get("type") in RAPPORT_QUESTION_TYPES
+        )
+
+    def _asked_within_limit(self, session: InterviewSession) -> bool:
+        """
+        마지막으로 내보낸 질문이 제한 시간 안에 나갔는지.
+
+        답변을 보낸 시각이 아니라 질문이 나간 시각을 본다. 29분에 받은 질문에
+        31분에 답하는 것까지 막으면 질문을 받고도 답할 기회가 없어진다.
+        답변이 길수록 그렇게 되기 쉽다.
+
+        유예 시간 같은 값을 따로 두지 않아도 한 번만 열린다. 이 답변으로 나오는
+        다음 질문은 제한 시간을 넘긴 시각에 기록되므로 그 답변은 거절된다.
+
+        기준 시각은 assistant 메시지의 created_at 이다. 질문을 내보낼 때마다
+        _log_message 가 행을 남기므로 별도 컬럼이 필요 없다.
+        """
+        row = (
+            self.db.query(InterviewMessage.created_at)
+            .filter(
+                InterviewMessage.interview_sessions_session_id == session.session_id,
+                InterviewMessage.role == "assistant",
+            )
+            # created_at 은 같은 초에 여러 건이 찍힐 수 있어 PK 로 정렬한다.
+            .order_by(InterviewMessage.message_id.desc())
+            .first()
+        )
+        if row is None or row[0] is None:
+            return False
+
+        elapsed_min = (row[0] - session.created_at).total_seconds() / 60
+        return elapsed_min <= INTERVIEW_TIME_LIMIT_MIN
+
     async def process_answer(
         self, session_id: str, answer: str, input_type: str = "text"
     ) -> ChatResponse:
         session = self._get_session(session_id)
 
-        _, finished = await graph_runner.snapshot(session_id)
+        pending, finished = await graph_runner.snapshot(session_id)
         if finished:
             raise HTTPException(status_code=409, detail="이미 종료된 면접입니다.")
+
+        # 지금 답변하는 질문이 라포 형성 질문인지. 그래프를 재개하면 상태가 다음 질문으로
+        # 넘어가므로 재개 전에 봐둔다.
+        is_rapport = self._is_rapport_pending(pending)
+
+        # 제한 시간 확인. 화면 타이머가 0이 되면 프론트가 종료를 걸어주지만, 탭을
+        # 열어둔 채 계속 답변하면 서버가 막을 방법이 없다. 여기서 거절만 하고
+        # 리포트를 자동 생성하지는 않는다. 종료는 LLM 을 두 번 부르는 동작이라
+        # 사용자가 종료 버튼을 눌렀을 때 하는 편이 낫다.
+        if INTERVIEW_TIME_LIMIT_MIN > 0 and session.created_at:
+            elapsed_min = (datetime.now() - session.created_at).total_seconds() / 60
+            if elapsed_min > INTERVIEW_TIME_LIMIT_MIN and not self._asked_within_limit(session):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"면접 시간 {INTERVIEW_TIME_LIMIT_MIN}분이 지났습니다. "
+                           "면접을 종료하고 결과를 확인해주세요.",
+                )
 
         values = await graph_runner.resume(session_id, answer, input_type)
         _, finished = await graph_runner.snapshot(session_id)
@@ -233,6 +452,11 @@ class InterviewService:
             # 따라서 0이 아니라는 건 follow_up_generator 를 거쳤다는 뜻.
             question_type = "follow_up" if follow_up_count > 0 else "next"
             next_question = values["messages"][-1].content if values.get("messages") else ""
+            # 라포 질문에서 평가 질문으로 곧바로 넘어가면 흐름이 끊긴다. 화면에 나가는
+            # 문장에만 붙이고 그래프가 들고 있는 질문은 그대로 둔다. 노드에서 붙이면
+            # report_generator 가 이 문구까지 질문으로 읽는다.
+            if is_rapport and next_question:
+                next_question = f"{RAPPORT_TRANSITION_MESSAGE}\n\n{next_question}"
 
         self._log_message(session_id, "user", answer, eval_score)
         self._log_message(session_id, "assistant", next_question)
@@ -247,9 +471,30 @@ class InterviewService:
         return ChatResponse(
             next_question=next_question,
             question_type=question_type,
+            is_rapport=is_rapport,
             realtime_score=report_mapper.to_realtime_score(eval_result),
             realtime_feedback=report_mapper.to_realtime_feedback(eval_result),
         )
+
+    def _realtime_scores(self, session_id: str) -> list[int]:
+        """
+        답변마다 매긴 실시간 평가 점수를 순서대로. 라포 질문 답변은 뺀다.
+
+        답변을 받을 때 interview_messages 에 함께 남겨둔 값이라 다시 채점하지 않는다.
+        라포 답변은 채점 대상이 아닌데도 중립 점수(80)가 들어가 있어, 평균에 섞이면
+        점수가 올라간다. 첫 질문이 라포이므로 첫 답변 하나를 뺀다.
+        """
+        rows = (
+            self.db.query(InterviewMessage.eval_score)
+            .filter(
+                InterviewMessage.interview_sessions_session_id == session_id,
+                InterviewMessage.role == "user",
+            )
+            .order_by(InterviewMessage.message_id)
+            .all()
+        )
+        scores = [row[0] for row in rows if row[0] is not None]
+        return scores[1:] if scores else []
 
     def _save_result(self, session_id: str, values: dict) -> None:
         """
@@ -257,11 +502,36 @@ class InterviewService:
 
         match_result 를 함께 읽는 게 중요하다. resume_score 는 여기서만 계산할 수 있고,
         저장하지 않으면 체크포인트가 사라진 뒤 0 으로 떨어진다.
+
+        점수는 실시간 평가 결과로 맞춘다. 같은 답변을 report_generator 가 다시 채점해서
+        화면 세 곳(실시간 · 피드백 보고서 · 결과 리포트)의 숫자가 서로 달랐다.
+        프롬프트도 "각 답변의 평가 결과를 종합·평균해 산출" 하도록 지시하고 있어
+        방향은 같고, 그 계산을 여기서 확실히 한다.
         """
         report = values.get("report_result") or {}
 
+        feedback_rows = report_mapper.to_question_feedback_rows(report)
+        realtime = self._realtime_scores(session_id)
+
+        # 답변 수와 피드백 항목 수가 같을 때만 점수를 바꿔 끼운다. 꼬리질문이 섞이거나
+        # 리포트가 항목을 합치면 개수가 어긋나는데, 그때 순서로 짝지으면 엉뚱한 질문에
+        # 엉뚱한 점수가 붙는다. 어긋나면 리포트 점수를 그대로 두고 로그만 남긴다.
+        if realtime and len(realtime) == len(feedback_rows):
+            for row, score in zip(feedback_rows, realtime):
+                row["score"] = score
+        elif realtime:
+            logger.warning(
+                "실시간 점수 %d개와 리포트 피드백 %d개가 맞지 않아 점수를 그대로 둡니다 "
+                "(session_id=%s)",
+                len(realtime), len(feedback_rows), session_id,
+            )
+
+        # 면접 점수는 질문별 점수의 평균이다. 위에서 바꿔 끼웠으면 실시간 평균과 같아지고,
+        # 개수가 어긋나 그대로 뒀으면 최소한 리포트 안에서는 총점과 질문별이 맞는다.
+        interview_score = report_mapper.average_score([r["score"] for r in feedback_rows])
+
         result = InterviewResult(
-            **report_mapper.to_result_columns(values),
+            **report_mapper.to_result_columns(values, interview_score=interview_score),
             eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
             weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
             # 컬럼 매핑이 틀렸을 때 재계산할 수 있도록 원본을 남긴다.
@@ -269,16 +539,21 @@ class InterviewService:
             interview_sessions_session_id=session_id,
         )
         result.question_feedbacks = [
-            InterviewQuestionFeedback(**row)
-            for row in report_mapper.to_question_feedback_rows(report)
+            InterviewQuestionFeedback(**row) for row in feedback_rows
         ]
 
         # resume_optimizer 가 종료 직전에 만든다. 없을 수도 있어 있을 때만 붙인다.
         optimization = values.get("resume_optimization") or {}
-        if optimization.get("matched_keywords") or optimization.get("suggestions"):
+        if any(
+            optimization.get(key)
+            for key in ("matched_keywords", "missing_keywords", "suggestions")
+        ):
             result.resume_optimization = InterviewResumeOptimization(
                 matched_keywords=json.dumps(
                     optimization.get("matched_keywords") or [], ensure_ascii=False
+                ),
+                missing_keywords=json.dumps(
+                    optimization.get("missing_keywords") or [], ensure_ascii=False
                 ),
                 suggestions=json.dumps(
                     optimization.get("suggestions") or [], ensure_ascii=False
@@ -415,21 +690,27 @@ class InterviewService:
             # 아직 저장 전이면 체크포인트에서 읽어본다.
             values = await self._checkpoint_values(session_id)
             data = values.get("resume_optimization") or {}
-            if not (data.get("matched_keywords") or data.get("suggestions")):
+            if not any(
+                data.get(key)
+                for key in ("matched_keywords", "missing_keywords", "suggestions")
+            ):
                 raise HTTPException(
                     status_code=409,
                     detail="면접이 아직 종료되지 않아 이력서 최적화 결과가 없습니다.",
                 )
             matched = data.get("matched_keywords") or []
+            missing = data.get("missing_keywords") or []
             suggestions = data.get("suggestions") or []
         else:
             matched = json.loads(optimization.matched_keywords or "[]")
+            missing = json.loads(optimization.missing_keywords or "[]")
             suggestions = json.loads(optimization.suggestions or "[]")
 
         return ResumeOptimizationResponse(
             session_id=session_id,
             resume_id=session.resumes_resume_id,
             matched_keywords=[str(k) for k in matched],
+            missing_keywords=[str(k) for k in missing],
             suggestions=[ResumeSuggestion(**s) for s in suggestions if isinstance(s, dict)],
         )
 

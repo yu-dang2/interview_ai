@@ -78,11 +78,17 @@ def me(user: User = Depends(current_user)):
 def kakao_login():
     """카카오 OAuth 로그인"""
     # TODO: 카카오 OAuth 구현
-    raise HTTPException(status_code=501, detail="카카오 OAuth 미구현")
+    raise HTTPException(
+        status_code=501,
+        detail="카카오 로그인은 준비 중입니다. 이메일로 로그인해주세요.",
+    )
 
 
 @router.get("/google")
 def google_login():
     """구글 OAuth 로그인"""
     # TODO: 구글 OAuth 구현
-    raise HTTPException(status_code=501, detail="구글 OAuth 미구현")
+    raise HTTPException(
+        status_code=501,
+        detail="구글 로그인은 준비 중입니다. 이메일로 로그인해주세요.",
+    )

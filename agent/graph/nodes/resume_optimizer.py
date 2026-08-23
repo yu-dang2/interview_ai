@@ -7,8 +7,8 @@ resume_optimizer 노드
 
 - report_generator 다음에 실행되므로 report_result가 State에 이미 존재 → 면접 근거로 재사용
   (전체 대화록 재전송 대신 리포트 요약 + 누적 키워드/약점을 넘겨 토큰 절약 + 환각 억제).
-- 프롬프트 출력 키를 화면·DB 기준으로 정규화하고(matched_jd_keywords→matched_keywords,
-  optimizations→suggestions) 각 제안에 id를 부여한다. 프롬프트 파일은 수정 금지 영역이라 노드에서 변환.
+- 프롬프트 출력 키를 화면·DB 기준으로 정규화하고(optimizations→suggestions) 각 제안에
+  id를 부여한다. 프롬프트 파일은 수정 금지 영역이라 노드에서 변환.
 - 실패 격리: 리포트는 성공했는데 최적화만 실패해도 면접 전체가 실패하면 안 되므로,
   LLM/파싱 실패 시 빈 결과를 반환하고 그래프는 정상 종료한다.
 - 답변 0개(중도 이탈) 세션: 면접 근거가 없어 환각 위험이 커 LLM 미호출로 빈 결과 반환.
@@ -26,20 +26,31 @@ from agent.graph.utils import call_llm
 logger = logging.getLogger(__name__)
 
 # 실패/스킵 시 반환할 빈 결과 (화면·DB 기준 구조 유지)
-EMPTY_OPTIMIZATION = {"matched_keywords": [], "suggestions": []}
+EMPTY_OPTIMIZATION = {"matched_keywords": [], "missing_keywords": [], "suggestions": []}
+
+
+def _keywords(value) -> list:
+    """키워드 배열만 통과시킨다. 형식이 어긋나면 빈 배열(실패 격리)."""
+    return value if isinstance(value, list) else []
 
 
 def _normalize(raw) -> dict:
     """
     프롬프트 출력을 화면·DB 기준으로 변환한다.
-      matched_jd_keywords → matched_keywords
+      matched_keywords    → 그대로 통과
+      missing_keywords    → 그대로 통과
       optimizations       → suggestions (각 원소에 id 부여)
     section/original/improved는 그대로, reason은 유지(화면 미사용, 향후 활용).
     """
     if not isinstance(raw, dict):
         return dict(EMPTY_OPTIMIZATION)
 
-    matched = raw.get("matched_jd_keywords", [])
+    # 8b714c7 에서 프롬프트가 matched_jd_keywords → matched_keywords/missing_keywords 로
+    # 바뀌었는데 여기가 따라가지 않아, .get 기본값 때문에 예외 없이 빈 배열만 나갔다.
+    # missing_keywords 는 화면에 "추가 추천 키워드"로 노출하기로 확정돼 함께 내보낸다.
+    # (백엔드 InterviewResumeOptimization.missing_keywords / 프론트 07 페이지가 같은 이름으로 대기 중)
+    matched = raw.get("matched_keywords", [])
+    missing = raw.get("missing_keywords", [])
     optimizations = raw.get("optimizations", [])
 
     suggestions = []
@@ -55,7 +66,8 @@ def _normalize(raw) -> dict:
         })
 
     return {
-        "matched_keywords": matched if isinstance(matched, list) else [],
+        "matched_keywords": _keywords(matched),
+        "missing_keywords": _keywords(missing),
         "suggestions": suggestions,
     }
 

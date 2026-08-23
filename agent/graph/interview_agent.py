@@ -1,8 +1,9 @@
 """
 AI 면접관 에이전트 - 그래프 조립 및 실행
 
-사용자 답변 수신은 노드가 아닌 while 루프에서 처리.
-유정님 FastAPI 연동 시 실행 루프 부분 변경 예정.
+그래프 조립(build_graph)은 백엔드와 CLI가 공유한다.
+사용자 답변 수신은 노드가 아니라 그래프 밖에서 처리한다 —
+실제 서비스는 backend/services/graph_runner.py 가, 단독 실행은 아래 main()의 while 루프가 맡는다.
 """
 
 import asyncio
@@ -16,6 +17,7 @@ from agent.graph.nodes.persona_selector import persona_selector
 from agent.graph.nodes.jd_parser import jd_parser
 from agent.graph.nodes.resume_parser import resume_parser
 from agent.graph.nodes.jd_resume_matcher import jd_resume_matcher
+from agent.graph.nodes.question_retriever import question_retriever
 from agent.graph.nodes.question_generator import question_generator
 from agent.graph.nodes.answer_evaluator import answer_evaluator
 from agent.graph.nodes.follow_up_generator import follow_up_generator
@@ -30,16 +32,16 @@ def build_graph(checkpointer=None, interrupt_before=None):
     """
     그래프를 조립해서 컴파일된 객체를 반환.
 
-    checkpointer=None이면 기존과 동일하게 동작한다.
-    유정님 FastAPI 연동 시 checkpointer를 주입해서 대화 상태를 보존할 수 있다.
+    checkpointer=None이면 대화 상태를 보존하지 않는다(단발 실행·테스트용).
+    백엔드는 graph_runner.init()에서 AsyncSqliteSaver를 주입해 상태를 보존한다.
 
     interrupt_before:
         휴먼-인-더-루프(HITL) 모드 opt-in. ["answer_evaluator"]를 주면
         질문 생성 노드(question_generator/follow_up_generator)에서 answer_evaluator
         직전까지 실행한 뒤 일시정지한다. 이때만 question_generator → answer_evaluator
         엣지를 추가해 하나의 연속 그래프로 순환하게 만든다.
-        None(기본값)이면 기존 토폴로지(첫 질문 생성 후 종료)를 그대로 유지하므로
-        백엔드 등 기존 사용처에는 영향이 없다.
+        None(기본값)이면 첫 질문 생성 후 종료하는 단발 토폴로지가 된다.
+        백엔드(graph_runner)는 ["answer_evaluator"]를 주입해 순환 모드로 쓴다.
     """
     builder = StateGraph(
         InterviewState,
@@ -52,6 +54,7 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_node("jd_parser", jd_parser)
     builder.add_node("resume_parser", resume_parser)
     builder.add_node("jd_resume_matcher", jd_resume_matcher)
+    builder.add_node("question_retriever", question_retriever)
     builder.add_node("question_generator", question_generator)
     builder.add_node("answer_evaluator", answer_evaluator)
     builder.add_node("follow_up_generator", follow_up_generator)
@@ -76,7 +79,21 @@ def build_graph(checkpointer=None, interrupt_before=None):
     builder.add_edge("jd_parser", "jd_resume_matcher")
     builder.add_edge("resume_parser", "jd_resume_matcher")
 
+    # 직무 지식 검색(RAG)도 같은 방식으로 병렬화한다.
+    # question_retriever 는 jd_parsed 만 읽고 retrieved_knowledge 에만 쓰므로
+    # jd_resume_matcher 와 반환 키가 겹치지 않는다. jd_parser 에서 fan-out 시키면
+    # matcher(LLM 호출, 수 초)와 같은 super-step 에서 돌아 시작 시간에 비용을 더하지 않는다.
+    # (retriever 는 임베딩 왕복 1회, 수백 ms)
+    #
+    # fan-in: question_generator 의 부모가 jd_resume_matcher 와 question_retriever 둘이므로
+    # 둘 다 끝나야 열린다. match_result 와 retrieved_knowledge 가 모두 채워진 State 를 본다.
+    # 순환 경로(answer_evaluator → topic_router → question_generator)로 재진입할 때는
+    # retriever 가 스케줄되지 않으므로 재검색이 일어나지 않는다. retrieved_knowledge 는
+    # LastValue 채널이라 첫 검색 결과가 그대로 남는다.
+    builder.add_edge("jd_parser", "question_retriever")
+
     builder.add_edge("jd_resume_matcher", "question_generator")
+    builder.add_edge("question_retriever", "question_generator")
 
     # question_generator 나가는 엣지(조건부, question_router 판단):
     #   - is_finished == True → report_generator (백엔드 종료 주입 / 질문 소진)
@@ -116,8 +133,8 @@ def build_graph(checkpointer=None, interrupt_before=None):
 graph = build_graph()
 
 
-# ── 실행 루프 ──────────────────────────────────────────
-# 유정님 FastAPI 연동 시 이 부분 변경 예정
+# ── 실행 루프 (CLI 단독 실행 전용) ─────────────────────
+# 실제 서비스 경로는 backend/services/graph_runner.py 다. 여기는 그래프만 따로 돌려볼 때 쓴다.
 #
 # checkpointer(InMemorySaver) + thread_id 방식:
 #   - 하나의 그래프를 매 턴 재사용하고, 전체 State는 checkpointer가 보존한다.

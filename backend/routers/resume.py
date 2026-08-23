@@ -11,15 +11,11 @@
     GET  /resume/{resume_id}               - 특정 이력서 조회
     GET  /resume/{resume_id}/optimize      - 이력서 최적화 제안 조회
     POST /resume/{resume_id}/apply         - 최적화 제안 적용 (새 이력서 생성)
-    GET  /resume/{resume_id}/download      - 이력서 docx 다운로드
 """
 
-import io
 import json
 
-from docx import Document
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.core.deps import current_user
@@ -62,7 +58,7 @@ def _get_owned(db: Session, resume_id: int, user: User) -> Resume:
     """
     resume = db.get(Resume, resume_id)
     if resume is None or resume.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"이력서를 찾을 수 없습니다: {resume_id}")
+        raise HTTPException(status_code=404, detail="이력서를 찾을 수 없습니다.")
     return resume
 
 
@@ -110,12 +106,11 @@ def get_resume(
 
 # ── 이력서 최적화 ──────────────────────────────────────
 # 제안 자체는 면접 종료 시 resume_optimizer 노드가 만든다. 여기서는 그 결과를
-# 이력서 기준으로 꺼내 쓰고(조회), 골라서 새 이력서로 만들고(적용), 파일로 내보낸다(다운로드).
-
-_DOWNLOAD_NOTICE = (
-    "※ 개인정보 보호를 위해 이메일·연락처·주소 등은 [항목] 형태로 대체되어 있습니다. "
-    "실제 지원 시에는 해당 부분을 직접 입력해주세요."
-)
+# 이력서 기준으로 꺼내 쓰고(조회), 골라서 새 이력서로 만든다(적용).
+#
+# docx 다운로드는 뺐다. 저장하는 건 추출된 텍스트라 원본 서식이 복원되지 않고,
+# 비식별화 때문에 연락처 자리에 자리표시자가 그대로 나간다. 그 상태의 파일을
+# 내려주면 지원자가 그대로 제출할 위험이 있다. (2026-08-19 회의 확정)
 
 
 def _latest_optimization(db: Session, resume: Resume):
@@ -155,6 +150,7 @@ def optimize_resume(
         session_id=row.result.interview_sessions_session_id,
         resume_id=resume_id,
         matched_keywords=json.loads(row.matched_keywords or "[]"),
+        missing_keywords=json.loads(row.missing_keywords or "[]"),
         suggestions=[
             ResumeSuggestion(**s)
             for s in json.loads(row.suggestions or "[]")
@@ -180,7 +176,7 @@ def apply_optimization(
 
     session = db.get(InterviewSession, req.session_id)
     if session is None or session.users_user_id != user.user_id:
-        raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {req.session_id}")
+        raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
 
     row = (
         db.query(InterviewResumeOptimization)
@@ -221,40 +217,4 @@ def apply_optimization(
         source_resume_id=resume_id,
         applied_count=applied,
         content=content,
-    )
-
-
-@router.get("/{resume_id}/download")
-def download_resume(
-    resume_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(current_user),
-):
-    """
-    이력서를 docx 파일로 내려준다.
-
-    우리가 저장하는 건 추출된 텍스트라 원본 서식은 복원되지 않는다. 최적화를 적용한
-    이력서(=새로 만들어진 resume_id)를 넘기면 그 내용으로 파일이 만들어진다.
-
-    본문에 안내 문구를 넣는 이유: 저장 시점에 연락처·주소가 비식별화되므로 파일에도
-    자리표시자가 그대로 나온다. 안내가 없으면 사용자는 자기 정보가 사라진 줄 안다.
-    """
-    resume = _get_owned(db, resume_id, user)
-
-    document = Document()
-    document.add_paragraph(_DOWNLOAD_NOTICE)
-    document.add_paragraph("")
-    for line in (resume.content or "").splitlines():
-        document.add_paragraph(line)
-
-    buffer = io.BytesIO()
-    document.save(buffer)
-    buffer.seek(0)
-
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f'attachment; filename="resume_{resume_id}.docx"'
-        },
     )

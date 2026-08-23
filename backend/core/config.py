@@ -85,13 +85,48 @@ CORS_ORIGINS = [
 INTERVIEW_DAILY_LIMIT = int(os.getenv("INTERVIEW_DAILY_LIMIT", "10"))
 INTERVIEW_ACTIVE_LIMIT = int(os.getenv("INTERVIEW_ACTIVE_LIMIT", "3"))
 
+# ── 면접 제한 시간 ──────────────────────────────────────
+# 화면 타이머와 같은 값이다. 프론트가 0초에 종료를 걸어주지만, 탭을 열어둔 채
+# 계속 답변하면 서버가 막을 방법이 없어 여기서도 확인한다.
+INTERVIEW_TIME_LIMIT_MIN = int(os.getenv("INTERVIEW_TIME_LIMIT_MIN", "30"))
+
+# 이 시간이 지나도 active 로 남아 있는 세션은 정리한다.
+# 브라우저를 그냥 닫으면 종료 요청이 오지 않아 세션이 영원히 active 로 남고,
+# 동시 진행 제한(INTERVIEW_ACTIVE_LIMIT)에 걸려 새 면접을 시작하지 못한다.
+# 제한 시간의 두 배로 잡아, 진행 중인 면접을 건드리지 않게 여유를 둔다.
+INTERVIEW_STALE_AFTER_MIN = int(
+    os.getenv("INTERVIEW_STALE_AFTER_MIN", str(INTERVIEW_TIME_LIMIT_MIN * 2))
+)
+
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
 # report_generator가 마지막 AIMessage로 리포트 JSON 전체를 넣기 때문에,
 # 그 JSON을 그대로 채팅 UI에 내보내지 않으려고 이 문구로 대체한다.
 CLOSING_MESSAGE = "면접이 종료되었습니다. 결과 리포트를 확인해 주세요."
 
+# 라포 형성 질문(자기소개·지원 동기) 다음 질문 앞에 붙이는 안내.
+# 가벼운 질문에서 평가 질문으로 곧바로 넘어가면 흐름이 끊긴다.
+# 페르소나마다 다음에 오는 질문 유형이 달라서 "기술 질문"으로 특정하지 않는다.
+RAPPORT_TRANSITION_MESSAGE = "답변 감사합니다. 이제 본격적으로 면접 질문을 시작하겠습니다."
+
+# 라포 형성 질문으로 볼 question_list 의 type 값.
+# 프롬프트는 지금 "자기소개"로 내보낸다. 지원 동기 질문도 같은 자리에 들어가서
+# "라포"로 바꿔달라고 요청해둔 상태다(8/20). 답을 받기 전에도 동작하도록 둘 다 받는다.
+# 값이 정해지면 쓰지 않는 쪽을 지운다.
+RAPPORT_QUESTION_TYPES = ("라포", "자기소개")
+
+# 면접 시작 진행 단계. 첫 질문까지 90~140초가 걸려서 화면이 멈춰 보이므로,
+# 어느 단계인지 흘려보낸다. (2026-08-21 지원님 요청)
+#
+# 문구는 프론트가 바꿀 수 있어야 해서 stage 키와 함께 내보낸다. label 은 참고용이다.
+INTERVIEW_START_STAGES = {
+    "parsing": "이력서·채용공고 읽는 중",
+    "matching": "직무 적합도 분석 중",
+    "generating": "맞춤 질문 만드는 중",
+}
+
 # 최종 총점 = 이력서 점수 × RESUME_WEIGHT + 면접 점수 × INTERVIEW_WEIGHT
+# 3 : 7 은 2026-08-16 회의에서 확정한 비율이다.
 RESUME_WEIGHT = 0.3
 INTERVIEW_WEIGHT = 0.7
 

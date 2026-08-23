@@ -154,9 +154,10 @@ def analyze(video_id: int) -> None:
             sample_every=VIDEO_SAMPLE_EVERY,
             with_timeline=False,
         )
-    except RuntimeError as e:
-        # _load_analyze_video 의 설치 안내. 경로가 들어가지 않으므로 그대로 쓴다.
-        error = str(e)
+    except RuntimeError:
+        # _load_analyze_video 의 설치 안내. 서버 설정 문제라 사용자가 할 수 있는
+        # 일이 없어 그대로 내보내지 않는다. 조치 방법은 로그에 남는다.
+        error = "영상 분석을 할 수 없습니다. 면접 결과는 정상적으로 확인하실 수 있습니다."
         logger.exception("영상 분석 모듈 로드 실패 (video_id=%s)", video_id)
     except ValueError:
         # analyze_video 가 파일을 못 열었을 때. 깨진 파일이거나 확장자만 영상인 경우다.
@@ -208,7 +209,7 @@ class VideoService:
         """내 세션만 반환. 없거나 남의 것이면 404."""
         session = self.db.get(InterviewSession, session_id)
         if session is None or session.users_user_id != self.user.user_id:
-            raise HTTPException(status_code=404, detail=f"세션을 찾을 수 없습니다: {session_id}")
+            raise HTTPException(status_code=404, detail="면접 기록을 찾을 수 없습니다.")
         return session
 
     def _my_videos_query(self):
@@ -271,7 +272,12 @@ class VideoService:
         except HTTPException:
             raise
         except OSError as e:
-            raise HTTPException(status_code=500, detail=f"영상을 저장하지 못했습니다: {e}")
+            # OSError 문자열에는 서버의 파일 경로가 들어 있어 그대로 내보내지 않는다.
+            logger.error("영상 저장 실패 (session=%s): %s: %s", session_id, type(e).__name__, e)
+            raise HTTPException(
+                status_code=500,
+                detail="영상을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.",
+            )
 
         if size == 0:
             video_storage.delete(key)
@@ -358,7 +364,7 @@ class VideoService:
         """영상 파일 자체를 내려준다. S3 로 바꾸면 presigned URL 리다이렉트로 교체할 자리."""
         row = self._my_videos_query().filter(InterviewVideo.video_id == video_id).first()
         if row is None:
-            raise HTTPException(status_code=404, detail=f"영상을 찾을 수 없습니다: {video_id}")
+            raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
 
         path = video_storage.local_path(row.storage_key)
         if not path.exists():
