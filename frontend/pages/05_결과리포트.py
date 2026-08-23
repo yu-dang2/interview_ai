@@ -5,7 +5,7 @@ from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error
+from utils.ui import show_error, show_error_once
 from utils import api
 
 try:
@@ -30,7 +30,6 @@ if _sid_param and _sid_param != get("session_id"):
     state_set("session_id", _sid_param)
     state_set("result", None)
 
-# 사이드바로 바로 들어와 session_id가 아예 없는 경우 — 가장 최근 면접으로 채운다.
 ensure_latest_session_id()
 
 render_sidebar(active="결과 리포트")
@@ -96,7 +95,7 @@ if result_data:
     total_score_val     = result_data.get("total_score", 0)
     grade_val           = result_data.get("grade") or "-"
 else:
-    show_error("결과를 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
+    show_error_once("결과를 불러오지 못했습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.", "result_fetch_failed")
     CATEGORIES   = ["논리성", "커뮤니케이션", "전문지식", "태도", "문제해결력"]
     MY_SCORES    = [0, 0, 0, 0, 0]
     AVG_SCORES   = [0, 0, 0, 0, 0]
@@ -349,17 +348,18 @@ with tab_video:
                 time.sleep(3.0)
                 st.rerun()
 
+            _video_error_msg = (video_metrics or {}).get("error") or "일시적인 문제로 영상 분석을 완료하지 못했습니다."
             st.markdown(
                 '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
                 'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:120px;box-sizing:border-box;">'
                 '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
-                '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
-                '일시적인 문제로 영상 분석을 완료하지 못했습니다.<br>'
+                f'<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">{_video_error_msg}<br>'
                 '답변 내용과 점수에는 영향이 없으니 안심하세요.'
                 '</p>'
-                '</div><div style="height:32px"></div>',
+                '</div>',
                 unsafe_allow_html=True
             )
+            st.markdown('<div style="height:32px"></div>', unsafe_allow_html=True)
 
         elif video_metrics and video_metrics.get("status") == "done":
             WEBCAM_RESULTS = []
