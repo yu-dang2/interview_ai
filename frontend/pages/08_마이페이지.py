@@ -392,7 +392,8 @@ elif _mypage_tab == "history":
     COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(150px,1.6fr)"
 
     def _play_btn(video_url: str) -> str:
-        full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
+        # 이 주소는 브라우저가 직접 불러오므로 PUBLIC_BASE_URL 을 쓴다.
+        full_url = f"{api.PUBLIC_BASE_URL}{video_url}" if video_url else ""
         return (
             f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
             'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'

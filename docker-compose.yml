@@ -4,6 +4,10 @@
 #   docker compose down          (데이터는 볼륨에 남는다)
 #   docker compose down -v       (볼륨까지 삭제)
 #
+# 다 뜨면 화면은 http://localhost:8501, API 문서는 http://localhost:8000/docs.
+# 직무 지식 인덱스는 최초 한 번만 만들면 볼륨에 남는다.
+#   docker compose exec api python scripts/build_knowledge_index.py
+#
 # .env 파일이 필요하다. .env.example 을 복사해서 값을 채운다.
 # 특히 SECRET_KEY 는 반드시 고정값을 넣어야 재배포해도 로그인이 유지된다.
 
@@ -62,6 +66,46 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  web:
+    # api 와 같은 이미지를 쓰고 실행 명령만 다르다. 레이어 캐시가 살아 있어
+    # 두 번째 빌드는 거의 즉시 끝난다.
+    build: .
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # 백엔드 주소가 두 벌인 이유:
+      #
+      #   API_BASE_URL         Streamlit 서버가 백엔드를 부를 때. 컨테이너끼리
+      #                        통신하므로 서비스 이름(api)을 쓴다.
+      #   PUBLIC_API_BASE_URL  화면의 자바스크립트가 부를 때. STT 업로드처럼
+      #                        사용자 브라우저에서 나가는 요청이라 밖에서 닿는
+      #                        주소여야 한다. 여기에 http://api:8000 을 넣으면
+      #                        사용자 PC 에서 그 이름을 찾지 못해 실패한다.
+      #
+      # 배포할 때는 PUBLIC_API_BASE_URL 과 CORS_ORIGINS 를 실제 주소로 바꾼다.
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "8501:8501"
+    command:
+      - streamlit
+      - run
+      - frontend/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      # 컨테이너에는 브라우저도 사용자 입력도 없다. headless 가 아니면
+      # 첫 실행에서 이메일을 물으며 멈춘다.
+      - --server.headless=true
+      - --browser.gatherUsageStats=false
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   db_data:
