@@ -3,6 +3,10 @@
 채용 공고를 JSON으로 파싱하는 모듈입니다.
 텍스트 입력, 이미지 업로드, URL 크롤링 3가지 입력 방식을 지원합니다.
 
+> 참고: 아래 프롬프트별 테스트 결과 섹션은 초기 개발 단계의 기록입니다.
+> 점수 척도(0~10 → 0~100), 질문 개수 등 일부 수치는 현재 동작과 다를 수 있으니,
+> 최신 동작은 각 프롬프트 파일의 docstring과 코드를 기준으로 확인하세요.
+
 
 ---
 
@@ -30,22 +34,24 @@ playwright install chromium
 사용자가 채용 공고 텍스트를 복사해서 붙여넣는 방식입니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_text
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_text
 
-result = parse_jd_from_text("채용 공고 텍스트...")
+result = asyncio.run(parse_jd_from_text("채용 공고 텍스트..."))
 print(result)
 ```
 
 
 ### 2. 이미지 업로드
 
-채용 공고 스크린샷을 GPT-4o Vision 또는 Gemini로 텍스트 변환 후 파싱합니다.
+채용 공고 스크린샷을 GPT-4o Vision으로 텍스트 변환 후 파싱합니다.
 잡코리아, 사람인 등 이미지 기반 채용 공고에 사용합니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_image
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_image
 
-result = parse_jd_from_image("screenshot.png")
+result = asyncio.run(parse_jd_from_image("screenshot.png"))
 ```
 
 처리 흐름:
@@ -63,9 +69,10 @@ Playwright로 채용 공고 페이지를 크롤링하여 파싱합니다.
 "상세 정보 더 보기" 같은 동적 로딩 콘텐츠도 자동으로 처리합니다.
 
 ```python
-from agent.parsers.jd_parser_free import parse_jd_from_url
+import asyncio
+from agent.parsers.jd_parser import parse_jd_from_url
 
-result = parse_jd_from_url("https://www.wanted.co.kr/wd/328573")
+result = asyncio.run(parse_jd_from_url("https://www.wanted.co.kr/wd/328573"))
 ```
 
 처리 흐름:
@@ -146,21 +153,21 @@ URL 입력
 ---
 
 
-## CLI 테스트 (무료)
+## CLI 테스트
 
 
 ### 사전 준비
 
-1. https://aistudio.google.com/apikey 에서 Gemini API 키를 발급받습니다 (무료).
+1. https://platform.openai.com/api-keys 에서 OpenAI API 키를 발급받습니다.
 
-2. API 키를 환경변수로 설정합니다.
+2. API 키를 환경변수로 설정합니다. (또는 프로젝트 루트 .env 의 OPENAI_API_KEY 사용)
 
 ```bash
 # Windows PowerShell
-$env:GEMINI_API_KEY = "your-key"
+$env:OPENAI_API_KEY = "your-key"
 
 # Mac / Linux
-export GEMINI_API_KEY=your-key
+export OPENAI_API_KEY=your-key
 ```
 
 3. 필요한 패키지를 설치합니다.
@@ -174,15 +181,15 @@ pip install requests
 
 ```bash
 # 텍스트 입력 테스트
-python jd_parser_free.py text
+python jd_parser.py text
 
 # 이미지 파싱 테스트
-python jd_parser_free.py image screenshot.png
+python jd_parser.py image screenshot.png
 
 # URL 크롤링 테스트 (playwright 추가 설치 필요)
 pip install playwright
 playwright install chromium
-python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
+python jd_parser.py url https://www.wanted.co.kr/wd/328573
 ```
 
 
@@ -192,7 +199,7 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 ## 테스트 결과
 
 
-### JD 파싱 (프롬프트 v2)
+### JD 파싱
 
 
 #### wavve Backend 개발자
@@ -210,8 +217,7 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 - 인성/기술 분리 정상 동작 확인
 
 
-### 이력서 파싱 (프롬프트 v1)
-
+### 이력서 파싱
 
 #### 가상 이력서 (백엔드 개발자 김서준, 4년차)
 
@@ -220,11 +226,10 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 - projects: 경력에서 프로젝트 단위 분리 2개 -- 정상
 - achievements: "응답속도 60% 개선", "일 50만 건 처리" 정량적 성과 추출 -- 정상
 - soft_skills: "코드 리뷰 문화 정착 주도", "팀 협업 중심 개발" 등 -- 정상
-- 인성/기술 분리: v1에서 일부 기술 항목 혼입 발견 -> 규칙 강화 완료
+- 인성/기술 분리: 초기에 일부 기술 항목이 혼입되던 문제를 규칙 강화로 해결
 
 
-### JD <-> 이력서 매칭 (프롬프트 v1)
-
+### JD <-> 이력서 매칭
 
 #### 배민 JD + 가상 이력서 (김서준)
 
@@ -234,11 +239,10 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 - weakness_areas: 경력 연차 부족 (4년 vs 7년), Linux/Unix 미기재 등 4개 -- 정상
 - experience_fit: "부족" (4년 vs 7년) -- 정상
 - interview_topics: 기술 5개 + 인성 2개, sample_question 포함 -- 정상
-- 상위/하위 기술 매칭: v1에서 Spring Boot-Spring Framework 미매칭 발견 -> 규칙 추가 완료
+- 상위/하위 기술 매칭: 초기에 Spring Boot-Spring Framework가 미매칭되던 문제를 규칙 추가로 해결
 
 
-### 답변 평가 (프롬프트 v1)
-
+### 답변 평가
 
 #### 부족한 답변 테스트 (배민 Redis 캐싱 질문)
 
@@ -251,8 +255,7 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 - follow_up_focus: APM 분석, Cache Aside/Write Through, 캐시 만료 정책, 데이터 정합성 -- 구체적
 
 
-### 면접 질문 생성 (프롬프트 v1)
-
+### 면접 질문 생성
 
 #### 배민 JD + 김서준 이력서 + 기술 리드 페르소나
 
@@ -263,8 +266,7 @@ python jd_parser_free.py url https://www.wanted.co.kr/wd/328573
 - intent: 각 질문의 검증 목적 명확 -- 정상
 
 
-### 꼬리질문 생성 (프롬프트 v1)
-
+### 꼬리질문 생성
 
 #### Redis 캐싱 부족한 답변 (score 3) 기반 꼬리질문
 
@@ -297,16 +299,15 @@ system_prompt = PERSONA_TECH_LEAD + QUESTION_GENERATOR_SYSTEM_PROMPT
 ```
 agent/parsers/
   README.md                       -- 이 파일
-  jd_parser_prompt.py             -- JD 파싱 프롬프트 v2
+  jd_parser_prompt.py             -- JD 파싱 프롬프트
   jd_parser.py                    -- JD 파서 메인 코드 (OpenAI 전용)
-  jd_parser_free.py               -- JD 파서 무료 테스트 버전 (Gemini + 에러 핸들링)
-  resume_parser_prompt.py         -- 이력서 파싱 프롬프트 v1
-  jd_resume_matcher_prompt.py     -- JD <-> 이력서 매칭 프롬프트 v1
-  answer_evaluator_prompt.py      -- 답변 평가 프롬프트 v2 (0~100점, 5개 세부 항목)
-  question_generator_prompt.py    -- 면접 질문 생성 프롬프트 v1
-  follow_up_prompt.py             -- 꼬리질문 생성 프롬프트 v1
-  report_generator_prompt.py      -- 최종 리포트 생성 프롬프트 v1
-  persona_prompts.py              -- 면접관 페르소나 3종 v2 (기술 리드/인사 담당자/임원 면접관)
+  resume_parser_prompt.py         -- 이력서 파싱 프롬프트
+  jd_resume_matcher_prompt.py     -- JD <-> 이력서 매칭 프롬프트
+  answer_evaluator_prompt.py      -- 답변 평가 프롬프트 (0~100점, 5개 세부 항목)
+  question_generator_prompt.py    -- 면접 질문 생성 프롬프트
+  follow_up_prompt.py             -- 꼬리질문 생성 프롬프트
+  report_generator_prompt.py      -- 최종 리포트 생성 프롬프트
+  persona_prompts.py              -- 면접관 페르소나 3종 (기술 리드/인사 담당자/임원 면접관)
 ```
 
 
@@ -315,14 +316,14 @@ agent/parsers/
 
 ## 전체 프롬프트 완성 현황
 
-- [x] JD 파싱 프롬프트 v2
-- [x] 이력서 파싱 프롬프트 v1
-- [x] JD <-> 이력서 매칭 프롬프트 v1
-- [x] 답변 평가 프롬프트 v2 (0~100점 체계, 5개 세부 평가 항목)
-- [x] 면접 질문 생성 프롬프트 v1
-- [x] 꼬리질문 생성 프롬프트 v1
-- [x] 최종 리포트 생성 프롬프트 v1
-- [x] 면접관 페르소나 3종 v2
+- [x] JD 파싱 프롬프트
+- [x] 이력서 파싱 프롬프트
+- [x] JD <-> 이력서 매칭 프롬프트
+- [x] 답변 평가 프롬프트 (0~100점 체계, 5개 세부 평가 항목)
+- [x] 면접 질문 생성 프롬프트
+- [x] 꼬리질문 생성 프롬프트
+- [x] 최종 리포트 생성 프롬프트
+- [x] 면접관 페르소나 3종
 
 모든 프롬프트 개발 완료.
 
