@@ -26,6 +26,10 @@ COPY agent/ ./agent/
 COPY backend/ ./backend/
 COPY video/ ./video/
 
+# 화면(Streamlit)도 같은 이미지에 담는다. compose 의 web 서비스가 실행 명령만
+# 바꿔서 쓴다. 이미지를 두 벌 만들면 의존성 설치가 두 번 돌고 버전도 갈릴 수 있다.
+COPY frontend/ ./frontend/
+
 # 직무 지식 카드 원본과 인덱스 생성 스크립트.
 # 인덱스(data/knowledge_index/)는 임베딩 결과라 이미지에 굽지 않는다. 빌드마다
 # OpenAI 를 호출하게 되고 빌드 시점에 키가 필요해진다. 컨테이너를 띄운 뒤
