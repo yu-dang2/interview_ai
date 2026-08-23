@@ -1,17 +1,9 @@
-import os
+import json
 
 import requests
 import streamlit as st
 
-# 이 파일(Streamlit 서버)에서 백엔드를 부를 때 쓰는 주소.
-# docker compose 로 띄우면 컨테이너끼리 통신하므로 서비스 이름(http://api:8000)이 들어간다.
-BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
-
-# 화면의 자바스크립트가 백엔드를 부를 때 쓰는 주소.
-# 음성 업로드·영상 업로드처럼 브라우저에서 직접 나가는 요청은 사용자 PC 에서 출발하므로,
-# 컨테이너 이름을 넣으면 찾지 못한다. 밖에서 닿는 주소여야 한다.
-# 지정하지 않으면 BASE_URL 을 그대로 쓴다(로컬 실행은 둘이 같다).
-PUBLIC_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", BASE_URL)
+BASE_URL = "http://127.0.0.1:8000"
 
 
 class SessionExpiredError(Exception):
@@ -103,6 +95,21 @@ def start_interview(resume_id: int, jd_id: int, persona: str, access_token: str 
     return res.json()
 
 
+def start_interview_stream(resume_id: int, jd_id: int, persona: str, access_token: str | None = None):
+
+    res = requests.post(
+        f"{BASE_URL}/interview/sessions/stream",
+        json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
+        headers=_headers(access_token),
+        timeout=180,
+        stream=True,
+    )
+    _check(res)
+    for line in res.iter_lines(decode_unicode=True):
+        if line:
+            yield json.loads(line)
+
+
 def send_answer(session_id: str, answer: str, input_type: str | None = None) -> dict:
     payload = {"answer": answer}
     if input_type == "voice":
@@ -174,6 +181,17 @@ def get_my_sessions(limit: int = 20) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions",
         params={"limit": limit},
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
+def get_my_resumes() -> list[dict]:
+    """내 이력서 목록. resume_id 내림차순(최신 먼저)으로 온다."""
+    res = requests.get(
+        f"{BASE_URL}/resume/",
         headers=_headers(),
         timeout=30,
     )

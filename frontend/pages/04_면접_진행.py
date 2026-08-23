@@ -62,8 +62,8 @@ if "iv_messages" not in st.session_state:
           margin: 0 auto 28px;
         }
         </style>""", unsafe_allow_html=True)
-        _IV_PREP_STAGES = ["이력서 분석 중...", "채용공고 분석 중...", "질문 생성 중..."]
-        _IV_STAGE_AT = [0.0, 2.2, 4.4] 
+        _IV_STAGE_KEYS   = ["parsing", "matching", "generating"]
+        _IV_PREP_STAGES  = ["이력서·채용공고 읽는 중...", "직무 적합도 분석 중...", "맞춤 질문 만드는 중..."]
 
         def _iv_prep_html(stage_idx: int) -> str:
             rows = ""
@@ -103,9 +103,21 @@ if "iv_messages" not in st.session_state:
 
         def _iv_start_worker():
             try:
-                _iv_result["resp"] = api.start_interview(
+                for event in api.start_interview_stream(
                     resume_id, jd_id, persona, access_token=_iv_access_token
-                )
+                ):
+                    _etype = event.get("type")
+                    if _etype == "progress":
+                        _iv_result["stage"] = event.get("stage")
+                    elif _etype == "done":
+                        _iv_result["resp"] = {
+                            "session_id": event.get("session_id"),
+                            "first_question": event.get("first_question"),
+                        }
+                    elif _etype == "error":
+                        _iv_result["error"] = RuntimeError(
+                            event.get("detail") or "면접 준비 중 오류가 발생했습니다."
+                        )
             except Exception as e:
                 _iv_result["error"] = e
 
@@ -113,19 +125,19 @@ if "iv_messages" not in st.session_state:
         _iv_thread.start()
 
         _iv_placeholder = st.empty()
-        _iv_t0 = time.time()
+        _iv_stage_idx = 0
         while _iv_thread.is_alive():
-            _elapsed = time.time() - _iv_t0
-            _stage = 0
-            for i, at in enumerate(_IV_STAGE_AT):
-                if _elapsed >= at:
-                    _stage = i
-            _iv_placeholder.markdown(_iv_prep_html(_stage), unsafe_allow_html=True)
+            _stage_key = _iv_result.get("stage")
+            if _stage_key in _IV_STAGE_KEYS:
+                _iv_stage_idx = _IV_STAGE_KEYS.index(_stage_key)
+            _iv_placeholder.markdown(_iv_prep_html(_iv_stage_idx), unsafe_allow_html=True)
             time.sleep(0.2)
         _iv_thread.join()
         _iv_placeholder.empty()
 
         _iv_error = _iv_result.get("error")
+        if _iv_error is None and "resp" not in _iv_result:
+            _iv_error = RuntimeError("면접 준비 중 연결이 끊겼습니다. 다시 시도해주세요.")
         if _iv_error is None:
             resp = _iv_result["resp"]
             state_set("session_id", resp["session_id"])
@@ -141,6 +153,9 @@ if "iv_messages" not in st.session_state:
             st.stop()
         elif isinstance(_iv_error, requests.exceptions.HTTPError):
             show_error(api.error_detail(_iv_error, "면접 준비에 실패했습니다."))
+            st.stop()
+        elif isinstance(_iv_error, RuntimeError):
+            show_error(str(_iv_error))
             st.stop()
         else:
             show_error(f"면접 준비 중 알 수 없는 오류가 발생했습니다: {_iv_error}")
@@ -197,7 +212,7 @@ timer_str = f"{remaining // 60:02d}:{remaining % 60:02d}"
 
 # ── 실시간 피드백 데이터 ───────────────────────────────────────────────────
 _rt_pending    = bool(st.session_state.get("_pending_answer"))
-_rt_is_rapport = False if _rt_pending else bool(st.session_state.get("realtime_is_rapport"))
+_rt_is_rapport = bool(st.session_state.get("realtime_is_rapport"))
 _rt_score    = None if (_rt_pending or _rt_is_rapport) else st.session_state.get("realtime_score")
 _rt_feedback = [] if (_rt_pending or _rt_is_rapport) else (st.session_state.get("realtime_feedback") or [])
 
@@ -526,22 +541,15 @@ body{{
   // ── 실시간 타이머 ────────────────────────────────────────────────
   var _startSec = {int(st.session_state.iv_start)};
   var _ivAutoEnded = false;
-  // 이 값은 이 iframe이 그려질 당시(리런 시작 시점)의 스냅샷이다 — 답변을 보낸 직후의
-  // 리런에서는 이미 _pending_answer가 true인 상태로 이 iframe이 그려지고, 그 뒤 같은
-  // 리런 안에서 api.send_answer() 블로킹 호출이 이어지므로, 그동안 이 iframe은 그대로
-  // 남아 있고 이 플래그도 계속 유효하다 — 답변이 서버에 도착하기 전에 타이머가
-  // 면접을 끊어버리는 걸 막는다.
   var _answerPending = {str(bool(st.session_state.get("_pending_answer"))).lower()};
+  var _awaitingAnswer = {str(bool(st.session_state.iv_messages and st.session_state.iv_messages[-1]["role"] == "ai")).lower()};
   function _tick() {{
     var rem = Math.max(0, 30*60 - Math.floor(Date.now()/1000 - _startSec));
     var el  = window.parent.document.getElementById('iv-timer');
     if (el) el.textContent =
       String(Math.floor(rem/60)).padStart(2,'0') + ':' +
       String(rem%60).padStart(2,'0');
-    // 타이머가 0초가 되면 자동으로 면접을 종료한다("면접 종료" 버튼과 동일한 동작).
-    // 단, 방금 제출한 답변이 아직 서버 응답을 기다리는 중이면 그 답변이 반영될 때까지
-    // 기다렸다가 다음 리런에서 다시 판단한다(여기서 억지로 끊지 않는다).
-    if (rem <= 0 && !_ivAutoEnded && !_answerPending) {{
+    if (rem <= 0 && !_ivAutoEnded && !_answerPending && !_awaitingAnswer) {{
       _ivAutoEnded = true;
       if (typeof showLoadingAndEnd === 'function') {{
         showLoadingAndEnd();
@@ -1171,13 +1179,11 @@ body{{
             syncSt(joined);
             autosize();
             setMicIdle();
-            // 발화 속도(분당 글자수) — 서버가 duration을 받아 계산해 돌려준 값을 표시한다.
             if (data.speech_cpm && data.speech) {{
               var lv = SPEECH_LEVEL_COLOR[data.speech.level] || {{ bg: '#f3f4f6', fg: '#6b7280' }};
               speechRateRow.innerHTML =
                 '<span class="srr-badge" style="background:' + lv.bg + ';color:' + lv.fg + ';">' +
-                data.speech.level + '</span><span>' + data.speech.message +
-                ' (분당 ' + Math.round(data.speech_cpm) + '자)</span>';
+                data.speech.level + '</span><span>' + data.speech.message + '</span>';
               speechRateRow.style.display = 'flex';
             }} else {{
               speechRateRow.style.display = 'none';
@@ -1289,7 +1295,8 @@ if _pending:
             st.session_state["realtime_score"] = resp.get("realtime_score")
             st.session_state["realtime_feedback"] = resp.get("realtime_feedback")
             st.session_state["realtime_is_rapport"] = bool(resp.get("is_rapport"))
-            if resp.get("question_type") == "end":
+            _iv_time_up = (time.time() - st.session_state.iv_start) >= 30 * 60
+            if resp.get("question_type") == "end" or _iv_time_up:
                 try:
                     api.end_session(session_id)
                 except Exception:

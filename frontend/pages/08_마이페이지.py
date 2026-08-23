@@ -34,6 +34,14 @@ except Exception:
 _sessions = _sessions_data.get("sessions", []) if _sessions_data else []
 _summary  = _sessions_data.get("summary", {}) if _sessions_data else {}
 
+try:
+    _resumes_data = api.get_my_resumes()
+except api.SessionExpiredError:
+    _resumes_data = []
+    mark_session_expired()
+except Exception:
+    _resumes_data = []
+
 # ── 데이터 (실제 GET /interview/sessions) ──────────────────────────────────
 HISTORY = []
 for _s in _sessions:
@@ -55,12 +63,19 @@ for _s in _sessions:
         "session_id": _s.get("session_id") or "",
     })
 
-VERSIONS = [
-    {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
-    {"v": "v2.1", "date": "2026.04.18", "score": 68, "active": False},
-    {"v": "v2.0", "date": "2026.04.10", "score": 63, "active": False},
-    {"v": "v1.0", "date": "2026.03.28", "score": 55, "active": False},
-]
+_RESUME_TOTAL = len(_resumes_data)
+VERSIONS = []
+for _i, _r in enumerate(_resumes_data[:5]):
+    try:
+        _rdt = datetime.fromisoformat(_r["created_at"].replace("Z", "+00:00"))
+        _rdate = _rdt.strftime("%Y.%m.%d")
+    except (ValueError, KeyError, TypeError):
+        _rdate = "-"
+    VERSIONS.append({
+        "v": f"v{_RESUME_TOTAL - _i}",
+        "date": _rdate,
+        "active": _i == 0,
+    })
 
 def score_color(s) -> str:
     if s is None: return "#9ca3af"
@@ -68,6 +83,20 @@ def score_color(s) -> str:
     if s >= 75: return "#3b6def"
     if s >= 65: return "#d97706"
     return "#dc2626"
+
+
+def _play_btn(video_url: str) -> str:
+    full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
+    return (
+        f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
+        'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
+        'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
+        '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
+        'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
+        '<span style="font-size:11px;font-weight:600;color:#3b6def;'
+        'font-family:Pretendard,-apple-system,sans-serif;line-height:1;">영상</span>'
+        '</div>'
+    )
 
 
 # ── CSS ──────────────────────────────────────────────────────────────────
@@ -264,6 +293,9 @@ if _mypage_tab == "overview":
             x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
             iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
 
+            _y_lo = max(0, min(35, min(iv_scores) - 10))
+            _y_hi = max(112, max(iv_scores) + 12)
+
             def ann_style(s):
                 if s >= 80: return {"color": "#16a34a", "size": 11}
                 if s < 65:  return {"color": "#dc2626", "size": 11}
@@ -325,8 +357,8 @@ if _mypage_tab == "overview":
                 height=258,
                 paper_bgcolor="white", plot_bgcolor="white",
                 yaxis=dict(
-                    range=[35, 112],
-                    tickvals=[40, 60, 80, 100],
+                    range=[_y_lo, _y_hi],
+                    tickvals=[0, 20, 40, 60, 80, 100],
                     gridcolor="#f3f4f6",
                     tickfont=dict(size=9, color="#9ca3af", family="Pretendard"),
                     showgrid=True, zeroline=False, showline=False,
@@ -355,27 +387,29 @@ if _mypage_tab == "overview":
             st.info("pip install plotly 후 차트를 확인할 수 있습니다.")
 
     with col_ver:
-        ver_rows = ""
-        for v in VERSIONS:
-            if v["active"]:
-                row_bg = "background:#eef3ff;border:1.5px solid #3b6def;"
-                v_color = "#3b6def"
-                s_color = "#3b6def"
-            else:
-                row_bg = "background:#f9fafb;border:1px solid #e5e7eb;"
-                v_color = "#374151"
-                s_color = "#6b7280"
-            ver_rows += (
-                f'<div style="{row_bg}border-radius:6px;height:36px;'
-                f'display:flex;align-items:center;padding:0 16px;margin-bottom:8px;">'
-                f'<span style="font-size:12px;font-weight:700;color:{v_color};'
-                f'min-width:36px;font-family:Pretendard,-apple-system,sans-serif;">{v["v"]}</span>'
-                f'<span style="font-size:10px;color:#6b7280;flex:1;margin-left:18px;'
-                f'font-family:Pretendard,-apple-system,sans-serif;">{v["date"]}</span>'
-                f'<span style="font-size:11px;font-weight:700;color:{s_color};'
-                f'font-family:Pretendard,-apple-system,sans-serif;">{v["score"]}점</span>'
-                f'</div>'
+        if not VERSIONS:
+            ver_rows = (
+                '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0;'
+                'font-family:Pretendard,-apple-system,sans-serif;">업로드된 이력서가 없어요</div>'
             )
+        else:
+            ver_rows = ""
+            for v in VERSIONS:
+                if v["active"]:
+                    row_bg = "background:#eef3ff;border:1.5px solid #3b6def;"
+                    v_color = "#3b6def"
+                else:
+                    row_bg = "background:#f9fafb;border:1px solid #e5e7eb;"
+                    v_color = "#374151"
+                ver_rows += (
+                    f'<div style="{row_bg}border-radius:6px;height:36px;'
+                    f'display:flex;align-items:center;padding:0 16px;margin-bottom:8px;">'
+                    f'<span style="font-size:12px;font-weight:700;color:{v_color};'
+                    f'min-width:36px;font-family:Pretendard,-apple-system,sans-serif;">{v["v"]}</span>'
+                    f'<span style="font-size:10px;color:#6b7280;flex:1;text-align:right;'
+                    f'font-family:Pretendard,-apple-system,sans-serif;">{v["date"]}</span>'
+                    f'</div>'
+                )
         st.markdown(
             '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
             'padding:15px 19px;">'
@@ -390,20 +424,6 @@ if _mypage_tab == "overview":
 elif _mypage_tab == "history":
     # ── 면접 히스토리 ──────────────────────────────────────────────────────────
     COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(150px,1.6fr)"
-
-    def _play_btn(video_url: str) -> str:
-        # 이 주소는 브라우저가 직접 불러오므로 PUBLIC_BASE_URL 을 쓴다.
-        full_url = f"{api.PUBLIC_BASE_URL}{video_url}" if video_url else ""
-        return (
-            f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
-            'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
-            'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
-            '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
-            'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
-            '<span style="font-size:11px;font-weight:600;color:#3b6def;'
-            'font-family:Pretendard,-apple-system,sans-serif;line-height:1;">영상</span>'
-            '</div>'
-        )
 
     _HDR_STYLE = (
         'font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;'
