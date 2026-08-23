@@ -115,6 +115,16 @@ RAPPORT_TRANSITION_MESSAGE = "답변 감사합니다. 이제 본격적으로 면
 # 값이 정해지면 쓰지 않는 쪽을 지운다.
 RAPPORT_QUESTION_TYPES = ("라포", "자기소개")
 
+# 면접 시작 진행 단계. 첫 질문까지 90~140초가 걸려서 화면이 멈춰 보이므로,
+# 어느 단계인지 흘려보낸다. (2026-08-21 지원님 요청)
+#
+# 문구는 프론트가 바꿀 수 있어야 해서 stage 키와 함께 내보낸다. label 은 참고용이다.
+INTERVIEW_START_STAGES = {
+    "parsing": "이력서·채용공고 읽는 중",
+    "matching": "직무 적합도 분석 중",
+    "generating": "맞춤 질문 만드는 중",
+}
+
 # 최종 총점 = 이력서 점수 × RESUME_WEIGHT + 면접 점수 × INTERVIEW_WEIGHT
 # 3 : 7 은 2026-08-16 회의에서 확정한 비율이다.
 RESUME_WEIGHT = 0.3

@@ -21,10 +21,12 @@ from backend.core.config import (
     INTERVIEW_ACTIVE_LIMIT,
     INTERVIEW_DAILY_LIMIT,
     INTERVIEW_STALE_AFTER_MIN,
+    INTERVIEW_START_STAGES,
     INTERVIEW_TIME_LIMIT_MIN,
     RAPPORT_QUESTION_TYPES,
     RAPPORT_TRANSITION_MESSAGE,
 )
+from backend.database import SessionLocal
 from backend.models.models import (
     JD,
     InterviewMessage,
@@ -56,6 +58,94 @@ _NO_REPORT = HTTPException(
     status_code=409,
     detail="면접이 아직 종료되지 않아 결과 리포트가 없습니다.",
 )
+
+
+# 이 노드들이 모두 끝나면 다음 단계로 넘어간 것으로 본다. 위에서부터 순서대로 확인한다.
+# question_retriever 는 jd_resume_matcher 와 함께 도는데 먼저 끝나므로, 둘 다 끝나야
+# 질문 생성 단계로 본다. (실측: 검색 26초 / 매칭 61초)
+_STAGE_PREREQUISITES = (
+    ("matching", {"jd_parser", "resume_parser"}),
+    ("generating", {"jd_resume_matcher", "question_retriever"}),
+)
+
+
+def _new_session_row(prepared: dict) -> InterviewSession:
+    """prepare_session 이 만든 값으로 세션 행을 만든다. 일반 생성과 스트리밍이 함께 쓴다."""
+    return InterviewSession(
+        session_id=prepared["session_id"],
+        status="active",
+        persona=prepared["persona"],
+        jd_content=prepared["jd_content"],
+        users_user_id=prepared["user_id"],
+        jds_jd_id=prepared["jd_id"],
+        resumes_resume_id=prepared["resume_id"],
+    )
+
+
+def _stage_event(stage: str) -> dict:
+    return {"type": "progress", "stage": stage, "label": INTERVIEW_START_STAGES[stage]}
+
+
+async def stream_session(prepared: dict):
+    """
+    면접을 시작하면서 진행 단계를 이벤트로 내보낸다.
+
+    첫 질문까지 90~140초가 걸려 화면이 멈춰 보이는 문제 때문에 만들었다.
+    한 줄에 JSON 하나씩(NDJSON) 나가고, 마지막 done 이 기존 세션 생성 응답과 같다.
+
+    DB 세션을 여기서 새로 연다. 요청 의존성으로 받은 세션은 응답 본문이 나가기 전에
+    닫히므로 그대로 쓰면 안 된다.
+
+    오류는 이벤트로 보낸다. 본문이 나가기 시작한 뒤에는 상태 코드를 바꿀 수 없다.
+    거절해야 하는 경우는 prepare_session 이 스트리밍 시작 전에 이미 걸러낸다.
+    """
+    session_id = prepared["session_id"]
+
+    # 첫 단계는 그래프를 돌리기 전에 보낸다. 노드 이벤트는 "끝났을 때" 오기 때문에
+    # 그것만 기다리면 첫 15초 동안 화면에 아무것도 못 띄운다.
+    yield _stage_event("parsing")
+
+    finished_nodes: set[str] = set()
+    sent_stages = {"parsing"}
+
+    try:
+        async for node_name in graph_runner.start_stream(session_id, prepared["init_state"]):
+            finished_nodes.add(node_name)
+            for stage, required in _STAGE_PREREQUISITES:
+                if stage not in sent_stages and required <= finished_nodes:
+                    sent_stages.add(stage)
+                    yield _stage_event(stage)
+
+        values, _ = await graph_runner.snapshot(session_id)
+        first_question = values["messages"][-1].content if values.get("messages") else ""
+
+        db = SessionLocal()
+        try:
+            db.add(_new_session_row(prepared))
+            db.add(
+                InterviewMessage(
+                    role="assistant",
+                    content=first_question,
+                    interview_sessions_session_id=session_id,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        yield {
+            "type": "done",
+            "session_id": session_id,
+            "first_question": first_question,
+        }
+
+    except Exception as e:
+        # 세션 행을 아직 안 만들었으므로 사용량 카운트에도 잡히지 않는다.
+        logger.exception("면접 시작 실패 (session_id=%s): %s", session_id, e)
+        yield {
+            "type": "error",
+            "detail": "면접 준비 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+        }
 
 
 class InterviewService:
@@ -192,7 +282,17 @@ class InterviewService:
 
     # ── 세션 생성 ──────────────────────────────────────
 
-    async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+    def prepare_session(self, req: SessionCreateRequest) -> dict:
+        """
+        세션을 만들기 전 확인을 끝내고 그래프 초기 상태를 준비한다.
+
+        스트리밍 응답은 본문이 나가기 시작하면 상태 코드를 바꿀 수 없다. 그래서
+        거절해야 하는 경우(사용량 초과·소유권)를 전부 여기서 끝내고, 스트리밍은
+        통과한 뒤에만 시작한다.
+
+        ORM 객체 대신 값만 담아 돌려준다. 스트리밍 중에는 요청 때 쓰던 DB 세션이
+        이미 닫혀 있어 ORM 객체를 그대로 들고 가면 쓸 수 없다.
+        """
         # LLM 호출 전에 막는다. 그래프를 돌린 뒤 거절하면 비용은 이미 나간 뒤다.
         self._check_usage_limit()
 
@@ -207,46 +307,46 @@ class InterviewService:
                 status_code=404, detail="선택한 이력서를 찾을 수 없습니다."
             )
 
-        session_id = str(uuid.uuid4())
-
-        init_state = {
-            "messages": [],
-            "jd_raw": jd.content,
-            "resume_raw": resume.content,
-            # persona 는 agent 의 PERSONA_MAP 키를 그대로 넘긴다. 설명 문구로 변환하면
-            # persona_selector 가 인식하지 못하고 기술 리드로 폴백한다.
+        return {
+            "session_id": str(uuid.uuid4()),
+            "user_id": self.user.user_id,
+            "jd_id": jd.jd_id,
+            "resume_id": resume.resume_id,
             "persona": req.persona,
-            "jd_parsed": {},
-            "resume_parsed": {},
-            "match_result": {},
-            "question_list": [],
-            "current_question_index": 0,
-            "eval_score": 0,
-            "eval_result": {},
-            "eval_keywords": [],
-            "weakness_areas": [],
-            "follow_up_count": 0,
-            "turn_count": 0,
-            "is_finished": False,
-            # 답변마다 resume() 이 덮어쓴다. 첫 질문 생성 시점에는 답변이 없으므로 "text".
-            "input_type": "text",
-            "report_result": {},
+            "jd_content": jd.content,
+            "init_state": {
+                "messages": [],
+                "jd_raw": jd.content,
+                "resume_raw": resume.content,
+                # persona 는 agent 의 PERSONA_MAP 키를 그대로 넘긴다. 설명 문구로 변환하면
+                # persona_selector 가 인식하지 못하고 기술 리드로 폴백한다.
+                "persona": req.persona,
+                "jd_parsed": {},
+                "resume_parsed": {},
+                "match_result": {},
+                "question_list": [],
+                "current_question_index": 0,
+                "eval_score": 0,
+                "eval_result": {},
+                "eval_keywords": [],
+                "weakness_areas": [],
+                "follow_up_count": 0,
+                "turn_count": 0,
+                "is_finished": False,
+                # 답변마다 resume() 이 덮어쓴다. 첫 질문 생성 시점에는 답변이 없으므로 "text".
+                "input_type": "text",
+                "report_result": {},
+            },
         }
 
-        values = await graph_runner.start(session_id, init_state)
+    async def create_session(self, req: SessionCreateRequest) -> SessionCreateResponse:
+        prepared = self.prepare_session(req)
+        session_id = prepared["session_id"]
+
+        values = await graph_runner.start(session_id, prepared["init_state"])
         first_question = values["messages"][-1].content if values.get("messages") else ""
 
-        self.db.add(
-            InterviewSession(
-                session_id=session_id,
-                status="active",
-                persona=req.persona,
-                jd_content=jd.content,
-                users_user_id=self.user.user_id,
-                jds_jd_id=jd.jd_id,
-                resumes_resume_id=resume.resume_id,
-            )
-        )
+        self.db.add(_new_session_row(prepared))
         self._log_message(session_id, "assistant", first_question)
         self.db.commit()
 
