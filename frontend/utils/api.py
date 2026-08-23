@@ -1,7 +1,17 @@
+import os
+
 import requests
 import streamlit as st
 
-BASE_URL = "http://127.0.0.1:8000"
+# 이 파일(Streamlit 서버)에서 백엔드를 부를 때 쓰는 주소.
+# docker compose 로 띄우면 컨테이너끼리 통신하므로 서비스 이름(http://api:8000)이 들어간다.
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+
+# 화면의 자바스크립트가 백엔드를 부를 때 쓰는 주소.
+# 음성 업로드·영상 업로드처럼 브라우저에서 직접 나가는 요청은 사용자 PC 에서 출발하므로,
+# 컨테이너 이름을 넣으면 찾지 못한다. 밖에서 닿는 주소여야 한다.
+# 지정하지 않으면 BASE_URL 을 그대로 쓴다(로컬 실행은 둘이 같다).
+PUBLIC_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", BASE_URL)
 
 
 class SessionExpiredError(Exception):
