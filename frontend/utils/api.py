@@ -1,3 +1,5 @@
+import json
+
 import requests
 import streamlit as st
 
@@ -93,6 +95,21 @@ def start_interview(resume_id: int, jd_id: int, persona: str, access_token: str 
     return res.json()
 
 
+def start_interview_stream(resume_id: int, jd_id: int, persona: str, access_token: str | None = None):
+
+    res = requests.post(
+        f"{BASE_URL}/interview/sessions/stream",
+        json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
+        headers=_headers(access_token),
+        timeout=180,
+        stream=True,
+    )
+    _check(res)
+    for line in res.iter_lines(decode_unicode=True):
+        if line:
+            yield json.loads(line)
+
+
 def send_answer(session_id: str, answer: str, input_type: str | None = None) -> dict:
     payload = {"answer": answer}
     if input_type == "voice":
@@ -164,6 +181,17 @@ def get_my_sessions(limit: int = 20) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions",
         params={"limit": limit},
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
+def get_my_resumes() -> list[dict]:
+    """내 이력서 목록. resume_id 내림차순(최신 먼저)으로 온다."""
+    res = requests.get(
+        f"{BASE_URL}/resume/",
         headers=_headers(),
         timeout=30,
     )
