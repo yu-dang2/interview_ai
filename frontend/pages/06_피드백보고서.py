@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error
+from utils.ui import show_error, show_error_once
 from utils import api
 
 st.set_page_config(
@@ -135,9 +135,9 @@ if not ALL_QA:
         unsafe_allow_html=True
     )
     if not session_id:
-        show_error("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.")
+        show_error_once("면접 세션 정보가 없습니다. 면접을 먼저 진행해주세요.", "feedback_no_session")
     else:
-        st.info("아직 생성된 피드백이 없습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.")
+        show_error_once("아직 생성된 피드백이 없습니다. 면접을 끝까지 완료한 뒤 다시 시도해주세요.", "feedback_not_ready")
     render_session_expired_banner()
     st.stop()
 
