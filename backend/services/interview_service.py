@@ -476,17 +476,62 @@ class InterviewService:
             realtime_feedback=report_mapper.to_realtime_feedback(eval_result),
         )
 
+    def _realtime_scores(self, session_id: str) -> list[int]:
+        """
+        답변마다 매긴 실시간 평가 점수를 순서대로. 라포 질문 답변은 뺀다.
+
+        답변을 받을 때 interview_messages 에 함께 남겨둔 값이라 다시 채점하지 않는다.
+        라포 답변은 채점 대상이 아닌데도 중립 점수(80)가 들어가 있어, 평균에 섞이면
+        점수가 올라간다. 첫 질문이 라포이므로 첫 답변 하나를 뺀다.
+        """
+        rows = (
+            self.db.query(InterviewMessage.eval_score)
+            .filter(
+                InterviewMessage.interview_sessions_session_id == session_id,
+                InterviewMessage.role == "user",
+            )
+            .order_by(InterviewMessage.message_id)
+            .all()
+        )
+        scores = [row[0] for row in rows if row[0] is not None]
+        return scores[1:] if scores else []
+
     def _save_result(self, session_id: str, values: dict) -> None:
         """
         리포트를 컬럼으로 펴서 저장한다.
 
         match_result 를 함께 읽는 게 중요하다. resume_score 는 여기서만 계산할 수 있고,
         저장하지 않으면 체크포인트가 사라진 뒤 0 으로 떨어진다.
+
+        점수는 실시간 평가 결과로 맞춘다. 같은 답변을 report_generator 가 다시 채점해서
+        화면 세 곳(실시간 · 피드백 보고서 · 결과 리포트)의 숫자가 서로 달랐다.
+        프롬프트도 "각 답변의 평가 결과를 종합·평균해 산출" 하도록 지시하고 있어
+        방향은 같고, 그 계산을 여기서 확실히 한다.
         """
         report = values.get("report_result") or {}
 
+        feedback_rows = report_mapper.to_question_feedback_rows(report)
+        realtime = self._realtime_scores(session_id)
+
+        # 답변 수와 피드백 항목 수가 같을 때만 점수를 바꿔 끼운다. 꼬리질문이 섞이거나
+        # 리포트가 항목을 합치면 개수가 어긋나는데, 그때 순서로 짝지으면 엉뚱한 질문에
+        # 엉뚱한 점수가 붙는다. 어긋나면 리포트 점수를 그대로 두고 로그만 남긴다.
+        if realtime and len(realtime) == len(feedback_rows):
+            for row, score in zip(feedback_rows, realtime):
+                row["score"] = score
+        elif realtime:
+            logger.warning(
+                "실시간 점수 %d개와 리포트 피드백 %d개가 맞지 않아 점수를 그대로 둡니다 "
+                "(session_id=%s)",
+                len(realtime), len(feedback_rows), session_id,
+            )
+
+        # 면접 점수는 질문별 점수의 평균이다. 위에서 바꿔 끼웠으면 실시간 평균과 같아지고,
+        # 개수가 어긋나 그대로 뒀으면 최소한 리포트 안에서는 총점과 질문별이 맞는다.
+        interview_score = report_mapper.average_score([r["score"] for r in feedback_rows])
+
         result = InterviewResult(
-            **report_mapper.to_result_columns(values),
+            **report_mapper.to_result_columns(values, interview_score=interview_score),
             eval_keywords=json.dumps(values.get("eval_keywords", []), ensure_ascii=False),
             weakness_areas=json.dumps(values.get("weakness_areas", []), ensure_ascii=False),
             # 컬럼 매핑이 틀렸을 때 재계산할 수 있도록 원본을 남긴다.
@@ -494,8 +539,7 @@ class InterviewService:
             interview_sessions_session_id=session_id,
         )
         result.question_feedbacks = [
-            InterviewQuestionFeedback(**row)
-            for row in report_mapper.to_question_feedback_rows(report)
+            InterviewQuestionFeedback(**row) for row in feedback_rows
         ]
 
         # resume_optimizer 가 종료 직전에 만든다. 없을 수도 있어 있을 때만 붙인다.
