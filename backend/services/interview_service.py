@@ -358,7 +358,7 @@ class InterviewService:
         """
         지금 답변을 기다리는 질문이 라포 형성 질문인지.
 
-        라포 질문은 채점하지 않기로 해서 answer_evaluator 가 고정 점수(INTRO_NEUTRAL_SCORE=80)
+        라포 질문은 채점하지 않기로 해서 answer_evaluator 가 고정 점수(RAPPORT_NEUTRAL_SCORE=80)
         를 내보낸다. 답변 내용과 무관한 값이라 화면에 그대로 보여주면 성의 없이 답해도
         80점이 뜨므로, 프론트가 패널을 숨길 수 있도록 응답에 표시해 준다. (8/20 확정)
 
