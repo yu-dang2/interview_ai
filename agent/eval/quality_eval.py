@@ -18,6 +18,10 @@ RAGAS(라가스) 기본 지표(context precision/recall 등)는 "검색 -> 답�
 3. evaluation_faithfulness  평가 피드백이 지원자가 실제 말한 것에 근거하는가 (환각 검출 = RAGAS faithfulness)
 4. feedback_usefulness      모범답안(improved_answer)이 구체적이고 유용한가
 
+추가로 '규칙 준수 체크'(질문 대상)를 수행한다. 점수가 아니라 규칙별 위반 여부를 세어,
+프롬프트 규칙(한 질문 하나만·물음표 종료·괄호 금지·암송/수치강요 금지) 위반이
+평균 점수에 묻히지 않고 몇 번째 질문인지까지 그대로 드러난다.
+
 실행
 ----
     # 프로젝트 루트에서, OPENAI_API_KEY 가 설정된 상태로
@@ -105,6 +109,16 @@ _USEFULNESS_SYS = """당신은 취업 코칭 전문가입니다.
 반드시 아래 JSON 형식만 출력하세요.
 {"score": <0-100 정수>, "reason": "<한 문장 근거>"}"""
 
+_COMPLIANCE_SYS = """당신은 면접 질문이 작성 규칙을 지켰는지 검사하는 검사관입니다.
+주어진 질문을 아래 두 항목으로만 판정하세요.
+- request_count: 질문에 담긴 서로 다른 요청(물어보는 것)의 개수. 하나의 개념만 물으면 1,
+  서로 다른 것을 여러 개 이어 물으면 2 이상.
+  (예: "A는 무엇이고, B는 어떻게 했으며, C도 말해 주세요" = 3)
+- has_recite_demand: 코드/설정파일/YAML 을 그대로 외워 말하라거나, 정확한 설정값·수치를
+  기억해 답하라고 요구하면 true, 아니면 false.
+반드시 아래 JSON 형식만 출력하세요.
+{"request_count": <정수>, "has_recite_demand": <true/false>, "reason": "<한 문장 근거>"}"""
+
 
 # ---------------------------------------------------------------------------
 # 판정 실행 헬퍼
@@ -126,6 +140,43 @@ async def _judge(system_prompt: str, payload: dict) -> dict:
             logger.warning("판정 호출 실패: %s: %s", type(e).__name__, e)
             return {"score": None, "reason": f"판정 실패: {type(e).__name__}"}
     return {"score": _clip_score(res.get("score")), "reason": str(res.get("reason", ""))}
+
+
+async def _judge_raw(system_prompt: str, payload: dict) -> dict:
+    """판정 결과 dict 를 그대로 반환한다(점수 정규화 없음). 실패 시 빈 dict."""
+    async with _sem:
+        try:
+            return await call_llm(system_prompt, json.dumps(payload, ensure_ascii=False))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("규칙 검사 호출 실패: %s: %s", type(e).__name__, e)
+            return {}
+
+
+# 규칙 준수 항목 (질문 대상). True=지킴 / False=위반 / None=판정불가
+_COMPLIANCE_RULES = ["물음표로 끝남", "괄호 없음", "요청 1개만", "암송·수치강요 없음"]
+
+
+async def check_compliance(question: str) -> dict:
+    """질문 하나가 작성 규칙(프롬프트 규칙 3·7·10·11)을 지켰는지 규칙별로 판정한다.
+
+    물음표·괄호는 문자열로 정확히 검사하고, '요청 개수'·'암송/수치강요'는 LLM 으로 판정한다.
+    점수(0~100)가 아니라 규칙별 True/False 라, 위반이 평균에 묻히지 않고 그대로 드러난다.
+    """
+    q = (question or "").strip()
+    raw = await _judge_raw(_COMPLIANCE_SYS, {"질문": q})
+    try:
+        req = int(raw.get("request_count"))
+    except (TypeError, ValueError):
+        req = None
+    recite = raw.get("has_recite_demand")
+    return {
+        "물음표로 끝남": q.endswith("?"),
+        "괄호 없음": ("(" not in q) and (")" not in q),
+        "요청 1개만": (req <= 1) if req is not None else None,
+        "암송·수치강요 없음": (not recite) if isinstance(recite, bool) else None,
+        "_request_count": req,
+        "_reason": str(raw.get("reason", "")),
+    }
 
 
 def _jd_to_str(jd) -> str:
@@ -170,7 +221,8 @@ async def eval_one_qa(jd_str: str, qa: dict) -> dict:
 
     keys = list(jobs)
     results = await asyncio.gather(*jobs.values())
-    return {"question": question, "metrics": dict(zip(keys, results))}
+    compliance = await check_compliance(question) if question else {}
+    return {"question": question, "metrics": dict(zip(keys, results)), "compliance": compliance}
 
 
 # 리포트에 고정으로 나오는 지표 순서
@@ -202,8 +254,9 @@ async def run_eval(dataset: list, limit: int | None) -> dict:
 
     flat = await asyncio.gather(*tasks)
 
-    # 지표별 점수 수집
+    # 지표별 점수 + 규칙 준수 수집
     buckets = {m: [] for m in _METRIC_ORDER}
+    compliance_stats = {r: {"checked": 0, "violations": []} for r in _COMPLIANCE_RULES}
     per_qa = []
     for (r_i, q_i), res in zip(index, flat):
         row = {"record": r_i, "qa": q_i, "question": res["question"], "scores": {}}
@@ -212,6 +265,17 @@ async def run_eval(dataset: list, limit: int | None) -> dict:
             row["scores"][m] = judged
             if score is not None:
                 buckets[m].append(score)
+        comp = res.get("compliance") or {}
+        row["compliance"] = comp
+        for r in _COMPLIANCE_RULES:
+            v = comp.get(r)
+            if v is None:
+                continue                       # 판정 불가는 집계에서 제외
+            compliance_stats[r]["checked"] += 1
+            if v is False:
+                compliance_stats[r]["violations"].append(
+                    {"record": r_i, "qa": q_i, "question": res["question"]}
+                )
         per_qa.append(row)
 
     summary = {}
@@ -222,7 +286,7 @@ async def run_eval(dataset: list, limit: int | None) -> dict:
             "n": len(scores),
         }
 
-    return {"summary": summary, "per_qa": per_qa}
+    return {"summary": summary, "compliance": compliance_stats, "per_qa": per_qa}
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +302,19 @@ def print_report(result: dict, detail: bool) -> None:
         mean = f"{s['mean']:>5}" if s["mean"] is not None else "  N/A"
         print(f"  {_METRIC_LABEL[m]:<10} {mean} 점   (n={s['n']})")
     print("=" * 52)
+
+    # 규칙 준수 (질문 대상) — 점수가 아니라 규칙별 위반 건수
+    comp = result.get("compliance", {})
+    if comp:
+        print("\n[규칙 준수 (질문 대상)]")
+        for r in _COMPLIANCE_RULES:
+            st = comp.get(r, {})
+            checked = st.get("checked", 0)
+            viols = st.get("violations", [])
+            mark = "" if not viols else "  <-- 위반"
+            print(f"  {r:<12} 위반 {len(viols)}/{checked}{mark}")
+            for v in viols:
+                print(f"      · (레코드 {v['record']}, 질문 {v['qa']}) {v['question'][:45]}")
 
     if detail:
         print("\n[질문별 상세]")
