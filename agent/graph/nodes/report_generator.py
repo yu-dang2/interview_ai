@@ -87,13 +87,31 @@ async def report_generator(state: InterviewState):
     # 종료 버튼(graph_runner.finish)으로 들어오면 question_generator 를 거치지 않아
     # index < len 이 유지된다.
     is_early_terminated = state.get("current_question_index", 0) < len(question_list)
-    user_content = json.dumps({
+
+    # eval_results 는 답변마다 실시간으로 매긴 점수다(라포 제외, 꼬리질문 포함).
+    # 프롬프트 규칙 2·4 가 "입력으로 주어진 각 답변의 평가 결과를 종합·평균하라"고
+    # 지시하는데 예전에는 그 입력을 넣지 않아, LLM 이 답변 원문만 보고 재채점했다.
+    # 그래서 리포트 총점·코멘트가 실시간 평가와 다른 기준으로 나왔다.
+    #
+    # question_list 와 짝지어 넘기지 않는다. 꼬리질문은 question_list 에 없어서
+    # 순서로 맞추면 어긋난다. 원소마다 order·question 을 달아 그대로 넘긴다.
+    payload = {
         "question_list": question_list,
         "conversation": qa_history,
         "eval_keywords": state.get("eval_keywords", []),
         "weakness_areas": state.get("weakness_areas", []),
         "is_early_terminated": is_early_terminated,
-    }, ensure_ascii=False)
+    }
+
+    # 비어 있으면 키 자체를 넣지 않는다. 빈 배열을 주면서 "이 점수들을 평균하라"고 하면
+    # 모델이 없는 값을 짜맞추려 든다(question_generator 의 reference_knowledge 와 같은 이유).
+    # 이 변경 전에 시작된 세션은 체크포인트에 eval_results 가 없어 여기로 떨어지고,
+    # 수정 전과 동일하게 동작한다.
+    eval_results = state.get("eval_results", [])
+    if eval_results:
+        payload["eval_results"] = eval_results
+
+    user_content = json.dumps(payload, ensure_ascii=False)
 
     report_result = await call_llm(
         REPORT_GENERATOR_SYSTEM_PROMPT
