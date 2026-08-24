@@ -10,7 +10,7 @@ eval_result의 eval_score를 State의 eval_score로 올리며, 이 값이 topic_
 """
 
 import json
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from agent.parsers.answer_evaluator_prompt import (
     ANSWER_EVALUATOR_SYSTEM_PROMPT,
     VOICE_INPUT_NOTICE,
@@ -25,6 +25,42 @@ from agent.graph.utils import call_llm, is_rapport_question
 # 다만 이 값에만 기대지 않는다 — THRESHOLD가 올라가도 버티도록 topic_router에도
 # 같은 판정을 명시적으로 넣어뒀다(의도적 이중 안전장치).
 RAPPORT_NEUTRAL_SCORE = 80
+
+# eval_results 에 담을 세부 점수 키. 리포트의 category_scores 5개 항목과 같다.
+# 화이트리스트라서 평가 프롬프트에 필드가 늘어도 여기 추가하지 않으면 리포트로 나가지 않는다.
+CATEGORY_SCORE_FIELDS = (
+    "logic_score",
+    "communication_score",
+    "expertise_score",
+    "attitude_score",
+    "problem_solving_score",
+)
+
+
+def _last_question(messages: list) -> str:
+    """방금 답변한 질문. 마지막 AIMessage 가 그것이다.
+
+    question_list 에서 꺼내지 않는 이유: 꼬리질문은 question_list 에 없고
+    current_question_index 도 움직이지 않아, 꼬리질문 답변에 주질문 텍스트가 붙는다.
+    """
+    for msg in reversed(messages or []):
+        if isinstance(msg, AIMessage):
+            return msg.content
+    return ""
+
+
+def to_score_entry(eval_result: dict, order: int, question: str, is_follow_up: bool) -> dict:
+    """채점 결과를 eval_results 원소로 추린다. (State 주석 참고)"""
+    entry = {
+        "order": order,
+        "question": question,
+        "is_follow_up": is_follow_up,
+        "eval_score": eval_result.get("eval_score", 0),
+    }
+    for field in CATEGORY_SCORE_FIELDS:
+        if eval_result.get(field) is not None:
+            entry[field] = eval_result[field]
+    return entry
 
 
 async def answer_evaluator(state: InterviewState):
@@ -44,7 +80,8 @@ async def answer_evaluator(state: InterviewState):
             "eval_score": RAPPORT_NEUTRAL_SCORE,
             "eval_result": {},
             "eval_keywords": [],
-            "weakness_areas": []
+            "weakness_areas": [],
+            "eval_results": []
         }
 
     # 마지막 사용자 답변 가져오기
@@ -67,9 +104,24 @@ async def answer_evaluator(state: InterviewState):
     }, ensure_ascii=False)
 
     eval_result = await call_llm(system_prompt, user_content)
+
+    # 리포트가 쓸 점수를 누적 채널에 쌓는다. eval_score/eval_result 는 LastValue 라
+    # 여기서 담아두지 않으면 report_generator 시점에 마지막 답변 것만 남는다.
+    #
+    # follow_up_count 는 follow_up_generator 가 꼬리질문을 낼 때 +1 되고
+    # question_generator 가 새 주질문마다 0 으로 리셋한다. 그래서 이 시점의 값이
+    # 0 이 아니면 방금 답한 것이 꼬리질문이다.
+    entry = to_score_entry(
+        eval_result,
+        order=len(state.get("eval_results", [])) + 1,
+        question=_last_question(state.get("messages", [])),
+        is_follow_up=state.get("follow_up_count", 0) > 0,
+    )
+
     return {
         "eval_score": eval_result.get("eval_score", 0),
         "eval_result": eval_result,
         "eval_keywords": eval_result.get("eval_keywords", []),
-        "weakness_areas": eval_result.get("weaknesses", [])
+        "weakness_areas": eval_result.get("weaknesses", []),
+        "eval_results": [entry]
     }
