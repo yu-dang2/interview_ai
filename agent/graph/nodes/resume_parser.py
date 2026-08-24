@@ -11,5 +11,7 @@ from agent.graph.utils import call_llm
 
 
 async def resume_parser(state: InterviewState):
-    resume_parsed = await call_llm(RESUME_PARSER_SYSTEM_PROMPT, state["resume_raw"])
+    resume_parsed = await call_llm(
+        RESUME_PARSER_SYSTEM_PROMPT, state["resume_raw"], stage="resume_parser"
+    )
     return {"resume_parsed": resume_parsed}
