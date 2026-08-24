@@ -14,8 +14,10 @@ LangGraph 그래프 소유 모듈
 주의(async): agent 그래프의 노드/LLM 호출(call_llm)이 전부 async 이므로 여기서도
 ainvoke/aget_state/aupdate_state 를 쓴다. 동기 invoke 로는 구동되지 않는다.
 
-주의(output 스키마): build_graph 는 output=InterviewOutput(messages 만) 으로 컴파일된다.
-따라서 ainvoke 의 반환값에는 eval_score·eval_result·report_result·match_result 가 없다.
+주의(output 스키마): build_graph 는 output=InterviewOutput 으로 컴파일된다. InterviewOutput 은
+State 의 일부(messages·is_finished·report_result·match_score·resume_optimization)만 노출하므로,
+ainvoke 의 반환값에는 eval_score·eval_result·eval_keywords·weakness_areas·question_list·
+current_question_index·follow_up_count·match_result 가 없다.
 서비스가 그 값들을 읽어야 하므로, start/resume 은 ainvoke 반환값이 아니라
 항상 aget_state().values(온전한 State)를 반환한다.
 

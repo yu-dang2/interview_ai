@@ -187,8 +187,8 @@ async def get_resume_optimization(
 # 이 라우터의 나머지 엔드포인트는 /interview/sessions/{id}/... 컨벤션을 쓴다.
 # 둘 다 받아 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 충돌하지 않는다.
 #
-# 프론트는 조회를 짧은 쪽으로 부르고 있다. 업로드는 아직 붙지 않았다.
-# 한쪽으로 모으려면 프론트도 함께 고쳐야 해서 지금은 둘 다 둔다.
+# 프론트는 업로드·조회 모두 짧은 쪽(/interview/{id}/video, /interview/{id}/video-metrics)을
+# 부른다. 긴 쪽은 지금 부르는 곳이 없으므로, 한쪽으로 모으려면 긴 쪽을 지우면 된다.
 
 @router.post("/{session_id}/video", response_model=VideoUploadResponse, status_code=202)
 @router.post("/sessions/{session_id}/video", response_model=VideoUploadResponse, status_code=202)

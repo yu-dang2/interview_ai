@@ -57,7 +57,8 @@ class ChatResponse(BaseModel):
     # 방금 답변한 질문이 라포 형성 질문이었는지. question_type 은 다음에 내보내는
     # 질문을 가리키므로 여기에 담을 수 없어 필드를 따로 뒀다.
     # true 면 화면에서 실시간 점수·피드백 패널을 숨긴다. 채점하지 않는 답변이라
-    # 점수가 0으로 내려가서, 그대로 보여주면 자기소개 직후에 0점이 뜬다.
+    # answer_evaluator 가 RAPPORT_NEUTRAL_SCORE(80) 를 넣어 내보내는데, 그대로 보여주면
+    # 성의 없이 답해도 80점이 뜬다. (그전에는 0점이 나갔다)
     is_rapport: bool = False
 
 
