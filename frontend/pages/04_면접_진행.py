@@ -19,6 +19,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+if "iv_messages" not in st.session_state and not st.session_state.get("session_id"):
+    st.session_state["_suppress_session_id_restore"] = True
+
 init_session()
 render_sidebar(active="면접 시작")
 
@@ -98,7 +101,9 @@ if "iv_messages" not in st.session_state:
                 '</div></div>'
             )
 
-        _iv_result: dict = {}
+        if "_iv_result" not in st.session_state:
+            st.session_state["_iv_result"] = {}
+        _iv_result = st.session_state["_iv_result"]
         _iv_access_token = st.session_state.get("access_token", "")
 
         def _iv_start_worker():
@@ -121,8 +126,10 @@ if "iv_messages" not in st.session_state:
             except Exception as e:
                 _iv_result["error"] = e
 
-        _iv_thread = threading.Thread(target=_iv_start_worker, daemon=True)
-        _iv_thread.start()
+        if "_iv_thread" not in st.session_state:
+            st.session_state["_iv_thread"] = threading.Thread(target=_iv_start_worker, daemon=True)
+            st.session_state["_iv_thread"].start()
+        _iv_thread = st.session_state["_iv_thread"]
 
         _iv_placeholder = st.empty()
         _iv_stage_idx = 0
@@ -134,6 +141,9 @@ if "iv_messages" not in st.session_state:
             time.sleep(0.2)
         _iv_thread.join()
         _iv_placeholder.empty()
+        del st.session_state["_iv_thread"]
+        del st.session_state["_iv_result"]
+        st.session_state.pop("_suppress_session_id_restore", None)
 
         _iv_error = _iv_result.get("error")
         if _iv_error is None and "resp" not in _iv_result:

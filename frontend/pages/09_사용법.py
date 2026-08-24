@@ -38,9 +38,12 @@ st.markdown("""
     padding: 120px 40px 56px;
     text-align: center;
 }
-.usage-hero-badge { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--blue); margin-bottom: 12px; }
-.usage-hero-title { font-size: 34px; font-weight: 800; color: var(--gray-900); margin: 0 0 12px; }
-.usage-hero-desc  { font-size: 15px; color: var(--gray-500); }
+/* font-size 에 !important — 이 클래스들이 전부 <p> 태그라, Streamlit이 markdown 안
+   <p>에 주입하는 자체 스타일(.st-emotion-cache-* p, 클래스+태그라 이 클래스 하나짜리
+   선택자보다 우선순위가 높음)에 밀려서 죄다 기본값 16px로 나오고 있었다. */
+.usage-hero-badge { font-size: 12px !important; font-weight: 700; letter-spacing: 2px; color: var(--blue); margin-bottom: 12px; }
+.usage-hero-title { font-size: 34px !important; font-weight: 800; color: var(--gray-900); margin: 0 0 12px; }
+.usage-hero-desc  { font-size: 15px !important; color: var(--gray-500); }
 
 .usage-steps { background: var(--bg); padding: 56px 40px 72px; }
 .usage-step {
@@ -64,8 +67,8 @@ st.markdown("""
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
 }
-.usage-step-title { font-size: 17px; font-weight: 700; color: var(--gray-900); margin: 0 0 6px; }
-.usage-step-desc  { font-size: 13px; color: var(--gray-500); line-height: 1.8; margin: 0 0 10px; }
+.usage-step-title { font-size: 17px !important; font-weight: 700; color: var(--gray-900); margin: 0 0 6px; }
+.usage-step-desc  { font-size: 13px !important; color: var(--gray-500); line-height: 1.8; margin: 0 0 10px; }
 .usage-step-tags  { display: flex; gap: 8px; flex-wrap: wrap; }
 .usage-tag {
     font-size: 11px; font-weight: 600; color: var(--blue);
