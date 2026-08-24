@@ -25,20 +25,20 @@ is_early_terminated가 true이면 면접이 중도에 종료된 것이므로, �
 "면접이 중도에 종료되어 답변한 문항만으로 평가된 결과입니다."를 반드시 포함하세요.
 """
 
-# 자기소개(라포 형성) 질문 제외 지시 (프롬프트 파일은 수정 불가 → 노드에서 이어붙임).
+# 라포 형성 질문 제외 지시 (프롬프트 파일은 수정 불가 → 노드에서 이어붙임).
 #
-# question_list에서 자기소개를 코드로 걸러내는 방식은 쓰지 않는다. conversation은
+# question_list에서 라포 질문을 코드로 걸러내는 방식은 쓰지 않는다. conversation은
 # messages 순서 그대로 나가는데 질문 하나만 빠지면 LLM의 질문-답변 정렬이 통째로 밀린다.
 # 그래서 둘 다 그대로 넘기고 "집계에서 빼라"고 지시만 한다.
-INTRO_EXCLUSION_INSTRUCTION = """
+RAPPORT_EXCLUSION_INSTRUCTION = """
 
-[추가 지시 - 자기소개 질문 제외]
-question_list에서 type이 "자기소개"인 질문은 지원자의 긴장을 풀기 위한 라포 형성 질문이며
+[추가 지시 - 라포 질문 제외]
+question_list에서 type이 "라포"인 질문은 지원자의 긴장을 풀기 위한 라포 형성 질문이며
 평가 대상이 아닙니다. 해당 질문과 그 답변은 다음에서 완전히 제외하세요.
 - total_score 계산
 - category_scores 계산 (5개 항목 모두)
 - question_feedbacks (개별 항목으로 만들지 마세요)
-나머지 질문만으로 점수를 산출하고, 자기소개 답변이 부실하더라도 그것을 근거로
+나머지 질문만으로 점수를 산출하고, 라포 질문 답변이 부실하더라도 그것을 근거로
 summary나 category_comments에서 감점하듯 서술하지 마세요.
 """
 
@@ -98,7 +98,7 @@ async def report_generator(state: InterviewState):
     report_result = await call_llm(
         REPORT_GENERATOR_SYSTEM_PROMPT
         + EARLY_TERMINATION_INSTRUCTION
-        + INTRO_EXCLUSION_INSTRUCTION,
+        + RAPPORT_EXCLUSION_INSTRUCTION,
         user_content,
     )
 
