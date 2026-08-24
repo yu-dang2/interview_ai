@@ -7,9 +7,10 @@
     .venv/Scripts/python.exe scripts/build_knowledge_index.py
 
 옵션:
-    --source  카드 JSON 경로   (기본 data/job_knowledge.json)
+    --source  카드 JSON 경로   (기본 data/job_knowledge_v2.json)
     --path    인덱스 출력 경로 (기본 KNOWLEDGE_INDEX_PATH 또는 ./data/knowledge_index)
 
+아직 내용을 채우지 않은 카드(PLACEHOLDER_MARKERS 참고)는 자동으로 제외한다.
 카드를 수정하면 다시 실행해야 반영된다. 기존 컬렉션은 삭제 후 새로 만든다
 (부분 갱신은 삭제된 카드가 남아 조용히 검색되는 문제가 있어 쓰지 않는다).
 """
@@ -29,9 +30,18 @@ load_dotenv()
 
 from agent.retrieval import store  # noqa: E402  (load_dotenv 이후에 import)
 
-DEFAULT_SOURCE = "./data/job_knowledge.json"
+DEFAULT_SOURCE = "./data/job_knowledge_v2.json"
 
 REQUIRED_FIELDS = ("id", "job_family")
+
+# 아직 내용을 채우지 않은 카드에 붙어 있는 표시 필드.
+# 자리표시자로 써둔 기출도 실제처럼 읽혀서, 색인되면 그대로 질문 생성에 쓰인다.
+# 내용을 채운 뒤 카드에서 이 필드를 지우면 다음 빌드부터 포함된다.
+PLACEHOLDER_MARKERS = ("_형식예시", "_주의")
+
+
+def is_placeholder(card: dict) -> bool:
+    return any(card.get(marker) for marker in PLACEHOLDER_MARKERS)
 
 
 def load_cards(source: str) -> list[dict]:
@@ -44,7 +54,18 @@ def load_cards(source: str) -> list[dict]:
     if not isinstance(cards, list) or not cards:
         raise SystemExit(f"카드 파일이 비어 있거나 리스트가 아닙니다: {source}")
 
+    # 미채움 카드 제외. 조용히 빼면 "왜 이 직무만 검색이 안 되지"로 되돌아오므로
+    # 무엇을 뺐는지 반드시 출력한다.
+    skipped = [card for card in cards if is_placeholder(card)]
+    cards = [card for card in cards if not is_placeholder(card)]
+    for card in skipped:
+        print(f"제외(미채움): {card.get('id')} — {card.get('job_family')}")
+
+    if not cards:
+        raise SystemExit(f"색인할 카드가 없습니다(전부 미채움 표시): {source}")
+
     # id 누락·중복은 검색 결과 dedupe 를 망가뜨리므로 색인 전에 막는다.
+    # 제외된 카드는 검사하지 않는다. 색인에 들어가지 않아 dedupe 에 영향이 없다.
     seen = set()
     for i, card in enumerate(cards):
         for field in REQUIRED_FIELDS:
