@@ -47,6 +47,13 @@ VIDEO_MAX_UPLOAD_MB = int(os.getenv("VIDEO_MAX_UPLOAD_MB", "200"))
 # 분석 도중 서버가 죽으면 상태가 영구히 analyzing 으로 남아 프론트가 끝없이 폴링한다.
 VIDEO_ANALYZE_TIMEOUT_MIN = int(os.getenv("VIDEO_ANALYZE_TIMEOUT_MIN", "30"))
 
+# 영상 분석(mediapipe)은 protobuf 4.25 를 요구해, 백엔드 프로세스(protobuf 7·chromadb)와
+# 같은 파이썬에 함께 살 수 없다. 그래서 mediapipe 를 격리한 별도 venv 의 파이썬으로
+# video/analyze_runner.py 를 subprocess 실행하고 결과 JSON 만 받는다.
+# 경로에 한글이 있으면 mediapipe 의 .binarypb 로드가 실패하므로 ASCII 경로여야 한다.
+# 팀원마다 venv 위치가 다르면 VIDEO_ANALYZER_PYTHON 환경변수로 덮어쓴다.
+VIDEO_ANALYZER_PYTHON = os.getenv("VIDEO_ANALYZER_PYTHON", r"C:\mp_venv\Scripts\python.exe")
+
 # ── 인증 ───────────────────────────────────────────────
 # SECRET_KEY 를 .env 에 지정하지 않으면 기동할 때마다 새 키가 생성된다.
 # 개발 중에는 편하지만 서버를 재시작하면 발급해둔 토큰이 전부 무효가 되므로,
