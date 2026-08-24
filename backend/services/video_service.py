@@ -15,7 +15,10 @@
    interview_results 를 건드리지 않는다.
 """
 
+import json
 import logging
+import os
+import subprocess
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, UploadFile
@@ -24,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import (
     VIDEO_ANALYZE_TIMEOUT_MIN,
+    VIDEO_ANALYZER_PYTHON,
     VIDEO_MAX_PER_USER,
     VIDEO_MAX_UPLOAD_MB,
     VIDEO_SAMPLE_EVERY,
@@ -43,6 +47,9 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 1024 * 1024   # 1MB
 _MAX_UPLOAD_BYTES = VIDEO_MAX_UPLOAD_MB * 1024 * 1024
+
+# backend/services/video_service.py → 세 단계 위가 프로젝트 루트.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 _STALE_ERROR = (
@@ -103,23 +110,81 @@ def _video_url(video_id: int) -> str:
     return f"/mypage/videos/{video_id}/file"
 
 
-def _load_analyze_video():
-    """
-    video.video_assist.analyze_video 를 지연 import 한다.
+def _parse_last_json(text: str) -> dict | None:
+    """stdout 뒤에서부터 파싱 가능한 JSON 객체 한 줄을 찾는다.
 
-    video_assist 는 mediapipe import 에 실패하면 모듈 최상단에서 sys.exit(1) 을 부른다.
-    서버 기동 시점에 import 하면 그 자리에서 프로세스가 죽으므로 분석 직전에 import 하고,
-    ImportError 뿐 아니라 SystemExit 까지 잡아 "그 영상만 분석 실패"로 격리한다.
-    (video/ 는 예진님 담당이라 여기서 우회한다)
+    러너를 도는 venv 에서 cv2·mediapipe 가 stdout 앞부분에 로그를 흘릴 수 있어,
+    결과 JSON 만 골라내려고 마지막 줄부터 역순으로 훑는다.
     """
+    for line in reversed((text or "").splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _run_analyze_subprocess(video_path: str, sample_every: int, with_timeline: bool) -> dict:
+    """
+    mediapipe 를 격리한 별도 venv 의 파이썬으로 video/analyze_runner.py 를 subprocess
+    실행하고, 분석 결과 dict 를 돌려준다.
+
+    영상 분석(mediapipe)은 protobuf 4.25 를 요구해 백엔드 프로세스(protobuf 7·chromadb)와
+    같은 파이썬에 공존할 수 없다. 그래서 직접 import 하지 않고 프로세스를 분리한다.
+    (video/ 는 예진님 담당이라 여기서 우회한다)
+
+    실패는 analyze() 의 기존 except 분기에 맞춰 구분해 던진다.
+      RuntimeError : venv/러너/모듈/타임아웃 등 서버 설정 문제
+      ValueError   : 영상 파일을 못 여는 문제(깨진 파일·코덱)
+    """
+    runner = os.path.join(_PROJECT_ROOT, "video", "analyze_runner.py")
+    cmd = [VIDEO_ANALYZER_PYTHON, runner, video_path, "--sample-every", str(sample_every)]
+    if with_timeline:
+        cmd.append("--with-timeline")
+
+    # 러너가 로캘(cp949)로 출력해 UTF-8 디코딩이 깨지는 것을 막는다.
+    # env 로 subprocess 를 UTF-8 로 강제하고, errors="replace" 로 혹시 남는
+    # 비UTF-8 로그 바이트(cv2·mediapipe C++ stderr)에도 리더 스레드가 죽지 않게 한다.
+    env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     try:
-        from video.video_assist import analyze_video
-    except (ImportError, SystemExit) as e:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=VIDEO_ANALYZE_TIMEOUT_MIN * 60,
+            env=env,
+        )
+    except FileNotFoundError as e:
         raise RuntimeError(
-            "영상 분석 모듈을 불러올 수 없습니다. "
-            "'pip install -r video/requirements.txt' 로 opencv-python·mediapipe 를 설치해주세요."
+            f"영상 분석 파이썬을 찾을 수 없습니다: {VIDEO_ANALYZER_PYTHON}. "
+            "VIDEO_ANALYZER_PYTHON 환경변수로 mediapipe 가 설치된 venv 파이썬을 지정하세요."
         ) from e
-    return analyze_video
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("영상 분석이 시간 제한을 초과했습니다.") from e
+
+    if proc.returncode != 0:
+        # mediapipe import 실패 등으로 러너가 sys.exit(1). 상세는 로그로만 남긴다.
+        raise RuntimeError(
+            f"영상 분석 러너가 비정상 종료했습니다 (code={proc.returncode}). "
+            f"stderr: {(proc.stderr or '')[-500:]}"
+        )
+
+    payload = _parse_last_json(proc.stdout)
+    if payload is None:
+        raise RuntimeError(
+            f"영상 분석 결과를 해석할 수 없습니다. stdout: {(proc.stdout or '')[-300:]}"
+        )
+    if not payload.get("ok"):
+        message = payload.get("message") or "영상 분석 실패"
+        if payload.get("error_type") == "value":
+            raise ValueError(message)
+        raise RuntimeError(message)
+    return payload["result"]
 
 
 def analyze(video_id: int) -> None:
@@ -147,9 +212,9 @@ def analyze(video_id: int) -> None:
     result = None
     error = None
     try:
-        analyze_video = _load_analyze_video()
         # with_timeline=False: 시선 이탈 구간 타임라인은 쓰지 않기로 확정됐다.
-        result = analyze_video(
+        # 별도 venv 파이썬으로 분석을 격리 실행한다(mediapipe protobuf 충돌 회피).
+        result = _run_analyze_subprocess(
             str(video_storage.local_path(storage_key)),
             sample_every=VIDEO_SAMPLE_EVERY,
             with_timeline=False,
@@ -188,6 +253,7 @@ def analyze(video_id: int) -> None:
         else:
             gaze = result.get("gaze") or {}
             row.status = "done"
+            row.error_message = None   # 재분석으로 성공했으면 이전 실패 메시지를 지운다
             row.gaze_percent = result.get("gaze_percent")
             row.gaze_level = gaze.get("level")
             row.gaze_message = gaze.get("message")
