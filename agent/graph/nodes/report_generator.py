@@ -118,6 +118,7 @@ async def report_generator(state: InterviewState):
         + EARLY_TERMINATION_INSTRUCTION
         + RAPPORT_EXCLUSION_INSTRUCTION,
         user_content,
+        stage="report_generator",
     )
 
     return {

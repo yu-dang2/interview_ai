@@ -98,7 +98,9 @@ async def resume_optimizer(state: InterviewState):
 
     # 실패 격리: 최적화 실패가 면접 전체를 실패시키지 않도록 빈 결과로 폴백
     try:
-        raw = await call_llm(RESUME_OPTIMIZER_SYSTEM_PROMPT, user_content)
+        raw = await call_llm(
+            RESUME_OPTIMIZER_SYSTEM_PROMPT, user_content, stage="resume_optimizer"
+        )
         return {"resume_optimization": _normalize(raw)}
     except Exception as e:
         logger.error(

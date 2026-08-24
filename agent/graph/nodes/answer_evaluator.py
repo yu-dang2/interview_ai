@@ -103,7 +103,7 @@ async def answer_evaluator(state: InterviewState):
         "answer": user_answer
     }, ensure_ascii=False)
 
-    eval_result = await call_llm(system_prompt, user_content)
+    eval_result = await call_llm(system_prompt, user_content, stage="answer_evaluator")
 
     # 리포트가 쓸 점수를 누적 채널에 쌓는다. eval_score/eval_result 는 LastValue 라
     # 여기서 담아두지 않으면 report_generator 시점에 마지막 답변 것만 남는다.

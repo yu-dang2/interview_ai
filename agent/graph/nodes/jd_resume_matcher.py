@@ -102,7 +102,7 @@ async def jd_resume_matcher(state: InterviewState):
     # 기술 리드는 매핑에 없으므로 아무것도 붙지 않는다(현행 동작 유지).
     system_prompt += PERSONA_TOPIC_INSTRUCTION.get(persona, "")
 
-    match_result = await call_llm(system_prompt, user_content)
+    match_result = await call_llm(system_prompt, user_content, stage="jd_resume_matcher")
     raw = match_result.get("match_score") if isinstance(match_result, dict) else None
     match_score = _clamp_match_score(raw)
     # 기존 match_result 반환은 그대로 유지, match_score만 추가

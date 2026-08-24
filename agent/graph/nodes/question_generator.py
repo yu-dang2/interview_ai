@@ -86,7 +86,7 @@ async def question_generator(state: InterviewState):
             payload["reference_knowledge"] = reference
 
         user_content = json.dumps(payload, ensure_ascii=False)
-        result = await call_llm(system_prompt, user_content)
+        result = await call_llm(system_prompt, user_content, stage="question_generator")
         question_list = result.get("questions", [])
         current_index = 0
     else:
