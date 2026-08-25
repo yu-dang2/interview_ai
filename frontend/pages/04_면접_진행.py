@@ -50,8 +50,8 @@ if "iv_messages" not in st.session_state:
         jd_id     = get("jd_id") or 0
         persona   = get("interviewer_style") or "기술 리드"
         st.markdown("""<style>
-        [data-testid="stAppViewContainer"] { background: #f3f4f6 !important; }
-        [data-testid="stMain"]             { background: #f3f4f6 !important; }
+        [data-testid="stAppViewContainer"] { background: #f8fafc !important; }
+        [data-testid="stMain"]             { background: #f8fafc !important; }
         [data-testid="stMainBlockContainer"] { padding: 0 !important; }
         [data-testid="stVerticalBlock"]    { gap: 0 !important; }
         header, footer, [data-testid="stSidebar"] { display: none !important; }
@@ -82,7 +82,7 @@ if "iv_messages" not in st.session_state:
                     text_style = "color:#3b6def;font-weight:700;"
                 else:
                     dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                           'background:#d1d5db;flex-shrink:0;"></span>')
+                           'background:#e5e7eb;flex-shrink:0;"></span>')
                     text_style = "color:#9ca3af;"
                 rows += (
                     f'<div style="font-size:13px;margin-bottom:10px;display:flex;align-items:center;'
@@ -90,11 +90,11 @@ if "iv_messages" not in st.session_state:
                 )
             heading = _IV_PREP_STAGES[stage_idx]
             return (
-                '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f3f4f6;">'
+                '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;">'
                 '<div style="background:white;border-radius:20px;padding:52px 56px;'
                 'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">'
                 '<div class="iv-prep-spinner"></div>'
-                f'<div style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">{heading}</div>'
+                f'<div style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">{heading}</div>'
                 '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">'
                 '이력서와 채용공고를 분석해 맞춤 질문을 만들고 있어요.<br>잠시만 기다려 주세요.</div>'
                 f'<div style="text-align:left;display:inline-block;">{rows}</div>'
@@ -255,7 +255,7 @@ else:
         f' stroke-dasharray="{fill:.1f} {circ - fill:.1f}"'
         f' transform="rotate(-90 {cx} {cy})" stroke-linecap="round"/>'
         f'<text x="{cx}" y="{cy + 7}" text-anchor="middle" font-size="22" font-weight="700"'
-        f' fill="#1f1f1f" font-family="sans-serif">{TOTAL}</text>'
+        f' fill="#111827" font-family="sans-serif">{TOTAL}</text>'
         f'<text x="{cx}" y="{cy + 22}" text-anchor="middle" font-size="10"'
         f' fill="#9ca3af" font-family="sans-serif">/100</text>'
         f'</svg>'
@@ -266,10 +266,10 @@ if SCORES:
     for label, score in SCORES:
         scores_html += (
             f'<div style="display:flex;justify-content:space-between;font-size:12px;'
-            f'color:#1f1f1f;margin-bottom:4px;">'
+            f'color:#111827;margin-bottom:4px;">'
             f'<span>{label}</span>'
             f'<span style="font-weight:600;color:#3b6def;">{score}</span></div>'
-            f'<div style="background:#edeef0;border-radius:3px;height:5px;margin-bottom:14px;">'
+            f'<div style="background:#f8fafc;border-radius:3px;height:5px;margin-bottom:14px;">'
             f'<div style="width:{score}%;background:#3b6def;height:5px;border-radius:3px;"></div></div>'
         )
 elif _rt_is_rapport:
@@ -288,7 +288,7 @@ if _rt_feedback:
     feedback_html = ""
     for item in _rt_feedback:
         is_positive = item.get("type") == "positive"
-        bg    = "#f7f8fc" if is_positive else "#fffbeb"
+        bg    = "#f9fafb" if is_positive else "#fffbeb"
         color = "#374151" if is_positive else "#92400e"
         icon  = "✓" if is_positive else "💡"
         feedback_html += (
@@ -351,35 +351,35 @@ st.markdown(f"""<style>
 }}
 .iv-ai-bubble {{
     background:white; border-radius:4px 14px 14px 14px;
-    padding:14px 16px; font-size:13px; color:#1f1f1f; line-height:1.65;
+    padding:14px 16px; font-size:13px; color:#111827; line-height:1.65;
     box-shadow:0 1px 4px rgba(0,0,0,0.08); max-width:540px; white-space:pre-wrap;
 }}
 .iv-user-row {{ display:flex; justify-content:flex-end; margin-bottom:28px; }}
 .iv-user-bubble {{
-    background:#f1f3f9; border-radius:14px 4px 14px 14px;
-    padding:14px 16px; font-size:13px; color:#1f1f1f; line-height:1.65;
+    background:#f8fafc; border-radius:14px 4px 14px 14px;
+    padding:14px 16px; font-size:13px; color:#111827; line-height:1.65;
     max-width:540px; white-space:pre-wrap;
 }}
 
-.iv-playback-divider {{ height:1px; background:#e0e0e6; margin:10px 0 8px; }}
+.iv-playback-divider {{ height:1px; background:#e5e7eb; margin:10px 0 8px; }}
 .iv-playback-row {{ display:flex; justify-content:flex-end; align-items:center; }}
 .iv-playback-row.playing {{ justify-content:space-between; }}
 .iv-playback-status {{ display:none; font-size:12px; font-weight:600; color:#3b6def; }}
 .iv-playback-row.playing .iv-playback-status {{ display:inline; }}
 .iv-playback-replay {{
-    font-size:12px; color:#8c8c8c; text-decoration:underline; cursor:pointer;
+    font-size:12px; color:#9ca3af; text-decoration:underline; cursor:pointer;
 }}
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 우측 ─────────────────────────────────
-_vg_track_bg  = '#3b6def' if voice_guide_on else '#d1d5db'
+_vg_track_bg  = '#3b6def' if voice_guide_on else '#e5e7eb'
 _vg_knob_left = '18px'    if voice_guide_on else '2px'
 
 st.markdown(
     f'<div style="position:fixed;top:0;right:0;height:60px;'
     f'display:flex;align-items:center;gap:10px;padding:0 20px;z-index:99999;">'
     f'<div id="voice-guide-toggle" style="display:flex;align-items:center;gap:8px;'
-    f'background:#eff6ff;border-radius:16px;height:32px;padding:0 12px;cursor:pointer;">'
+    f'background:#eef3ff;border-radius:16px;height:32px;padding:0 12px;cursor:pointer;">'
     f'<span style="font-size:13px;font-weight:600;color:#3b6def;">음성 안내</span>'
     f'<div id="vg-track" style="width:36px;height:20px;border-radius:10px;background:{_vg_track_bg};'
     f'position:relative;transition:background 0.15s;">'
@@ -405,7 +405,7 @@ st.markdown(
 _webcam_display = "" if webcam_on else "display:none;"
 webcam_html = (
     f'<div id="webcam-preview-block" style="width:100%;height:210px;overflow:hidden;{_webcam_display}'
-    'background:#12151e;position:relative;">'
+    'background:#2563eb;position:relative;">'
     '<video id="webcam-preview-video" autoplay playsinline muted '
     'style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>'
     '<div id="webcam-preview-status" style="display:none;position:absolute;inset:0;'
@@ -415,34 +415,34 @@ webcam_html = (
     'font-size:10px;background:rgba(0,0,0,0.55);color:white;border:1px solid rgba(255,255,255,0.3);'
     'border-radius:5px;padding:3px 5px;box-sizing:border-box;"></select>'
     '</div>'
-    f'<div id="webcam-preview-divider" style="height:1px;background:#e5e8ec;margin-bottom:16px;{_webcam_display}"></div>'
+    f'<div id="webcam-preview-divider" style="height:1px;background:#e5e7eb;margin-bottom:16px;{_webcam_display}"></div>'
 )
 
 if _rt_is_rapport:
     _panel_body = (
-        '<div style="font-size:14px;font-weight:600;color:#1f1f1f;margin-bottom:2px;">실시간 피드백</div>'
+        '<div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">실시간 피드백</div>'
         '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">자기소개 답변은 채점하지 않아요</div>'
         '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:40px 0;">'
         '다음 답변부터 점수와 피드백이 표시돼요</div>'
     )
 else:
     _panel_body = (
-        '<div style="font-size:14px;font-weight:600;color:#1f1f1f;margin-bottom:2px;">실시간 피드백</div>'
+        '<div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">실시간 피드백</div>'
         '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">AI가 분석 중입니다</div>'
         '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
         + donut_svg
-        + '<div style="font-size:12px;font-weight:500;color:#1f1f1f;margin-top:4px;">현재 점수</div>'
+        + '<div style="font-size:12px;font-weight:500;color:#111827;margin-top:4px;">현재 점수</div>'
         '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">※ 영상은 점수에 반영되지 않습니다</div>'
         '</div>'
         '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
         + scores_html
-        + '<div style="font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:10px;">AI 실시간 피드백</div>'
+        + '<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:10px;">AI 실시간 피드백</div>'
         + feedback_html
     )
 
 st.markdown(
     '<div style="position:fixed;top:60px;right:0;width:288px;'
-    'height:calc(100vh - 60px);background:white;border-left:1px solid #e5e8ec;'
+    'height:calc(100vh - 60px);background:white;border-left:1px solid #e5e7eb;'
     'overflow-y:auto;z-index:300;box-sizing:border-box;">'
     + webcam_html
     + '<div style="padding:16px 18px 20px;">'
@@ -455,7 +455,7 @@ st.markdown(
 st.text_input("input_type", value="text", key="input_type_hidden", label_visibility="collapsed")
 
 # ── 커스텀 입력바 ─────────────────
-_cam_bg = '#3b6def' if webcam_on else '#f3f4f6'
+_cam_bg = '#3b6def' if webcam_on else '#f8fafc'
 _cam_bd = '#3b6def' if webcam_on else '#e5e7eb'
 
 if webcam_on:
@@ -479,7 +479,7 @@ components.html(f"""<!DOCTYPE html><html><head>
 *{{box-sizing:border-box;margin:0;padding:0;
    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}}
 body{{
-  background:white;border-top:1px solid #f3f4f6;
+  background:white;border-top:1px solid #f8fafc;
   display:flex;flex-direction:column;justify-content:center;
   overflow:hidden;
 }}
@@ -506,7 +506,7 @@ body{{
 #cta{{
   display:block;width:100%;height:44px;min-height:44px;max-height:120px;
   border:1px solid #e5e7eb;border-radius:14px;
-  background:#f9fafb;font-size:14px;color:#1f1f1f;
+  background:#f9fafb;font-size:14px;color:#111827;
   padding:11px 21px;resize:none;outline:none;
   font-family:inherit;line-height:20px;overflow-y:auto;
 }}
@@ -514,7 +514,7 @@ body{{
 #cta:focus{{border-color:#e5e7eb;background:#f9fafb;box-shadow:none;}}
 .ibtn{{
   width:40px;height:40px;border-radius:8px;
-  border:1.5px solid #e5e7eb;background:#f3f4f6;
+  border:1.5px solid #e5e7eb;background:#f8fafc;
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;flex-shrink:0;user-select:none;
 }}
@@ -684,7 +684,7 @@ body{{
   cbtn.addEventListener('click', function() {{
     webcamOn = !webcamOn;
     cbtn.innerHTML = webcamOn ? CAM_FILLED : CAM_OUTLINE;
-    cbtn.style.background  = webcamOn ? '#3b6def' : '#f3f4f6';
+    cbtn.style.background  = webcamOn ? '#3b6def' : '#f8fafc';
     cbtn.style.borderColor = webcamOn ? '#3b6def' : '#e5e7eb';
     var pv = doc.getElementById('webcam-preview-block');
     var pd = doc.getElementById('webcam-preview-divider');
@@ -847,7 +847,7 @@ body{{
 
   function stopAndUploadVideo(onDone) {{
     if (window.parent.__ivStopAndUploadVideo) {{
-      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.BASE_URL}', onDone);
+      window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.PUBLIC_BASE_URL}', onDone);
     }} else {{
       console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
       onDone();
@@ -903,7 +903,7 @@ body{{
   var vgKnob  = doc.getElementById('vg-knob');
   (function() {{
     var on = window.parent.__ivVoiceGuideOn;
-    if (vgTrack) vgTrack.style.background = on ? '#3b6def' : '#d1d5db';
+    if (vgTrack) vgTrack.style.background = on ? '#3b6def' : '#e5e7eb';
     if (vgKnob)  vgKnob.style.left        = on ? '18px' : '2px';
     doc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
       b.style.display = on ? '' : 'none';
@@ -918,7 +918,7 @@ body{{
       var pdoc = window.parent.document;
       var t = pdoc.getElementById('vg-track');
       var k = pdoc.getElementById('vg-knob');
-      if (t) t.style.background = on ? '#3b6def' : '#d1d5db';
+      if (t) t.style.background = on ? '#3b6def' : '#e5e7eb';
       if (k) k.style.left       = on ? '18px' : '2px';
       pdoc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
         b.style.display = on ? '' : 'none';
@@ -963,13 +963,13 @@ body{{
       var ov = doc.createElement('div');
       ov.id = '_iv_ov';
       ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
-        'background:#f3f4f6;z-index:9999999;display:flex;align-items:center;justify-content:center;';
+        'background:#f8fafc;z-index:9999999;display:flex;align-items:center;justify-content:center;';
       ov.innerHTML =
         '<div style="background:white;border-radius:20px;padding:52px 56px;' +
         'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">' +
         '<div id="_iv_sp" style="width:52px;height:52px;border:4px solid #e5e7eb;' +
         'border-top-color:#3b6def;border-radius:50%;margin:0 auto 28px;"></div>' +
-        '<div id="_iv_ov_heading" style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">' +
+        '<div id="_iv_ov_heading" style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">' +
         '면접을 마무리하고 있습니다</div>' +
         '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">' +
         '결과 리포트로 이동할 준비를 하고 있어요.<br>잠시만 기다려 주세요.</div>' +
@@ -978,7 +978,7 @@ body{{
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
         '면접 종료 처리 중...</div>' +
         '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#d1d5db;flex-shrink:0;"></span>' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></span>' +
         '영상 저장 중...</div>' +
         '</div>' +
         '</div>';
@@ -1061,7 +1061,7 @@ body{{
         res();
       }}, 20000);
     }});
-    var endDone = fetch('{api.BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
+    var endDone = fetch('{api.PUBLIC_BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
       method: 'POST',
       headers: {{ 'Authorization': 'Bearer ' + _accessToken }}
     }}).catch(function(err) {{
@@ -1091,7 +1091,7 @@ body{{
   var SPEECH_LEVEL_COLOR = {{
     '빠름': {{ bg: '#fef3c7', fg: '#92400e' }},
     '적정': {{ bg: '#dcfce7', fg: '#16a34a' }},
-    '느림': {{ bg: '#dbeafe', fg: '#1d4ed8' }}
+    '느림': {{ bg: '#eef3ff', fg: '#2563eb' }}
   }};
   var MIC_OUTLINE =
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
@@ -1118,7 +1118,7 @@ body{{
 
   function setMicIdle() {{
     recording = false;
-    mbtn.style.background  = '#f3f4f6';
+    mbtn.style.background  = '#f8fafc';
     mbtn.style.borderColor = '#e5e7eb';
     mbtn.innerHTML = MIC_OUTLINE;
     hintRow.style.display = 'none';
@@ -1171,7 +1171,7 @@ body{{
         formData.append('audio', blob, 'recording.' + ext);
         var durationSec = _recordStartedAt ? (Date.now() - _recordStartedAt) / 1000 : 0;
         formData.append('duration', String(durationSec));
-        fetch('{api.BASE_URL}/voice/transcribe', {{
+        fetch('{api.PUBLIC_BASE_URL}/voice/transcribe', {{
           method: 'POST',
           headers: {{ 'Authorization': 'Bearer ' + _accessToken }},
           body: formData
@@ -1190,7 +1190,7 @@ body{{
             autosize();
             setMicIdle();
             if (data.speech_cpm && data.speech) {{
-              var lv = SPEECH_LEVEL_COLOR[data.speech.level] || {{ bg: '#f3f4f6', fg: '#6b7280' }};
+              var lv = SPEECH_LEVEL_COLOR[data.speech.level] || {{ bg: '#f8fafc', fg: '#6b7280' }};
               speechRateRow.innerHTML =
                 '<span class="srr-badge" style="background:' + lv.bg + ';color:' + lv.fg + ';">' +
                 data.speech.level + '</span><span>' + data.speech.message + '</span>';
@@ -1234,7 +1234,7 @@ body{{
 
 # ── 채팅 메시지 ───────────────────────────────────────────────────────────
 TAG_COLORS = {
-    "꼬리 질문": "#1d4ed8",
+    "꼬리 질문": "#2563eb",
     "압박":      "#991b1b",
 }
 
