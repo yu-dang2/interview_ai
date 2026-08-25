@@ -19,17 +19,17 @@ AI 면접 서비스의 "발표 습관 개선" 보조 코칭용 모듈.
 import argparse
 import sys
 
-import cv2
-
-# mediapipe import 오류 방지: 가상환경이 Python 3.12인지 먼저 확인할 것.
-# (3.13에서는 mediapipe가 설치되지 않으므로 ImportError가 발생한다.)
+# cv2·mediapipe 는 시선 분석(analyze_video / GazeAnalyzer)에만 쓰인다.
+# 발화 속도(speech_rate)는 이것들이 필요 없는데, 예전에는 모듈 최상단 import 가
+# 실패하면 sys.exit(1) 로 죽어 speech_rate 까지 못 불러왔다(백엔드엔 mediapipe 미설치).
+# → 없으면 None 으로 두고, 실제로 시선 분석을 호출할 때만 명확히 실패시킨다.
+# (시선 분석은 mediapipe 를 갖춘 별도 venv 에서 subprocess 로 실행된다)
 try:
+    import cv2
     import mediapipe as mp
 except ImportError:
-    print("[오류] mediapipe를 불러올 수 없습니다.")
-    print("       Python 3.11 또는 3.12 가상환경에서 실행해야 합니다. (3.13 미지원)")
-    print("       예) py -3.12 -m venv venv  후  pip install opencv-python mediapipe")
-    sys.exit(1)
+    cv2 = None
+    mp = None
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +57,9 @@ class GazeAnalyzer:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
         )
-        self._total_frames = 0   # 얼굴이 검출된 분석 대상 프레임 수
-        self._front_frames = 0   # 그중 정면 응시로 판정된 프레임 수
+        self._total_frames = 0     # 얼굴이 검출된 분석 대상 프레임 수 (= frames_analyzed)
+        self._front_frames = 0     # 그중 정면 응시로 판정된 프레임 수
+        self._no_face_frames = 0   # 얼굴 미검출 프레임 수 (가림·화면 이탈 → 미응시로 집계)
 
     @staticmethod
     def _iris_ratio(iris_x, corner_a_x, corner_b_x):
@@ -81,7 +82,10 @@ class GazeAnalyzer:
         result = self._face_mesh.process(frame_rgb)
 
         if not result.multi_face_landmarks:
-            return None  # 얼굴이 없으면 집계하지 않는다.
+            # 얼굴이 안 잡히면 가리거나 화면을 벗어난 것으로 보고 미응시로 집계한다.
+            # (예전에는 제외해서, 얼굴을 가려도 정면 비율이 안 떨어지는 문제가 있었다)
+            self._no_face_frames += 1
+            return None
 
         landmarks = result.multi_face_landmarks[0].landmark
 
@@ -108,10 +112,12 @@ class GazeAnalyzer:
         return is_front
 
     def summary(self):
-        """정면 응시 비율(%)을 반환한다. 분석된 프레임이 없으면 0.0."""
-        if self._total_frames == 0:
+        """정면 응시 비율(%)을 반환한다. 얼굴 미검출(가림·이탈) 프레임도 분모에 넣어,
+        화면을 가리거나 벗어난 시간만큼 비율이 낮아지게 한다. 샘플이 없으면 0.0."""
+        denom = self._total_frames + self._no_face_frames
+        if denom == 0:
             return 0.0
-        return self._front_frames / self._total_frames * 100.0
+        return self._front_frames / denom * 100.0
 
     def close(self):
         """FaceMesh 리소스를 해제한다."""
@@ -194,6 +200,12 @@ def analyze_video(video_path, sample_every=1, with_timeline=True):
 
     ※ 이 값은 면접 점수에 미반영(보조 코칭용). 파일을 못 열면 ValueError.
     """
+    if cv2 is None or mp is None:
+        raise RuntimeError(
+            "시선 분석에는 opencv-python·mediapipe 가 필요합니다. "
+            "mediapipe 가 설치된 환경(별도 venv)에서 실행하세요."
+        )
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"영상을 열 수 없습니다: {video_path}")
