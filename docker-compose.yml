@@ -53,6 +53,10 @@ services:
       INTERVIEW_ACTIVE_LIMIT: ${INTERVIEW_ACTIVE_LIMIT:-3}
       INTERVIEW_TIME_LIMIT_MIN: ${INTERVIEW_TIME_LIMIT_MIN:-30}
       INTERVIEW_STALE_AFTER_MIN: ${INTERVIEW_STALE_AFTER_MIN:-60}
+      # 영상 분석(mediapipe)을 돌릴 파이썬. 로컬에서는 protobuf 충돌 때문에 별도 venv 를
+      # 쓰지만, 이 이미지는 requirements.txt 로 protobuf 4.25 가 맞게 깔려 있어 자기
+      # 파이썬으로 그대로 돌린다. (기본값이 윈도우 경로라 지정하지 않으면 분석이 실패한다)
+      VIDEO_ANALYZER_PYTHON: ${VIDEO_ANALYZER_PYTHON:-python}
     ports:
       - "8000:8000"
     volumes:
