@@ -136,7 +136,7 @@ st.markdown(f'<div class="usage-steps">{steps_html}</div>', unsafe_allow_html=Tr
 
 # ── CTA ─────────────────────────────────────────────────────────────
 with st.container(key="usage_cta_row"):
-    st.markdown('<p style="font-size:14px;color:#6b7280;margin-bottom:20px;">이제 직접 체험해볼 차례예요</p>',
+    st.markdown('<p style="font-size:14px;color:#6b7280;margin-bottom:20px;text-align:center;">이제 직접 체험해볼 차례예요</p>',
                 unsafe_allow_html=True)
     _, center, _ = st.columns([2, 1, 2])
     with center:
