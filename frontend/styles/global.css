@@ -7,6 +7,8 @@
    ② Streamlit 기본 요소 숨기기
    ③ 색상 변수 (CSS Custom Properties)
    ④ 공통 컴포넌트 스타일
+   ⑤ 네비게이션 바 (app.py / 09_사용법.py 공용)
+   ⑥ 랜딩 페이지 (app.py 전용 — ld- 접두사)
    ============================================= */
 
 
@@ -87,22 +89,25 @@ header,
 
 /* ③ 색상 변수 */
 :root {
-    --blue:      #3b6def;
+    --blue:      #3b6def;  /* = --ld-forest */
     --blue-dark: #2563eb;
-    --blue-soft: #eef3ff;
+    --blue-soft: #eef3ff;  /* 옅은 블루 틴트 (배지·인포 배경용) */
 
     --green:     #16a34a;
     --orange:    #d97706;
     --red:       #dc2626;
 
-    --gray-900:  #111827;
-    --gray-700:  #374151;
-    --gray-500:  #6b7280;
-    --gray-300:  #d1d5db;
-    --gray-100:  #f3f4f6;
+    --gray-900:  #111827;  /* = --ld-ink */
+    --gray-700:  #374151;  /* = --ld-body */
+    --gray-500:  #6b7280;  /* = --ld-muted */
+    --gray-300:  #d1d5db;  /* = --ld-border 톤과 통일 */
+    --gray-100:  #f9fafb;  /* = --ld-card */
 
-    --border:    #e5e7eb;
-    --bg:        #f8fafc;
+    --accent:       #7c3aed;  /* 보라 — 포인트 강조용, blue 자리 대신 별도 보탠 것 */
+    --accent-deep:  #5b21b6;
+
+    --border:    #e5e7eb;  /* = --ld-border */
+    --bg:        #f8fafc;  /* = --ld-bg */
 
     /* 간격 스케일 (4px 기준) */
     --space-1:  4px;
@@ -140,6 +145,21 @@ header,
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
     --shadow-md: 0 4px 10px rgba(0,0,0,0.08);
     --shadow-lg: 0 10px 24px rgba(18,32,62,0.10);
+
+    --ld-bg:             #f8fafc;
+    --ld-card:           #f9fafb;
+    --ld-border:         #e5e7eb;
+    --ld-ink:            #111827;
+    --ld-body:           #374151;
+    --ld-muted:          #6b7280;
+    --ld-label:          #6b7280;
+    --ld-forest:         #3b6def;
+    --ld-on-forest:      #ffffff;
+    --ld-on-forest-dim:  #dbeafe;
+    --ld-mustard:        #7c3aed;
+    --ld-mustard-deep:   #5b21b6;
+    --ld-mustard-bubble: #f5f3ff;
+    --ld-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 }
 
 
@@ -209,10 +229,8 @@ header,
 
 
 /* =============================================
-   랜딩 페이지 (app.py)
+   ⑤ 네비게이션 바 — app.py, 09_사용법.py 공용
    ============================================= */
-
-/* --- 네비게이션 바 --- */
 .navbar {
     position: fixed;
     top: 0; left: 0; right: 0;
@@ -229,7 +247,7 @@ header,
     font-size: 21px;
     font-weight: 800;
     letter-spacing: -0.3px;
-    color: var(--blue);
+    color: var(--blue) !important;
     white-space: nowrap;
 }
 .navbar-right {
@@ -265,113 +283,6 @@ header,
 }
 .btn-filled:hover { background: var(--blue-dark); }
 
-/* --- 히어로 섹션 --- */
-.hero {
-    background:
-        radial-gradient(560px 320px at 88% 0%, var(--blue-soft) 0%, rgba(238,243,255,0) 70%),
-        white;
-    padding: var(--space-20) var(--space-10) var(--space-12);
-    text-align: center;
-    margin-top: 64px;
-}
-.hero-inner { max-width: 760px; margin: 0 auto; position: relative; z-index: 1; }
-.hero-badge {
-    font-size: var(--text-sm);
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--blue);
-    margin: 0 0 var(--space-4);
-    word-break: keep-all;
-}
-.hero-title {
-    font-size: clamp(30px, 5vw, 44px);
-    font-weight: 800;
-    color: var(--gray-900);
-    line-height: 1.25;
-    margin: 0 0 var(--space-3);
-    word-break: keep-all;
-}
-.hero-subtitle {
-    font-size: var(--text-2xl);
-    font-weight: 700;
-    color: var(--blue);
-    margin: 0 0 var(--space-5);
-    word-break: keep-all;
-}
-.hero-desc {
-    font-size: var(--text-md);
-    color: var(--gray-500);
-    line-height: 1.7;
-    margin: 0;
-    word-break: keep-all;
-}
-
-/* 히어로 CTA 버튼 행 — 히어로의 흰 배경을 그대로 이어받는다 */
-.st-key-cta_row {
-    background: white;
-    padding: var(--space-8) 0 var(--space-16);
-    display: block;
-    width: 100%;
-}
-
-/* CTA 버튼 (st.button) */
-.cta-wrap .stButton > button {
-    height: 52px !important;
-    border-radius: var(--radius-md) !important;
-    font-size: var(--text-lg) !important;
-    font-weight: 700 !important;
-}
-
-/* --- 기능 카드 섹션 --- */
-.features-section {
-    background: white;
-    padding: var(--space-16) var(--space-10) var(--space-20);
-}
-.features-title {
-    font-size: var(--text-2xl);
-    font-weight: 700;
-    color: var(--gray-900);
-    text-align: center;
-    margin: 0 0 var(--space-10);
-    word-break: keep-all;
-}
-.features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: var(--space-6);
-}
-.feat-card {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-8) var(--space-6) var(--space-6);
-    min-width: 0;
-    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
-}
-.feat-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--blue);
-    box-shadow: var(--shadow-md);
-}
-.feat-icon-box {
-    width: 44px; height: 44px;
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: var(--space-4);
-    flex-shrink: 0;
-}
-/* 아이콘 박스 안 SVG 크기 고정 */
-.feat-icon-box svg {
-    width: 22px;
-    height: 22px;
-}
-.feat-title { font-size: var(--text-lg); font-weight: 700; color: var(--gray-900); margin-bottom: var(--space-3); word-break: keep-all; }
-.feat-item  { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); font-size: var(--text-sm); color: var(--gray-500); word-break: keep-all; }
-.feat-dot   { width: 6px; height: 6px; border-radius: 3px; flex-shrink: 0; }
-
-/* --- 네비게이션 텍스트 링크 (사용법 등) --- */
 .navbar-link,
 .navbar-link:visited,
 .navbar-link:active {
@@ -384,113 +295,201 @@ header,
 }
 .navbar-link:hover { color: var(--blue) !important; }
 
-/* --- 진행 과정 (3단계) --- */
-.process-section {
-    background: var(--bg);
-    padding: var(--space-16) var(--space-10);
-    text-align: center;
-}
-.process-label {
-    font-size: var(--text-sm);
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--blue);
-    margin: 0 0 var(--space-2);
-}
-.process-title-main {
-    font-size: var(--text-3xl);
-    font-weight: 700;
-    color: var(--gray-900);
-    margin: 0 0 var(--space-10);
-    word-break: keep-all;
-}
-.process-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: var(--space-8);
-    max-width: 900px;
-    margin: 0 auto;
-}
-.process-step { text-align: left; }
-.process-num {
-    width: 44px; height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1.5px solid var(--blue);
-    border-radius: 50%;
-    font-size: var(--text-lg);
-    font-weight: 700;
-    color: var(--blue);
-    margin-bottom: var(--space-4);
-}
-.process-title { font-size: var(--text-lg); font-weight: 700; color: var(--gray-900); margin-bottom: var(--space-2); word-break: keep-all; }
-.process-desc  { font-size: var(--text-base); color: var(--gray-500); line-height: 1.7; word-break: keep-all; }
+.ld-navbar.navbar { background: rgba(248,250,252,.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--ld-border); }
+.ld-navbar .navbar-link:hover { color: var(--ld-mustard-deep) !important; }
+.ld-navbar .btn-ghost { border-color: var(--ld-border) !important; color: var(--ld-ink) !important; background: transparent !important; }
+.ld-navbar .btn-filled { background: var(--ld-forest) !important; color: var(--ld-on-forest) !important; border-radius: 999px !important; }
+.ld-navbar .btn-filled:hover { background: var(--blue-dark) !important; }
 
-/* --- FAQ --- */
-.faq-section {
-    background: white;
-    padding: var(--space-16) var(--space-10);
-}
-.faq-title {
-    font-size: var(--text-2xl);
-    font-weight: 700;
-    color: var(--gray-900);
-    text-align: center;
-    margin: 0 0 var(--space-8);
-}
-.faq-list { max-width: 720px; margin: 0 auto; }
-.faq-item {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4) var(--space-5);
-    margin-bottom: var(--space-3);
-    transition: border-color 0.15s;
-}
-.faq-item[open] { border-color: var(--blue); }
-.faq-item summary {
-    font-size: var(--text-md);
-    font-weight: 600;
-    color: var(--gray-900);
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    word-break: keep-all;
-}
-.faq-item summary::-webkit-details-marker { display: none; }
-.faq-item .faq-chevron { color: var(--gray-500); transition: transform 0.15s; flex-shrink: 0; margin-left: var(--space-3); }
-.faq-item[open] .faq-chevron { transform: rotate(180deg); color: var(--blue); }
-.faq-item p {
-    font-size: var(--text-base);
-    color: var(--gray-500);
-    line-height: 1.7;
-    margin: var(--space-3) 0 0;
-    word-break: keep-all;
-}
 
-/* --- 마무리 CTA --- */
-.final-cta {
-    background: var(--gray-900);
-    padding: var(--space-16) var(--space-10) var(--space-8);
+/* =============================================
+   ⑥ 랜딩 페이지 — app.py 전용 (1d 시안: 스레드 · 꼬리질문 대화록)
+   ============================================= */
+
+.ld-eyebrow {
+    font-family: var(--ld-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ld-label);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.ld-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ld-mustard); flex-shrink: 0; }
+
+/* --- 히어로 --- */
+.ld-hero {
+    background: var(--ld-bg);
+    padding: 128px 40px 56px;
     text-align: center;
 }
-.final-cta-title { font-size: var(--text-3xl); font-weight: 700; color: white; margin: 0 0 var(--space-3); word-break: keep-all; }
-.final-cta-desc  { font-size: var(--text-md); color: rgba(255,255,255,0.65); margin: 0; word-break: keep-all; }
-.st-key-final_cta_row {
-    background: var(--gray-900);
-    padding: var(--space-6) 0 var(--space-16);
+.ld-hero-inner { max-width: 780px; margin: 0 auto; }
+.ld-hero-title {
+    font-weight: 700 !important;
+    font-size: clamp(32px, 5.4vw, 56px) !important;
+    line-height: 1.14 !important;
+    letter-spacing: -.045em;
+    color: var(--ld-ink);
+    margin: 18px 0 0;
+    word-break: keep-all;
+}
+.ld-hero-title em { font-style: normal; color: var(--ld-forest); }
+.ld-hero-sub {
+    max-width: 560px;
+    margin: 20px auto 0 !important;
+    font-size: 16.5px;
+    line-height: 1.8;
+    color: var(--ld-body);
+    word-break: keep-all;
+}
+.st-key-ld_cta_row {
+    background: var(--ld-bg);
+    padding: 30px 0 60px;
     display: block;
     width: 100%;
 }
-.st-key-final_cta_btn button {
+.st-key-ld_cta_row .stButton > button {
     height: 52px !important;
-    border-radius: var(--radius-md) !important;
-    background: white !important;
-    color: var(--blue) !important;
-    border: 1px solid transparent !important;
+    border-radius: 999px !important;
+    background: var(--ld-forest) !important;
+    border: none !important;
+    color: var(--ld-on-forest) !important;
 }
-.st-key-final_cta_btn button p { font-size: var(--text-lg) !important; font-weight: 700 !important; }
-.st-key-final_cta_btn button:hover { background: var(--blue-soft) !important; }
+.st-key-ld_cta_row .stButton > button:hover { background: var(--blue-dark) !important; }
+.st-key-ld_cta_row .stButton > button p { font-size: 15px !important; font-weight: 700 !important; }
+.ld-hero-link { display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 700; color: var(--ld-ink); border-bottom: 2px solid var(--ld-mustard); padding-bottom: 2px; }
+
+/* --- 시그니처: 대화 스레드 데모 (2열 비대칭) --- */
+.ld-thread-section { background: var(--ld-bg); padding: 20px 40px 100px; }
+.ld-thread-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: .82fr 1fr; gap: 56px; align-items: center; }
+.ld-title-lg { font-weight: 700; font-size: 32px !important; letter-spacing: -.02em; color: var(--ld-ink); margin: 12px 0 0; word-break: keep-all; }
+.ld-title-card { font-weight: 700; font-size: 18px !important; color: var(--ld-ink); margin: 0 0 9px; letter-spacing: -.01em; word-break: keep-all; }
+.ld-title-step { font-weight: 700; font-size: 16.5px !important; color: var(--ld-ink); margin: 0 0 6px; word-break: keep-all; }
+.ld-title-cta { color: var(--ld-on-forest) !important; font-weight: 700; font-size: 28px !important; letter-spacing: -.02em; margin: 0; word-break: keep-all; }
+.ld-thread-copy .ld-title-lg { margin: 12px 0 16px; }
+.ld-thread-copy p { font-size: 15px; line-height: 1.85; color: var(--ld-body); word-break: keep-all; }
+.ld-thread-stat {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-top: 26px; padding: 10px 16px;
+    background: var(--ld-card); border: 1px solid var(--ld-border); border-radius: 999px;
+}
+.ld-thread-stat b { font-family: var(--ld-mono); font-weight: 700; font-size: 13px; color: var(--ld-mustard-deep); }
+.ld-thread-stat span { font-size: 12.5px; color: var(--ld-muted); }
+
+.ld-thread-panel { background: var(--ld-card); border: 1px solid var(--ld-border); border-radius: 18px; padding: 30px 32px 34px; }
+.ld-thread-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.ld-pill { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid var(--ld-forest); color: var(--ld-forest); font-weight: 700; font-size: 12px; padding: 4px 12px 4px 9px; border-radius: 999px; }
+.ld-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ld-forest); }
+.ld-thread-timer { font-family: var(--ld-mono); font-weight: 500; font-size: 11px; color: var(--ld-muted); background: var(--ld-bg); border: 1px solid var(--ld-border); padding: 4px 10px; border-radius: 999px; }
+
+.ld-msg { display: flex; gap: 11px; margin-bottom: 18px; align-items: flex-start; }
+.ld-msg.user { flex-direction: row-reverse; }
+.ld-avatar { width: 27px; height: 27px; border-radius: 50%; flex-shrink: 0; background: var(--ld-forest); }
+.ld-msg.user .ld-avatar { background: var(--ld-mustard); }
+.ld-bubble { font-size: 13.5px; line-height: 1.65; padding: 12px 15px; max-width: 78%; word-break: keep-all; }
+.ld-bubble.ai { background: var(--ld-forest); color: var(--ld-on-forest); border-radius: 4px 14px 14px 14px; }
+.ld-bubble.user { background: var(--ld-bg); color: var(--ld-ink); border: 1px solid var(--ld-border); border-radius: 14px 4px 14px 14px; }
+
+.ld-followup { border-left: 2px solid var(--ld-mustard); margin-left: 12px; padding-left: 20px; margin-top: 4px; margin-bottom: 18px; }
+.ld-followup-tag { font-family: var(--ld-mono); font-weight: 500; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--ld-mustard-deep); background: var(--ld-mustard-bubble); display: inline-block; padding: 3px 9px; border-radius: 999px; margin-bottom: 9px; }
+.ld-followup .ld-bubble.ai { background: var(--ld-mustard-bubble); color: var(--ld-mustard-deep); }
+.ld-followup .ld-avatar { background: var(--ld-mustard); }
+
+.ld-gaze-inline { display: flex; align-items: center; gap: 8px; margin: 18px 0 2px 39px; padding: 8px 12px; background: var(--ld-bg); border: 1px dashed var(--ld-border); border-radius: 10px; }
+.ld-gaze-inline .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ld-label); flex-shrink: 0; }
+.ld-gaze-inline span { font-size: 12px; color: var(--ld-muted); word-break: keep-all; }
+.ld-gaze-inline b { font-family: var(--ld-mono); font-weight: 500; font-size: 9.5px; color: var(--ld-label); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
+
+/* --- 비교: 일반 모의면접 vs intro (2열 패널) --- */
+.ld-compare-section { background: white; padding: 100px 40px; }
+.ld-compare-head { max-width: 640px; margin: 0 auto 44px; text-align: center; }
+.ld-compare-grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.ld-compare-panel { border-radius: 18px; padding: 30px 30px 26px; }
+.ld-compare-panel.old { background: var(--ld-bg); border: 1px solid var(--ld-border); }
+.ld-compare-panel.new { background: var(--ld-forest); }
+.ld-compare-panel-title { font-weight: 700; font-size: 15px; margin-bottom: 20px; }
+.ld-compare-panel.old .ld-compare-panel-title { color: var(--ld-muted); }
+.ld-compare-panel.new .ld-compare-panel-title { color: #ffffff; }
+.ld-compare-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-top: 1px solid; }
+.ld-compare-panel.old .ld-compare-row { border-color: var(--ld-border); }
+.ld-compare-panel.new .ld-compare-row { border-color: rgba(239,241,233,.14); }
+.ld-compare-row:first-of-type { border-top: none; padding-top: 0; }
+.ld-compare-mark { font-family: var(--ld-mono); font-weight: 700; font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+.ld-compare-panel.old .ld-compare-mark { color: #9CA3AF; }
+.ld-compare-panel.new .ld-compare-mark { color: var(--ld-on-forest-dim); }
+.ld-compare-row span { font-size: 13.5px; line-height: 1.6; word-break: keep-all; }
+.ld-compare-panel.old .ld-compare-row span { color: var(--ld-body); }
+.ld-compare-panel.new .ld-compare-row span { color: var(--ld-on-forest); }
+
+/* --- 기능 (2x2) --- */
+.ld-features-section { background: var(--ld-bg); padding: 100px 40px; }
+.ld-section-head { max-width: 620px; margin: 0 auto 44px; text-align: center; }
+.ld-features-grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.ld-feat-card { background: var(--ld-card); border: 1px solid var(--ld-border); border-radius: 16px; padding: 28px 26px; }
+.ld-feat-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--ld-forest); margin-bottom: 18px; position: relative; }
+.ld-feat-icon::after { content: ""; position: absolute; inset: 11px; border-radius: 3px; background: #ffffff; }
+.ld-feat-card p { font-size: 13.5px; line-height: 1.75; color: var(--ld-muted); word-break: keep-all; }
+
+/* --- 페르소나 쇼케이스 (가로 3열) --- */
+.ld-persona-section { background: white; padding: 100px 40px; }
+.ld-persona-row { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.ld-persona-card { background: var(--ld-card); border: 1px solid var(--ld-border); border-radius: 18px; padding: 26px 24px; text-align: center; }
+.ld-persona-avatar { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; margin: 0 auto 16px; border: 2px solid white; box-shadow: 0 0 0 2px var(--ld-border); }
+.ld-persona-name { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid var(--ld-forest); color: var(--ld-forest); font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 999px; margin-bottom: 12px; }
+.ld-persona-desc { font-weight: 700; font-size: 14.5px; color: var(--ld-ink); margin-bottom: 14px; word-break: keep-all; }
+.ld-persona-detail { text-align: left; }
+.ld-persona-detail div { display: flex; gap: 8px; font-size: 12.5px; color: var(--ld-muted); line-height: 1.7; word-break: keep-all; }
+.ld-persona-detail div::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--ld-mustard); margin-top: 8px; flex-shrink: 0; }
+
+/* --- 진행 단계 (세로 리스트) --- */
+.ld-steps-section { background: var(--ld-bg); padding: 100px 40px; }
+.ld-step-list { max-width: 720px; margin: 0 auto; }
+.ld-step { display: grid; grid-template-columns: 96px 1fr; gap: 22px; padding: 26px 0 26px 20px; border-top: 1px solid var(--ld-border); position: relative; }
+.ld-step:last-child { border-bottom: 1px solid var(--ld-border); }
+.ld-step::before { content: ""; position: absolute; left: 0; top: 26px; bottom: 26px; width: 2px; background: var(--ld-mustard); }
+.ld-step-idx { font-family: var(--ld-mono); font-weight: 500; font-size: 11px; color: var(--ld-mustard-deep); letter-spacing: .04em; padding-top: 2px; }
+.ld-step p { font-size: 13.5px; color: var(--ld-muted); line-height: 1.75; word-break: keep-all; }
+
+/* --- FAQ --- */
+.ld-faq-section { background: white; padding: 100px 40px; }
+.ld-faq-list { max-width: 700px; margin: 0 auto; }
+.ld-faq-item { border-top: 1px solid var(--ld-border); padding: 22px 4px; }
+.ld-faq-item:last-child { border-bottom: 1px solid var(--ld-border); }
+.ld-faq-item summary { font-weight: 600; font-size: 15px; color: var(--ld-ink); cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; word-break: keep-all; }
+.ld-faq-item summary::-webkit-details-marker { display: none; }
+.ld-faq-mark { font-family: var(--ld-mono); font-weight: 500; color: var(--ld-mustard-deep); flex-shrink: 0; transition: transform .15s; }
+.ld-faq-item[open] .ld-faq-mark { transform: rotate(45deg); }
+.ld-faq-item p { margin: 12px 0 0; font-size: 13.5px; color: var(--ld-muted); line-height: 1.8; max-width: 580px; word-break: keep-all; }
+
+/* --- 마무리 CTA --- */
+.ld-final-cta-wrap { background: var(--ld-bg); padding: 56px 40px 28px; }
+.ld-final-cta { max-width: 1000px; margin: 0 auto; background: var(--ld-forest); border-radius: 26px; padding: 56px; text-align: center; }
+.ld-final-cta p { color: var(--ld-on-forest-dim) !important; font-size: 14px; margin-top: 8px; word-break: keep-all; }
+.st-key-ld_final_cta_row { max-width: 1000px; margin: 0 auto; padding: 44px 40px 90px; display: block; width: 100%; box-sizing: border-box; }
+.st-key-ld_final_cta_row .stButton > button {
+    height: 52px !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    color: var(--ld-forest) !important;
+    border: 1.5px solid var(--ld-forest) !important;
+}
+.st-key-ld_final_cta_row .stButton > button p { font-size: 15px !important; font-weight: 700 !important; }
+.st-key-ld_final_cta_row .stButton > button:hover { background: var(--blue-soft) !important; }
+
+/* --- 푸터 --- */
+.ld-footer { background: var(--ld-bg); border-top: 1px solid var(--ld-border); padding: 26px 40px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--ld-label); }
+
+@media (max-width: 900px) {
+    .ld-thread-grid { grid-template-columns: 1fr; gap: 36px; }
+    .ld-compare-grid { grid-template-columns: 1fr; }
+    .ld-persona-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+    .ld-features-grid { grid-template-columns: 1fr; }
+    .ld-step { grid-template-columns: 1fr; gap: 6px; }
+    .ld-final-cta { padding: 40px 28px; }
+    .ld-hero { padding: 108px 20px 44px; }
+    .ld-thread-section, .ld-compare-section, .ld-features-section, .ld-persona-section, .ld-steps-section, .ld-faq-section { padding-left: 20px; padding-right: 20px; }
+}
