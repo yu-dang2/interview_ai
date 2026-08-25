@@ -50,7 +50,7 @@ st.markdown("""<style>
     margin-bottom: var(--space-10);
     box-sizing: border-box;
 }
-.wc-card-highlight { border-color: #3b6def; background: #f7f9ff; }
+.wc-card-highlight { border-color: #3b6def; background: #f9fafb; }
 
 [data-testid="stBaseButton-primary"] {
     width: 100% !important;
@@ -60,8 +60,8 @@ st.markdown("""<style>
     white-space: nowrap !important;
 }
 [data-testid="stBaseButton-primary"]:hover {
-    background: #2d55c8 !important;
-    border-color: #2d55c8 !important;
+    background: #2563eb !important;
+    border-color: #2563eb !important;
 }
 
 [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="element-container"]:last-child {
@@ -86,13 +86,13 @@ with card_col:
 
         st.markdown(
             '<div style="display:flex;align-items:center;justify-content:center;margin-bottom:32px;">'
-            '<div style="width:10px;height:10px;border-radius:50%;background:#d9dee8;flex-shrink:0;"></div>'
+            '<div style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></div>'
             '<span style="font-size:11px;color:#6b7280;margin:0 6px 0 4px;">환경 설정</span>'
-            '<div style="width:52px;height:1px;background:#d9dee8;"></div>'
+            '<div style="width:52px;height:1px;background:#e5e7eb;"></div>'
             '<div style="width:10px;height:10px;border-radius:50%;background:#3b6def;flex-shrink:0;margin:0 4px;"></div>'
             '<span style="font-size:11px;font-weight:600;color:#3b6def;margin-right:6px;">웹캠 허용</span>'
-            '<div style="width:52px;height:1px;background:#d9dee8;"></div>'
-            '<div style="width:10px;height:10px;border-radius:50%;background:#d9dee8;flex-shrink:0;margin-left:4px;"></div>'
+            '<div style="width:52px;height:1px;background:#e5e7eb;"></div>'
+            '<div style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;flex-shrink:0;margin-left:4px;"></div>'
             '<span style="font-size:11px;color:#6b7280;margin-left:4px;">면접 시작</span>'
             '</div>',
             unsafe_allow_html=True,
@@ -100,7 +100,7 @@ with card_col:
 
         st.markdown(
             '<p style="text-align:center;font-size:22px;font-weight:700;'
-            'color:#1f1f1f;margin:0 0 6px;">면접 방식을 선택해주세요</p>'
+            'color:#111827;margin:0 0 6px;">면접 방식을 선택해주세요</p>'
             '<p style="text-align:center;font-size:14px;color:#6b7280;margin:0 0 28px;">'
             '웹캠을 켜면 시선 처리·발화 속도까지 분석해드려요.</p>',
             unsafe_allow_html=True,
@@ -119,23 +119,23 @@ with card_col:
                 '<div class="wc-card wc-card-highlight">'
                 '<div style="display:flex;justify-content:center;margin-bottom:14px;">'
                 '<svg width="52" height="52" viewBox="0 0 88 88" fill="none">'
-                '<circle cx="44" cy="44" r="44" fill="#eef2ff"/>'
+                '<circle cx="44" cy="44" r="44" fill="#eef3ff"/>'
                 '<rect x="23" y="30" width="42" height="30" rx="5" fill="#3b6def"/>'
                 '<rect x="38" y="23" width="12" height="9" rx="3" fill="#3b6def"/>'
                 '<circle cx="44" cy="45" r="8" fill="white"/>'
                 '<circle cx="44" cy="45" r="4" fill="#3b6def"/>'
                 '</svg></div>'
-                '<p style="text-align:center;font-size:16px;font-weight:700;color:#1f1f1f;margin:0 0 4px;">웹캠 켜고 진행</p>'
+                '<p style="text-align:center;font-size:16px;font-weight:700;color:#111827;margin:0 0 4px;">웹캠 켜고 진행</p>'
                 '<p style="text-align:center;font-size:12px;color:#3b6def;font-weight:600;margin:0 0 16px;">AI 분석 항목 추가 · 추천</p>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#3b6def;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#1a3380;">시선 처리 점수화</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#2563eb;">시선 처리 점수화</span></div>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#f59e0b;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#1a3380;">발화 속도 분석</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#2563eb;">발화 속도 분석</span></div>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:18px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#ef4444;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#1a3380;">영상 녹화 및 저장 허용</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#2563eb;">영상 녹화 및 저장 허용</span></div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -148,23 +148,23 @@ with card_col:
                 '<div class="wc-card">'
                 '<div style="display:flex;justify-content:center;margin-bottom:14px;">'
                 '<svg width="52" height="52" viewBox="0 0 88 88" fill="none">'
-                '<circle cx="44" cy="44" r="44" fill="#f3f4f6"/>'
+                '<circle cx="44" cy="44" r="44" fill="#f8fafc"/>'
                 '<rect x="23" y="30" width="42" height="30" rx="5" fill="#9ca3af"/>'
                 '<rect x="38" y="23" width="12" height="9" rx="3" fill="#9ca3af"/>'
                 '<circle cx="44" cy="45" r="8" fill="white"/>'
                 '<line x1="20" y1="20" x2="68" y2="68" stroke="#9ca3af" stroke-width="4"/>'
                 '</svg></div>'
-                '<p style="text-align:center;font-size:16px;font-weight:700;color:#1f1f1f;margin:0 0 4px;">웹캠 없이 진행</p>'
+                '<p style="text-align:center;font-size:16px;font-weight:700;color:#111827;margin:0 0 4px;">웹캠 없이 진행</p>'
                 '<p style="text-align:center;font-size:12px;color:#6b7280;font-weight:600;margin:0 0 16px;">음성·텍스트 답변만으로 평가</p>'
                 '<div style="height:34px;background:#f9fafb;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#9ca3af;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#4b5563;">답변 내용·논리성 분석은 동일</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#374151;">답변 내용·논리성 분석은 동일</span></div>'
                 '<div style="height:34px;background:#f9fafb;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#9ca3af;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#4b5563;">카메라·영상 녹화 없음</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#374151;">카메라·영상 녹화 없음</span></div>'
                 '<div style="height:34px;background:#f9fafb;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:18px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#9ca3af;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#4b5563;">얼굴 노출 없이 편안하게 진행</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#374151;">얼굴 노출 없이 편안하게 진행</span></div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
