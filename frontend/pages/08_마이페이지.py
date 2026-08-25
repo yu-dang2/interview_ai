@@ -85,11 +85,22 @@ def score_color(s) -> str:
     return "#dc2626"
 
 
+def _link_pill(path: str, label: str, session_id: str) -> str:
+    return (
+        f'<a href="/{path}?sid={session_id}" target="_self" style="text-decoration:none;'
+        'display:inline-flex;align-items:center;background:#eef3ff;border:1px solid #e5e7eb;'
+        'border-radius:12px;height:24px;padding:0 10px;box-sizing:border-box;">'
+        f'<span style="font-size:11px;font-weight:600;color:#3b6def;'
+        f'font-family:Pretendard,-apple-system,sans-serif;line-height:1;white-space:nowrap;">{label}</span>'
+        '</a>'
+    )
+
+
 def _play_btn(video_url: str) -> str:
-    full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
+    full_url = f"{api.PUBLIC_BASE_URL}{video_url}" if video_url else ""
     return (
         f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
-        'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
+        'background:#eef3ff;border:1px solid #e5e7eb;border-radius:12px;'
         'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
         '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
         'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
@@ -323,11 +334,11 @@ if _mypage_tab == "overview":
 
             _last_idx = len(CHART_HISTORY) - 1
             fig.add_shape(type="line", x0=-0.45, x1=_last_idx + 0.45, y0=70, y1=70,
-                          line=dict(color="#94a3b8", width=1))
+                          line=dict(color="#9ca3af", width=1))
             fig.add_annotation(
                 x=_last_idx + 0.55, y=70, text="기준<br>70",
                 showarrow=False, xanchor="left", yanchor="middle",
-                font=dict(size=8, color="#94a3b8", family="Pretendard"),
+                font=dict(size=8, color="#9ca3af", family="Pretendard"),
                 align="center",
             )
 
@@ -359,7 +370,7 @@ if _mypage_tab == "overview":
                 yaxis=dict(
                     range=[_y_lo, _y_hi],
                     tickvals=[0, 20, 40, 60, 80, 100],
-                    gridcolor="#f3f4f6",
+                    gridcolor="#f8fafc",
                     tickfont=dict(size=9, color="#9ca3af", family="Pretendard"),
                     showgrid=True, zeroline=False, showline=False,
                 ),
@@ -470,22 +481,20 @@ elif _mypage_tab == "history":
             f'</div>'
             + (
                 (
-                    f'<div style="display:flex;justify-content:flex-end;align-items:center;gap:5px;'
+                    f'<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;'
                     f'padding-right:16px;white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">'
                     + ''.join(
-                        f'<a href="/{path}?sid={h["session_id"]}" target="_self" '
-                        f'style="font-size:11px;font-weight:600;color:#3b6def;text-decoration:none;">{label}</a>'
-                        + ('<span style="color:#d1d5db;">·</span>' if not is_last else '')
-                        for path, label, is_last in [
-                            ("결과리포트", "결과", False),
-                            ("피드백보고서", "피드백", False),
-                            ("이력서최적화", "최적화", True),
+                        _link_pill(path, label, h["session_id"])
+                        for path, label in [
+                            ("결과리포트", "결과"),
+                            ("피드백보고서", "피드백"),
+                            ("이력서최적화", "최적화"),
                         ]
                     )
                     + '</div>'
                 )
                 if h["iv"] is not None and h["session_id"] else
-                '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
+                '<span style="font-size:11px;color:#e5e7eb;text-align:right;padding-right:24px;'
                 'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
             )
             + '</div>'
@@ -566,7 +575,7 @@ components.html(f"""
 
         var title = doc.createElement('p');
         title.textContent = '면접 영상';
-        title.style.cssText = 'font-size:15px;font-weight:600;color:#1f1f1f;margin:0 0 16px;';
+        title.style.cssText = 'font-size:15px;font-weight:600;color:#111827;margin:0 0 16px;';
 
         box.appendChild(closeBtn);
         box.appendChild(title);
@@ -588,6 +597,16 @@ components.html(f"""
                     video.autoplay = true;
                     video.src = URL.createObjectURL(blob);
                     video.style.cssText = 'width:100%;max-height:70vh;border-radius:8px;background:#000;display:block;';
+                    video.addEventListener('loadedmetadata', function () {{
+                        if (video.duration === Infinity || isNaN(video.duration)) {{
+                            video.currentTime = 1e101;
+                            video.addEventListener('timeupdate', function fixDuration() {{
+                                video.removeEventListener('timeupdate', fixDuration);
+                                video.currentTime = 0;
+                            }}, {{ once: true }});
+                        }}
+                    }});
+
                     if (status.parentNode) status.replaceWith(video);
                 }})
                 .catch(function (err) {{
@@ -596,7 +615,7 @@ components.html(f"""
         }} else {{
             var ph = doc.createElement('div');
             ph.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:#9ca3af;gap:12px;';
-            ph.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:14px;">저장된 영상이 없습니다</span>';
+            ph.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:14px;">저장된 영상이 없습니다</span>';
             box.appendChild(ph);
         }}
 
