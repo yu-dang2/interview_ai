@@ -63,7 +63,7 @@ st.markdown("""
 }
 
 [data-testid="stTextInput"] label p {
-    font-size:14px !important; font-weight:600 !important; color:#1f1f1f !important;
+    font-size:14px !important; font-weight:600 !important; color:#111827 !important;
 }
 
 [data-testid="stBaseButton-primary"] {
@@ -103,8 +103,8 @@ st.markdown("""
 <div style="display:flex;align-items:center;justify-content:center;margin-bottom:32px;">
   <div style="width:10px;height:10px;border-radius:50%;background:#3b6def;flex-shrink:0;"></div>
   <span style="font-size:11px;font-weight:600;color:#3b6def;margin:0 6px 0 4px;">기본 정보</span>
-  <div style="width:52px;height:1px;background:#d9dee8;"></div>
-  <div style="width:10px;height:10px;border-radius:50%;background:#d9dee8;flex-shrink:0;margin-left:4px;"></div>
+  <div style="width:52px;height:1px;background:#e5e7eb;"></div>
+  <div style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;flex-shrink:0;margin-left:4px;"></div>
   <span style="font-size:11px;color:#9ca3af;margin-left:4px;">문서 업로드</span>
 </div>
 """, unsafe_allow_html=True)
@@ -112,7 +112,7 @@ st.markdown("""
 # ── 타이틀 ──────────────────────────────────────────────────────────────
 st.markdown("""
 <div style="margin-bottom:60px;">
-  <div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">
+  <div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">
     면접 환경을 설정해주세요
   </div>
   <p style="font-size:14px;color:#9ca3af;margin:0;">
@@ -136,7 +136,7 @@ if name:
 st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
 
 # ── 면접관 스타일 ────────────────────────────────────────────────────────
-st.markdown('<p style="font-size:14px;font-weight:600;color:#1f1f1f;margin:0 0 20px;">면접관 스타일 선택</p>',
+st.markdown('<p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 20px;">면접관 스타일 선택</p>',
             unsafe_allow_html=True)
 
 # 페르소나 카드
@@ -144,8 +144,8 @@ cards_html = '<div style="display:flex;gap:28px;">'
 for p in PERSONAS:
     is_active  = selected == p["key"]
     border     = "1.5px solid #3b6def" if is_active else "1px solid #e5e7eb"
-    bg         = "#eff6ff"             if is_active else "white"
-    name_color = "#3b6def"             if is_active else "#1f1f1f"
+    bg         = "#eef3ff"             if is_active else "white"
+    name_color = "#3b6def"             if is_active else "#111827"
     detail_html = "".join(
         f'<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">'
         f'<div style="width:4px;height:4px;border-radius:50%;background:#3b6def;flex-shrink:0;"></div>'
