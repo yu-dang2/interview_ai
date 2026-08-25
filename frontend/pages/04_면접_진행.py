@@ -405,7 +405,7 @@ st.markdown(
 _webcam_display = "" if webcam_on else "display:none;"
 webcam_html = (
     f'<div id="webcam-preview-block" style="width:100%;height:210px;overflow:hidden;{_webcam_display}'
-    'background:#2563eb;position:relative;">'
+    'background:#111827;position:relative;">'
     '<video id="webcam-preview-video" autoplay playsinline muted '
     'style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>'
     '<div id="webcam-preview-status" style="display:none;position:absolute;inset:0;'
