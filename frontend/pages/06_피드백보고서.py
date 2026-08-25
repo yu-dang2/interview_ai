@@ -85,7 +85,7 @@ st.markdown("""<style>
 }
 [data-page-number] {
     font-size: 14px !important;
-    color: #a6a6a6 !important;
+    color: #9ca3af !important;
     position: relative !important;
     top: -2px !important;
 }
@@ -130,7 +130,7 @@ today        = f"{_now.month}월 {_now.day}일"
 if not ALL_QA:
     st.markdown(
         '<div style="margin-bottom:28px;">'
-        '<div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">질문별 피드백 보고서</div>'
+        '<div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">질문별 피드백 보고서</div>'
         '</div>',
         unsafe_allow_html=True
     )
@@ -148,8 +148,8 @@ current_qa   = ALL_QA[page_idx * ITEMS_PER_PAGE : (page_idx + 1) * ITEMS_PER_PAG
 
 st.markdown(
     '<div style="margin-bottom:28px;">'
-    '<div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">질문별 피드백 보고서</div>'
-    f'<p style="font-size:14px;color:#a6a6a6;margin:0;">총 {len(ALL_QA)}개 질문 &nbsp;|&nbsp; 평균 점수 {avg_score}점 &nbsp;|&nbsp; {today}</p>'
+    '<div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">질문별 피드백 보고서</div>'
+    f'<p style="font-size:14px;color:#9ca3af;margin:0;">총 {len(ALL_QA)}개 질문 &nbsp;|&nbsp; 평균 점수 {avg_score}점 &nbsp;|&nbsp; {today}</p>'
     '</div>',
     unsafe_allow_html=True
 )
@@ -165,22 +165,22 @@ for i, qa in enumerate(current_qa):
         badge_bg, badge_color = "#ffedde", "#eb8c14"
 
     cards_html += (
-        '<div style="background:white;border:1px solid #dedede;border-radius:12px;overflow:hidden;margin-bottom:12px;">'
+        '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px;">'
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:15px 19px 13px;">'
-        f'<div style="font-size:14px;font-weight:600;color:#1f1f1f;flex:1;margin-right:12px;line-height:1.5;">Q{q_num}. {qa["q"]}</div>'
+        f'<div style="font-size:14px;font-weight:600;color:#111827;flex:1;margin-right:12px;line-height:1.5;">Q{q_num}. {qa["q"]}</div>'
         f'<div style="background:{badge_bg};border-radius:13px;height:26px;min-width:56px;padding:0 10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
         f'<span style="font-size:12px;font-weight:500;color:{badge_color};">{score}점</span>'
         '</div>'
         '</div>'
-        '<div style="height:1px;background:#dedede;margin:0 19px;"></div>'
+        '<div style="height:1px;background:#e5e7eb;margin:0 19px;"></div>'
         '<div style="padding:13px 19px 13px;">'
-        '<div style="font-size:11px;font-weight:500;color:#a6a6a6;margin-bottom:6px;">내 답변</div>'
-        f'<div style="font-size:13px;color:#1f1f1f;line-height:1.65;">{qa["my"]}</div>'
+        '<div style="font-size:11px;font-weight:500;color:#9ca3af;margin-bottom:6px;">내 답변</div>'
+        f'<div style="font-size:13px;color:#111827;line-height:1.65;">{qa["my"]}</div>'
         '</div>'
-        '<div style="height:1px;background:#e0edff;margin:0 19px;"></div>'
+        '<div style="height:1px;background:#eef3ff;margin:0 19px;"></div>'
         '<div style="padding:13px 19px 16px;">'
-        '<div style="font-size:11px;font-weight:500;color:#3d78f2;margin-bottom:6px;">개선 답변 제안</div>'
-        f'<div style="font-size:13px;color:#264db2;line-height:21px;">{qa["better"]}</div>'
+        '<div style="font-size:11px;font-weight:500;color:#3b6def;margin-bottom:6px;">개선 답변 제안</div>'
+        f'<div style="font-size:13px;color:#2563eb;line-height:21px;">{qa["better"]}</div>'
         '</div>'
         '</div>'
     )
