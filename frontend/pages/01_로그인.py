@@ -56,7 +56,7 @@ html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input {
     background: #f9fafb !important;
-    border: 1px solid #d1d5db !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 8px !important;
     height: 48px !important;
     font-size: 14px !important;
@@ -65,7 +65,7 @@ html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input:focus {
     border-color: #3b6def !important;
-    box-shadow: 0 0 0 3px rgba(59,109,239,0.15) !important;
+    box-shadow: 0 0 0 3px rgba(30,50,38,0.15) !important;
     outline: none !important;
 }
 [data-testid="stTextInput"] > div > div {
@@ -198,28 +198,7 @@ with form_col:
             except Exception as e:
                 show_error(f"알 수 없는 오류가 발생했습니다: {e}")
 
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
-      <div style="flex:1;height:1px;background:#e5e7eb;"></div>
-      <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">또는</span>
-      <div style="flex:1;height:1px;background:#e5e7eb;"></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="display:flex;gap:16px;margin-bottom:24px;">
-      <button style="flex:1;height:48px;border-radius:8px;border:none;
-                     background:#fee500;color:#38210a;font-size:13px;
-                     font-weight:600;cursor:pointer;font-family:inherit;">
-        카카오로 로그인
-      </button>
-      <button style="flex:1;height:48px;border-radius:8px;
-                     border:1px solid #d1d5db;background:white;color:#374151;
-                     font-size:13px;cursor:pointer;font-family:inherit;">
-        Google로 로그인
-      </button>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
     # 회원가입 링크
     st.markdown("""
