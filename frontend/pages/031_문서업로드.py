@@ -29,8 +29,8 @@ st.markdown("""
 
 [data-testid="stFileUploader"] label { display:none !important; }
 [data-testid="stFileUploaderDropzone"] {
-    background:#f7f8fc !important;
-    border:1.5px dashed #c7d2e8 !important;
+    background:#f9fafb !important;
+    border:1.5px dashed #e5e7eb !important;
     border-radius:10px !important; min-height:140px !important;
     display: flex !important;
     flex-direction: column !important;
@@ -58,9 +58,6 @@ st.markdown("""
     row-gap: 8px !important;
     margin-top: var(--space-8) !important;
 }
-/* 업로드 완료 표시 ↔ 음성안내 체크박스 ↔ 시작 버튼 사이 간격 —
-   빈 spacer div는 이 페이지에서 높이가 0으로 collapse되는 경우가 있어
-   실제 위젯 컨테이너에 margin을 직접 건다. */
 .st-key-voice_guide_default_checkbox { margin-top: var(--space-5) !important; }
 .st-key-start_area [data-testid="stAlert"] {
     justify-self: stretch !important;
@@ -90,9 +87,9 @@ st.markdown("""
 # ── 스텝 인디케이터 ────────────────────────────────────────────────────────
 st.markdown("""
 <div style="display:flex;align-items:center;justify-content:center;margin-bottom:32px;">
-  <div style="width:10px;height:10px;border-radius:50%;background:#93b4f5;flex-shrink:0;"></div>
-  <span style="font-size:11px;color:#93b4f5;margin:0 6px 0 4px;">기본 정보</span>
-  <div style="width:52px;height:1px;background:#93b4f5;"></div>
+  <div style="width:10px;height:10px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></div>
+  <span style="font-size:11px;color:#9ca3af;margin:0 6px 0 4px;">기본 정보</span>
+  <div style="width:52px;height:1px;background:#9ca3af;"></div>
   <div style="width:10px;height:10px;border-radius:50%;background:#3b6def;flex-shrink:0;margin-left:4px;"></div>
   <span style="font-size:11px;font-weight:600;color:#3b6def;margin-left:4px;">문서 업로드</span>
 </div>
@@ -101,7 +98,7 @@ st.markdown("""
 # ── 타이틀 ──────────────────────────────────────────────────────────────
 st.markdown("""
 <div style="margin-bottom:60px;">
-  <div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">
+  <div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">
     직무 기술서와 이력서를 업로드해주세요
   </div>
   <p style="font-size:14px;color:#9ca3af;margin:0;">
@@ -122,7 +119,7 @@ if not get("interviewer_style"):
     )
 
 # ── 문서 업로드 ─────────────────────────────────────────────────────────
-st.markdown('<p style="font-size:14px;font-weight:600;color:#1f1f1f;margin:0 0 20px;">문서 업로드</p>',
+st.markdown('<p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 20px;">문서 업로드</p>',
             unsafe_allow_html=True)
 
 up1, _gap, up2 = st.columns([15, 1, 15])
