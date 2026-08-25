@@ -55,7 +55,7 @@ html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input {
     background: white !important;
-    border: 1px solid #e5e7ea !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 6px !important;
     height: 48px !important;
     font-size: 14px !important;
@@ -64,7 +64,7 @@ html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input:focus {
     border-color: #3b6def !important;
-    box-shadow: 0 0 0 3px rgba(59,109,239,0.15) !important;
+    box-shadow: 0 0 0 3px rgba(30,50,38,0.15) !important;
     outline: none !important;
 }
 [data-testid="stTextInput"] > div > div {
@@ -202,31 +202,10 @@ with form_col:
             except Exception:
                 show_error("회원가입에 실패했습니다. 다시 시도해주세요.")
 
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
-      <div style="flex:1;height:1px;background:#e5e7ea;"></div>
-      <span style="font-size:11px;color:#9ca3a8;white-space:nowrap;">또는</span>
-      <div style="flex:1;height:1px;background:#e5e7ea;"></div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
     st.markdown("""
-    <div style="display:flex;gap:16px;margin-bottom:24px;">
-      <button style="flex:1;height:48px;border-radius:8px;border:none;
-                     background:#fee500;color:#191919;font-size:13px;
-                     font-weight:600;cursor:pointer;font-family:inherit;">
-        카카오로 시작하기
-      </button>
-      <button style="flex:1;height:48px;border-radius:8px;
-                     border:1px solid #e5e7ea;background:white;color:#6b7280;
-                     font-size:13px;cursor:pointer;font-family:inherit;">
-        Google로 시작하기
-      </button>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <p style="text-align:center;font-size:13px;color:#9ca3a8;margin:0;">
+    <p style="text-align:center;font-size:13px;color:#9ca3af;margin:0;">
       이미 계정이 있으신가요?&nbsp;→&nbsp;
       <a href="/%EB%A1%9C%EA%B7%B8%EC%9D%B8"
          style="color:#3b6def;font-weight:600;text-decoration:none;">
