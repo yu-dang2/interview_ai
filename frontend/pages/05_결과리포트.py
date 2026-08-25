@@ -120,13 +120,13 @@ st.markdown("""<style>
     overflow-wrap: break-word !important;
 }
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
-[data-testid="stPlotlyChart"] { padding: 0 !important; margin: 0 10px 0 0 !important; border-left: 1px solid #dedede !important; border-right: 1px solid #dedede !important; overflow: hidden !important; }
+[data-testid="stPlotlyChart"] { padding: 0 !important; margin: 0 10px 0 0 !important; border-left: 1px solid #e5e7eb !important; border-right: 1px solid #e5e7eb !important; overflow: hidden !important; }
 [data-testid="stPlotlyChart"] > div { padding: 0 !important; overflow: hidden !important; }
 @keyframes shimmer {
   0%   { background-position: -600px 0; }
   100% { background-position:  600px 0; }
 }
-.sk { background: linear-gradient(90deg,#f0f2f5 25%,#e4e7ec 50%,#f0f2f5 75%); background-size:1200px 100%; animation: shimmer 1.4s infinite; border-radius:6px; }
+.sk { background: linear-gradient(90deg,#f8fafc 25%,#e5e7eb 50%,#f8fafc 75%); background-size:1200px 100%; animation: shimmer 1.4s infinite; border-radius:6px; }
 
 [data-score-label], [data-panel-header], [data-comp-label], [data-comp-score] {
     white-space: nowrap !important;
@@ -156,7 +156,7 @@ st.markdown("""<style>
 # ── 헤더 ──────────────────────────────────────────────────────────────────
 st.markdown(
     '<div style="margin-bottom:28px;">'
-    '<div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">면접 결과 리포트</div>'
+    '<div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">면접 결과 리포트</div>'
     f'<p style="font-size:14px;color:#9ca3af;margin:0;">{meta_str}</p>'
     '</div>',
     unsafe_allow_html=True
@@ -185,7 +185,7 @@ def _score_section(color, pill_bg, pill_border, label, icon, sublabel, score, fi
         f'</div>'
     )
 
-_div = '<div style="width:1px;background:#dee3e8;margin:11px 0;flex-shrink:0;"></div>'
+_div = '<div style="width:1px;background:#e5e7eb;margin:11px 0;flex-shrink:0;"></div>'
 
 def _grade_badge(score: int) -> str:
     if score >= 80: return "우수"
@@ -216,8 +216,8 @@ with tab_detail:
 
     with col_l:
         st.markdown(
-            '<div style="background:white;border:1px solid #dedede;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
-            '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">역량 레이더 차트</div>'
+            '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px 12px 0 0;padding:19px 23px 16px;margin-right:10px;">'
+            '<div data-panel-header style="font-size:15px;font-weight:600;color:#111827;padding-bottom:12px;border-bottom:1px solid #e5e7eb;">역량 레이더 차트</div>'
             '</div>',
             unsafe_allow_html=True
         )
@@ -228,7 +228,7 @@ with tab_detail:
             fig = go.Figure()
             fig.add_trace(go.Scatterpolar(
                 r=avg_vals, theta=cats, fill="none",
-                line=dict(color="#d1d5db", width=1.5, dash="dot"),
+                line=dict(color="#e5e7eb", width=1.5, dash="dot"),
                 name="평균", showlegend=False,
             ))
             fig.add_trace(go.Scatterpolar(
@@ -240,8 +240,8 @@ with tab_detail:
             fig.update_layout(
                 polar=dict(
                     radialaxis=dict(visible=True, range=[0, 100],
-                                    tickfont=dict(size=9), gridcolor="#f1f5f9"),
-                    angularaxis=dict(tickfont=dict(size=11, color="#a6a6a6")),
+                                    tickfont=dict(size=9), gridcolor="#f8fafc"),
+                    angularaxis=dict(tickfont=dict(size=11, color="#9ca3af")),
                     bgcolor="white",
                 ),
                 margin=dict(l=90, r=90, t=55, b=70),
@@ -249,22 +249,22 @@ with tab_detail:
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.markdown(
-            '<div style="background:white;border:1px solid #dedede;border-top:none;border-radius:0 0 12px 12px;height:20px;margin-right:10px;"></div>',
+            '<div style="background:white;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;height:20px;margin-right:10px;"></div>',
             unsafe_allow_html=True
         )
 
     with col_r:
         if summary_text:
             st.markdown(
-                '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
-                '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;margin-bottom:16px;">종합 총평</div>'
+                '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;">'
+                '<div data-panel-header style="font-size:15px;font-weight:600;color:#111827;padding-bottom:12px;border-bottom:1px solid #e5e7eb;margin-bottom:16px;">종합 총평</div>'
                 f'<div style="font-size:13px;color:#374151;line-height:1.8;white-space:pre-wrap;">{summary_text}</div>'
                 '</div>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                '<div style="background:white;border:1px solid #dedede;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;'
+                '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:19px 23px;min-height:445px;box-sizing:border-box;margin-left:10px;'
                 'display:flex;align-items:center;justify-content:center;text-align:center;">'
                 '<div style="font-size:13px;color:#9ca3af;">종합 총평을 불러오지 못했습니다.</div>'
                 '</div>',
@@ -277,21 +277,21 @@ with tab_detail:
         s = min(max(score, 0), 100)
         a = min(max(avg, 0), 100)
         comp_rows += (
-            '<div style="position:relative;background:#fbfcff;border:1px solid #e5e8ec;border-left:4px solid #3b6ef0;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
+            '<div style="position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid #3b6def;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
             '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
-            f'<div data-comp-label style="font-size:13px;font-weight:600;color:#38455c;margin-bottom:3px;">{label}</div>'
-            f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6ef0;">{score}점</span>'
-            f'<span data-comp-score style="font-size:11px;color:#9ca3b0;"> / 평균 {avg}</span>'
+            f'<div data-comp-label style="font-size:13px;font-weight:600;color:#111827;margin-bottom:3px;">{label}</div>'
+            f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6def;">{score}점</span>'
+            f'<span data-comp-score style="font-size:11px;color:#9ca3af;"> / 평균 {avg}</span>'
             '</div>'
             '<div style="flex:1;padding:0 16px;position:relative;">'
-            f'<div style="font-size:10px;color:#3b6ef0;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
-            '<div style="background:#e5e8eb;height:5px;border-radius:3px;position:relative;">'
-            f'<div style="background:#3b6ef0;height:5px;border-radius:3px;width:{s}%;"></div>'
+            f'<div style="font-size:10px;color:#3b6def;position:absolute;top:calc(50% - 20px);left:calc(16px + {s}% - 8px);">{score}</div>'
+            '<div style="background:#e5e7eb;height:5px;border-radius:3px;position:relative;">'
+            f'<div style="background:#3b6def;height:5px;border-radius:3px;width:{s}%;"></div>'
             f'<div style="position:absolute;left:{a}%;top:-4px;width:2px;height:13px;background:rgba(191,196,204,0.8);transform:translateX(-50%);border-radius:1px;"></div>'
             '</div>'
             '</div>'
-            '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e8eb;flex-shrink:0;"></div>'
-            f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#5e6673;line-height:18px;">{comment}</div>'
+            '<div style="width:1px;align-self:stretch;margin:10px 0;background:#e5e7eb;flex-shrink:0;"></div>'
+            f'<div style="flex:1;padding:12px 16px;font-size:11.5px;color:#374151;line-height:18px;">{comment}</div>'
             '</div>'
         )
 
@@ -299,7 +299,7 @@ with tab_detail:
         '<div style="height:32px"></div>'
         '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:19px 23px 12px;">'
         '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px;">면접 역량 평가</div>'
-        '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e8eb;">AI 면접관이 분석한 5가지 역량 — 점수 및 개선 코멘트</div>'
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;">AI 면접관이 분석한 5가지 역량 — 점수 및 개선 코멘트</div>'
         + comp_rows
         + '</div><div style="height:32px"></div>',
         unsafe_allow_html=True
@@ -328,7 +328,7 @@ with tab_video:
             st.markdown(
                 '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
                 'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
-                '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 10px;">영상 분석 중입니다...</p>'
+                '<p style="font-size:15px;font-weight:600;color:#111827;margin:0 0 10px;">영상 분석 중입니다...</p>'
                 '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
                 '면접 영상을 바탕으로 AI가 시선 처리를 분석하고 있습니다.<br>'
                 '분석이 완료되면 결과가 자동으로 표시됩니다.<br>'
@@ -352,7 +352,7 @@ with tab_video:
             st.markdown(
                 '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
                 'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:120px;box-sizing:border-box;">'
-                '<p style="font-size:15px;font-weight:600;color:#121827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
+                '<p style="font-size:15px;font-weight:600;color:#111827;margin:0 0 8px;">영상 분석에 실패했습니다</p>'
                 f'<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">{_video_error_msg}<br>'
                 '답변 내용과 점수에는 영향이 없으니 안심하세요.'
                 '</p>'
@@ -376,15 +376,15 @@ with tab_video:
                 webcam_rows += (
                     f'<div style="display:flex;align-items:center;gap:0;{top_border}">'
                     f'<span style="font-size:12px;font-weight:600;color:#3b6def;white-space:nowrap;min-width:48px;">{metric}</span>'
-                    '<div style="width:1px;height:22px;background:#cbd2da;flex-shrink:0;margin:0 10px;"></div>'
-                    f'<span style="font-size:12px;color:#5e6673;">{comment}</span>'
+                    '<div style="width:1px;height:22px;background:#e5e7eb;flex-shrink:0;margin:0 10px;"></div>'
+                    f'<span style="font-size:12px;color:#374151;">{comment}</span>'
                     '</div>'
                 )
             if webcam_rows:
                 st.markdown(
-                    '<div style="background:white;border:1px solid #e5e8ec;border-radius:8px;overflow:hidden;">'
+                    '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
                     '<div style="padding:16px 19px 0;">'
-                    '<div data-panel-header style="font-size:15px;font-weight:600;color:#1f1f1f;padding-bottom:12px;border-bottom:1px solid #dedede;">AI 영상 분석 코멘트</div>'
+                    '<div data-panel-header style="font-size:15px;font-weight:600;color:#111827;padding-bottom:12px;border-bottom:1px solid #e5e7eb;">AI 영상 분석 코멘트</div>'
                     '</div>'
                     f'<div style="padding:16px 19px 16px;">{webcam_rows}</div>'
                     '</div><div style="height:32px"></div>',
