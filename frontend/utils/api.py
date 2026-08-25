@@ -1,9 +1,12 @@
 import json
+import os
 
 import requests
 import streamlit as st
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+
+PUBLIC_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", BASE_URL)
 
 
 class SessionExpiredError(Exception):
@@ -204,22 +207,6 @@ def get_my_resumes() -> list[dict]:
 def get_resume_optimization(session_id: str) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/resume-optimization",
-        headers=_headers(),
-        timeout=30,
-    )
-    _check(res)
-    return res.json()
-
-
-def apply_resume_optimization(
-    resume_id: int, session_id: str, suggestion_ids: list | None = None
-) -> dict:
-    payload = {"session_id": session_id}
-    if suggestion_ids:
-        payload["suggestion_ids"] = suggestion_ids
-    res = requests.post(
-        f"{BASE_URL}/resume/{resume_id}/apply",
-        json=payload,
         headers=_headers(),
         timeout=30,
     )
