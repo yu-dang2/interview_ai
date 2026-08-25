@@ -13,8 +13,8 @@ st.set_page_config(
 init_session()
 
 st.markdown("""<style>
-[data-testid="stAppViewContainer"] { background: #f3f4f6 !important; }
-[data-testid="stMain"]             { background: #f3f4f6 !important; }
+[data-testid="stAppViewContainer"] { background: #f8fafc !important; }
+[data-testid="stMain"]             { background: #f8fafc !important; }
 [data-testid="stMainBlockContainer"] { padding: 0 !important; }
 [data-testid="stVerticalBlock"]    { gap: 0 !important; }
 header, footer, [data-testid="stSidebar"] { display: none !important; }
@@ -55,7 +55,7 @@ def _loading_html(stage_idx: int) -> str:
         else:
             dot = (
                 '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                'background:#d1d5db;flex-shrink:0;"></span>'
+                'background:#e5e7eb;flex-shrink:0;"></span>'
             )
             text_style = "color:#9ca3af;"
         rows += (
@@ -64,11 +64,11 @@ def _loading_html(stage_idx: int) -> str:
         )
     heading = _STAGES[stage_idx]
     return (
-        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f3f4f6;">'
+        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;">'
         '<div style="background:white;border-radius:20px;padding:52px 56px;'
         'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">'
         '<div class="loading-spinner"></div>'
-        f'<div style="font-size:20px;font-weight:700;color:#1f1f1f;margin-bottom:12px;">{heading}</div>'
+        f'<div style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">{heading}</div>'
         '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">'
         '면접 답변을 AI가 종합 분석 중입니다.<br>잠시만 기다려 주세요.</div>'
         f'<div style="text-align:left;display:inline-block;">{rows}</div>'
