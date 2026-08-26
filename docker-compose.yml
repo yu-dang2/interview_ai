@@ -15,6 +15,11 @@ services:
   db:
     image: mysql:8.0
     environment:
+      # 컨테이너 기본 시간대는 UTC 다. 앱과 DB 가 같은 UTC 면 시간 계산은 맞지만,
+      # created_at 이 UTC 로 저장돼 화면에 9시간 이른 날짜가 찍힌다(밤에 본 면접이
+      # 전날로 표시됨). api 와 함께 KST 로 맞춘다. 한쪽만 바꾸면 제한 시간 계산이
+      # 어긋나므로 반드시 두 서비스를 같이 둔다.
+      TZ: ${TZ:-Asia/Seoul}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-interview_ai}
       MYSQL_USER: ${MYSQL_USER:-interview_ai}
@@ -43,6 +48,8 @@ services:
       db:
         condition: service_healthy
     environment:
+      # db 와 같은 시간대여야 한다. (위 db 서비스 주석 참고)
+      TZ: ${TZ:-Asia/Seoul}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY 를 .env 에 설정하세요}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY 를 .env 에 설정하세요}
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-interview_ai}:${MYSQL_PASSWORD:-interview_ai!}@db:3306/${MYSQL_DATABASE:-interview_ai}?charset=utf8mb4
@@ -90,6 +97,7 @@ services:
       #                        사용자 PC 에서 그 이름을 찾지 못해 실패한다.
       #
       # 배포할 때는 PUBLIC_API_BASE_URL 과 CORS_ORIGINS 를 실제 주소로 바꾼다.
+      TZ: ${TZ:-Asia/Seoul}
       API_BASE_URL: ${API_BASE_URL:-http://api:8000}
       PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8000}
     ports:
