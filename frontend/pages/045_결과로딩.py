@@ -32,8 +32,14 @@ header, footer, [data-testid="stSidebar"] { display: none !important; }
 }
 </style>""", unsafe_allow_html=True)
 
+_webcam_on = bool(get("webcam_on"))
+
 _STAGES = ["답변 내용 분석 중...", "역량 점수 산출 중...", "개선 피드백 생성 중..."]
 _STAGE_AT = [0.0, 2.2, 4.4]
+
+if _webcam_on:
+    _STAGES = _STAGES + ["시선·표정 분석 중..."]
+    _STAGE_AT = _STAGE_AT + [6.6]
 
 
 def _loading_html(stage_idx: int) -> str:
