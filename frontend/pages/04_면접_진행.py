@@ -953,6 +953,9 @@ body{{
   // ── 면접 종료 ─────────────────────────
 
   function showLoadingAndEnd() {{
+    var vr = window.parent.__ivVideoRec;
+    var hasVideoStream = !!(vr && vr.stream);
+
     if (!doc.getElementById('_iv_ov')) {{
       var sty = doc.createElement('style');
       sty.id = '_iv_sty';
@@ -964,6 +967,12 @@ body{{
       ov.id = '_iv_ov';
       ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
         'background:#f8fafc;z-index:9999999;display:flex;align-items:center;justify-content:center;';
+      // 영상이 실제로 녹화되고 있지 않았으면 "영상 저장 중..." 줄 자체를 안 그린다 —
+      // 예전엔 이 줄이 항상 떠서, 웹캠 껐는데도 "영상 저장 완료"가 찍히는 버그가 있었다.
+      var _videoRowHtml = hasVideoStream ?
+        '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></span>' +
+        '영상 저장 중...</div>' : '';
       ov.innerHTML =
         '<div style="background:white;border-radius:20px;padding:52px 56px;' +
         'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">' +
@@ -977,9 +986,7 @@ body{{
         '<div id="_iv_ov_row_end" style="font-size:13px;color:#3b6def;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
         '면접 종료 처리 중...</div>' +
-        '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></span>' +
-        '영상 저장 중...</div>' +
+        _videoRowHtml +
         '</div>' +
         '</div>';
       doc.body.appendChild(ov);
@@ -1005,7 +1012,9 @@ body{{
         'background:#3b6def;flex-shrink:0;"></span>' + label;
     }}
 
-    var endResolved = false, videoResolved = false;
+    // 웹캠을 안 켰으면 저장할 영상 자체가 없으니 videoResolved를 처음부터 true로 둔다 —
+    // 그래야 아래 heading이 "영상을 저장하고 있습니다" 단계 없이 바로 다음으로 넘어간다.
+    var endResolved = false, videoResolved = !hasVideoStream;
     function updateHeading() {{
       var h = doc.getElementById('_iv_ov_heading');
       if (!h) return;
@@ -1023,8 +1032,7 @@ body{{
       markDone('_iv_ov_row_video', '영상 저장 완료');
       updateHeading();
 
-      var vr = window.parent.__ivVideoRec;
-      var wc = (vr && vr.stream) ? '1' : '0';
+      var wc = hasVideoStream ? '1' : '0';
       var input = doc.querySelector('.st-key-_iv_nav_ready input');
       if (input) {{
         var setter = Object.getOwnPropertyDescriptor(
@@ -1044,15 +1052,16 @@ body{{
         '}}, 800);'
       );
     }}
-    var videoDone = new Promise(function(res) {{
+
+    var videoDone = hasVideoStream ? new Promise(function(res) {{
       stopAndUploadVideo(function() {{
         videoResolved = true;
         markDone('_iv_ov_row_video', '영상 저장 완료');
         updateHeading();
         res();
       }});
-    }});
-    var videoTimeout = new Promise(function(res) {{
+    }}) : Promise.resolve();
+    var videoTimeout = hasVideoStream ? new Promise(function(res) {{
       setTimeout(function() {{
         console.warn('[영상] 업로드 대기 시간 초과(20초) — 결과 화면으로 진행합니다.');
         videoResolved = true;
@@ -1060,7 +1069,7 @@ body{{
         updateHeading();
         res();
       }}, 20000);
-    }});
+    }}) : Promise.resolve();
     var endDone = fetch('{api.PUBLIC_BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
       method: 'POST',
       headers: {{ 'Authorization': 'Bearer ' + _accessToken }}
@@ -1069,7 +1078,7 @@ body{{
     }}).then(function(v) {{
       endResolved = true;
       markDone('_iv_ov_row_end', '면접 종료 처리 완료');
-      markActive('_iv_ov_row_video', '영상 저장 중...');
+      if (hasVideoStream) markActive('_iv_ov_row_video', '영상 저장 중...');
       updateHeading();
       return v;
     }});
