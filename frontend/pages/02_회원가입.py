@@ -122,8 +122,8 @@ st.markdown(f"""
             color:white;text-decoration:none;">intro</a>
 
   <div style="position:relative;z-index:1;">
-    <div style="font-size:34px;font-weight:800;color:white;
-               line-height:1.4;margin:0 0 16px;">
+    <div style="font-size:clamp(24px, 2.6vw, 34px);font-weight:800;color:white;
+               line-height:1.4;margin:0 0 16px;word-break:keep-all;overflow-wrap:break-word;">
       지금 시작하면<br>합격이 가까워집니다
     </div>
     <p style="font-size:16px;color:#dbeafe;line-height:1.75;margin:0 0 32px;">
