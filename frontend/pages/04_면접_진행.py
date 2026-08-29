@@ -375,6 +375,11 @@ st.markdown(f"""<style>
 _vg_track_bg  = '#3b6def' if voice_guide_on else '#e5e7eb'
 _vg_knob_left = '18px'    if voice_guide_on else '2px'
 
+_end_btn_bg     = '#e5e7eb'  if _rt_pending else '#dc2626'
+_end_btn_color  = '#9ca3af'  if _rt_pending else 'white'
+_end_btn_cursor = 'default'  if _rt_pending else 'pointer'
+_end_btn_label  = '처리 중...' if _rt_pending else '면접 종료'
+
 st.markdown(
     f'<div style="position:fixed;top:0;right:0;height:60px;'
     f'display:flex;align-items:center;gap:10px;padding:0 20px;z-index:99999;">'
@@ -393,10 +398,11 @@ st.markdown(
     f'<polyline points="12 6 12 12 16 14"/></svg>'
     f'<span id="iv-timer" style="font-size:13px;font-weight:700;color:#dc2626;">{timer_str}</span>'
     f'</div>'
-    f'<div id="end-interview" style="background:#dc2626;color:white;font-size:13px;font-weight:600;'
+    f'<div id="end-interview" data-pending="{str(_rt_pending).lower()}" '
+    f'style="background:{_end_btn_bg};color:{_end_btn_color};font-size:13px;font-weight:600;'
     f'height:34px;display:flex;align-items:center;padding:0 16px;'
-    f'border-radius:8px;cursor:pointer;">'
-    f'면접 종료</div>'
+    f'border-radius:8px;cursor:{_end_btn_cursor};">'
+    f'{_end_btn_label}</div>'
     f'</div>',
     unsafe_allow_html=True,
 )
@@ -491,13 +497,18 @@ body{{
   display:none;text-align:center;font-size:11px;color:#9ca3af;
   padding:0 20px 6px;
 }}
+#timeup-row{{
+  display:none;text-align:center;font-size:12px;font-weight:600;
+  color:#dc2626;background:#fff5f5;margin:8px 20px 0;padding:8px 12px;
+  border-radius:8px;
+}}
 #speech-rate-row{{
-  display:none;align-items:center;justify-content:center;gap:6px;
-  text-align:center;font-size:11px;color:#6b7280;
-  padding:0 20px 8px;
+  display:none;align-items:center;justify-content:center;gap:8px;
+  text-align:center;font-size:14px;color:#6b7280;
+  padding:0 20px 10px;
 }}
 #speech-rate-row .srr-badge{{
-  font-weight:700;padding:1px 8px;border-radius:10px;font-size:10px;
+  font-weight:700;padding:2px 10px;border-radius:10px;font-size:13px;
 }}
 #controls-row{{
   display:flex;align-items:center;padding:16px 20px;
@@ -523,6 +534,7 @@ body{{
 #cbtn{{background:{_cam_bg};border-color:{_cam_bd};margin-left:8px;}}
 </style></head><body>
 <div id="hint-row">음성 인식 중... 말씀하신 내용이 아래에 입력됩니다</div>
+<div id="timeup-row">면접이 종료되었습니다. 지금 작성 중인 답변을 보내시면 정상적으로 함께 제출돼요.</div>
 <div id="controls-row">
 <div id="ta-wrap">
   <textarea id="cta" placeholder="답변을 입력하세요..." rows="1"></textarea>
@@ -553,12 +565,19 @@ body{{
   var _ivAutoEnded = false;
   var _answerPending = {str(bool(st.session_state.get("_pending_answer"))).lower()};
   var _awaitingAnswer = {str(bool(st.session_state.iv_messages and st.session_state.iv_messages[-1]["role"] == "ai")).lower()};
+  var _timeupNoteShown = false;
   function _tick() {{
     var rem = Math.max(0, 30*60 - Math.floor(Date.now()/1000 - _startSec));
     var el  = window.parent.document.getElementById('iv-timer');
     if (el) el.textContent =
       String(Math.floor(rem/60)).padStart(2,'0') + ':' +
       String(rem%60).padStart(2,'0');
+    var shouldShowTimeup = rem <= 0 && !_ivAutoEnded && !_answerPending && _awaitingAnswer;
+    if (timeupRowEl && shouldShowTimeup !== _timeupNoteShown) {{
+      _timeupNoteShown = shouldShowTimeup;
+      timeupRowEl.style.display = shouldShowTimeup ? 'block' : 'none';
+      recomputeBarHeight();
+    }}
     if (rem <= 0 && !_ivAutoEnded && !_answerPending && !_awaitingAnswer) {{
       _ivAutoEnded = true;
       if (typeof showLoadingAndEnd === 'function') {{
@@ -599,12 +618,14 @@ body{{
   var hintRowEl = document.getElementById('hint-row');
   var noteRowEl = document.getElementById('note-row');
   var speechRateRowEl = document.getElementById('speech-rate-row');
+  var timeupRowEl = document.getElementById('timeup-row');
   function recomputeBarHeight() {{
     requestAnimationFrame(function() {{
       var h = controlsRowEl.offsetHeight;
       if (hintRowEl.style.display !== 'none') h += hintRowEl.offsetHeight;
       if (noteRowEl.style.display !== 'none') h += noteRowEl.offsetHeight;
       if (speechRateRowEl.style.display !== 'none') h += speechRateRowEl.offsetHeight;
+      if (timeupRowEl.style.display !== 'none') h += timeupRowEl.offsetHeight;
       barHeight = h;
       applyFixed();
     }});
@@ -774,14 +795,19 @@ body{{
 
         'window.__ivStopAndUploadVideo = function(sessionId, accessToken, baseUrl, onDone) {{',
         '  var vr = window.__ivVideoRec;',
-        '  if (!vr || !vr.recorder) {{ onDone(); return; }}',
-        '  if (vr.recorder.state === "inactive" || vr.uploaded) {{ onDone(); return; }}',
+        '  if (!vr || !vr.recorder) {{ onDone(false); return; }}',
+        '  if (vr.recorder.state === "inactive" || vr.uploaded) {{ onDone(!!vr.uploadSucceeded); return; }}',
         '  vr.uploaded = true;',
         '  vr.recorder.onstop = function() {{',
         '    var actualType = vr.recorder.mimeType || "video/webm";',
         '    var ext = actualType.indexOf("mp4") !== -1 ? "mp4" : "webm";',
         '    var blob = new Blob(vr.chunks, {{ type: actualType }});',
-        '    if (blob.size === 0) {{ console.warn("[영상] 녹화된 데이터가 0바이트입니다."); }}',
+        '    if (blob.size === 0) {{',
+        '      console.warn("[영상] 녹화된 데이터가 0바이트입니다.");',
+        '      vr.uploadSucceeded = false;',
+        '      onDone(false);',
+        '      return;',
+        '    }}',
         '    var form = new FormData();',
         '    form.append("video", blob, "interview_" + sessionId + "." + ext);',
         '    fetch(baseUrl + "/interview/" + sessionId + "/video", {{',
@@ -791,10 +817,17 @@ body{{
         '    }}).then(function(res) {{',
         '      if (!res.ok) {{',
         '        res.text().then(function(t) {{ console.warn("[영상] 업로드 실패 HTTP " + res.status + ": " + t); }});',
+        '        vr.uploadSucceeded = false;',
+        '        onDone(false);',
+        '      }} else {{',
+        '        vr.uploadSucceeded = true;',
+        '        onDone(true);',
         '      }}',
         '    }}).catch(function(err) {{',
         '      console.warn("[영상] 업로드 네트워크 오류:", err);',
-        '    }}).finally(onDone);',
+        '      vr.uploadSucceeded = false;',
+        '      onDone(false);',
+        '    }});',
         '  }};',
         '  vr.recorder.stop();',
         '  if (vr.stream) {{ vr.stream.getTracks().forEach(function(t) {{ t.stop(); }}); }}',
@@ -850,7 +883,7 @@ body{{
       window.parent.__ivStopAndUploadVideo(_videoSessionId, _accessToken, '{api.PUBLIC_BASE_URL}', onDone);
     }} else {{
       console.warn('[영상] 녹화가 시작된 적이 없습니다 (카메라 권한/시작 단계에서 실패).');
-      onDone();
+      onDone(false);
     }}
   }}
 
@@ -952,7 +985,33 @@ body{{
 
   // ── 면접 종료 ─────────────────────────
 
-  function showLoadingAndEnd() {{
+  function showLoadingAndEnd(timeUpNote) {{
+    if (timeUpNote && !doc.getElementById('_iv_ov') && !doc.getElementById('_iv_timeup_modal')) {{
+      var modal = doc.createElement('div');
+      modal.id = '_iv_timeup_modal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(17,24,39,0.45);z-index:10000000;display:flex;align-items:center;justify-content:center;';
+      modal.innerHTML =
+        '<div style="background:white;border-radius:20px;padding:40px 44px;' +
+        'box-shadow:0 4px 24px rgba(0,0,0,0.12);text-align:center;max-width:420px;width:90%;">' +
+        '<div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;">면접이 종료되었습니다</div>' +
+        '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:28px;">' +
+        '30분 제한 시간이 지나 면접이 자동으로 종료되었습니다.<br>' +
+        '방금 작성하신 답변까지는 정상적으로 제출됐어요.</div>' +
+        '<button id="_iv_timeup_ok" style="background:#3b6def;color:white;border:none;' +
+        'border-radius:10px;padding:12px 32px;font-size:14px;font-weight:600;cursor:pointer;">확인</button>' +
+        '</div>';
+      doc.body.appendChild(modal);
+      doc.getElementById('_iv_timeup_ok').onclick = function() {{
+        modal.remove();
+        _startEndFlow();
+      }};
+      return;
+    }}
+    _startEndFlow();
+  }}
+
+  function _startEndFlow() {{
     var vr = window.parent.__ivVideoRec;
     var hasVideoStream = !!(vr && vr.stream);
 
@@ -967,8 +1026,6 @@ body{{
       ov.id = '_iv_ov';
       ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
         'background:#f8fafc;z-index:9999999;display:flex;align-items:center;justify-content:center;';
-      // 영상이 실제로 녹화되고 있지 않았으면 "영상 저장 중..." 줄 자체를 안 그린다 —
-      // 예전엔 이 줄이 항상 떠서, 웹캠 껐는데도 "영상 저장 완료"가 찍히는 버그가 있었다.
       var _videoRowHtml = hasVideoStream ?
         '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></span>' +
@@ -992,15 +1049,15 @@ body{{
       doc.body.appendChild(ov);
     }}
 
-    function markDone(rowId, label) {{
+    function markDone(rowId, label, failed) {{
       var row = doc.getElementById(rowId);
       if (!row) return;
-      row.style.color = '#9ca3af';
+      row.style.color = failed ? '#dc2626' : '#9ca3af';
       row.style.fontWeight = '400';
       row.innerHTML =
         '<span style="display:inline-flex;align-items:center;justify-content:center;' +
-        'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;' +
-        'font-size:9px;flex-shrink:0;">✓</span>' + label;
+        'width:14px;height:14px;border-radius:50%;background:' + (failed ? '#dc2626' : '#3b6def') + ';color:white;' +
+        'font-size:9px;flex-shrink:0;">' + (failed ? '✕' : '✓') + '</span>' + label;
     }}
     function markActive(rowId, label) {{
       var row = doc.getElementById(rowId);
@@ -1012,8 +1069,6 @@ body{{
         'background:#3b6def;flex-shrink:0;"></span>' + label;
     }}
 
-    // 웹캠을 안 켰으면 저장할 영상 자체가 없으니 videoResolved를 처음부터 true로 둔다 —
-    // 그래야 아래 heading이 "영상을 저장하고 있습니다" 단계 없이 바로 다음으로 넘어간다.
     var endResolved = false, videoResolved = !hasVideoStream;
     function updateHeading() {{
       var h = doc.getElementById('_iv_ov_heading');
@@ -1029,7 +1084,6 @@ body{{
 
     function navigate() {{
       markDone('_iv_ov_row_end', '면접 종료 처리 완료');
-      markDone('_iv_ov_row_video', '영상 저장 완료');
       updateHeading();
 
       var wc = hasVideoStream ? '1' : '0';
@@ -1053,19 +1107,23 @@ body{{
       );
     }}
 
+    var _videoTimedOut = false;
     var videoDone = hasVideoStream ? new Promise(function(res) {{
-      stopAndUploadVideo(function() {{
+      stopAndUploadVideo(function(success) {{
+        if (_videoTimedOut) {{ res(); return; }}  // 이미 시간 초과로 라벨을 정한 뒤라 덮어쓰지 않는다
         videoResolved = true;
-        markDone('_iv_ov_row_video', '영상 저장 완료');
+        markDone('_iv_ov_row_video', success ? '영상 저장 완료' : '영상 저장 실패', !success);
         updateHeading();
         res();
       }});
     }}) : Promise.resolve();
     var videoTimeout = hasVideoStream ? new Promise(function(res) {{
       setTimeout(function() {{
+        if (videoResolved) {{ res(); return; }}  // 그새 videoDone이 먼저 끝났으면 그대로 둔다
         console.warn('[영상] 업로드 대기 시간 초과(20초) — 결과 화면으로 진행합니다.');
+        _videoTimedOut = true;
         videoResolved = true;
-        markDone('_iv_ov_row_video', '영상 저장 완료');
+        markDone('_iv_ov_row_video', '영상 저장 시간 초과', true);
         updateHeading();
         res();
       }}, 20000);
@@ -1089,6 +1147,7 @@ body{{
   var endBtnEl = doc.getElementById('end-interview');
   if (endBtnEl) {{
     endBtnEl.onclick = function() {{
+      if (endBtnEl.getAttribute('data-pending') === 'true') return;
       showLoadingAndEnd();
     }};
   }}
@@ -1322,31 +1381,32 @@ if _pending:
                     pass
                 state_set("interview_done", True)
             
-                components.html("""
+                _iv_time_up_js = str(_iv_time_up).lower()
+                components.html(f"""
                 <script>
-                (function () {
+                (function () {{
                     var tries = 0;
-                    function attempt() {
-                        if (window.parent.__ivShowLoadingAndEnd) {
-                            window.parent.__ivShowLoadingAndEnd();
+                    function attempt() {{
+                        if (window.parent.__ivShowLoadingAndEnd) {{
+                            window.parent.__ivShowLoadingAndEnd({_iv_time_up_js});
                             return;
-                        }
+                        }}
                         tries++;
-                        if (tries < 40) { setTimeout(attempt, 50); return; }
+                        if (tries < 40) {{ setTimeout(attempt, 50); return; }}
                         var doc2 = window.parent.document;
                         var input = doc2.querySelector('.st-key-_iv_nav_ready input');
-                        if (input) {
+                        if (input) {{
                             var setter = Object.getOwnPropertyDescriptor(
                                 window.parent.HTMLInputElement.prototype, 'value'
                             ).set;
                             setter.call(input, 'go:0');
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-                        }
-                    }
+                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            input.dispatchEvent(new FocusEvent('focusout', {{ bubbles: true }}));
+                            input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', code: 'Enter', bubbles: true }}));
+                        }}
+                    }}
                     attempt();
-                }());
+                }}());
                 </script>
                 """, height=0)
                 st.stop()
