@@ -76,9 +76,8 @@ st.markdown(
 st.markdown(
     '<div class="ld-hero">'
     '<div class="ld-hero-inner">'
-    '<span class="ld-eyebrow"><span class="dot"></span>AI 면접 코칭 · intro</span>'
-    '<p class="ld-hero-title">Meet your interview<br><em>before the real interview.</em></p>'
-    '<p class="ld-hero-quote">&ldquo;실제 면접 전에 먼저 만나보는 AI 면접관&rdquo;</p>'
+    '<p class="ld-hero-title">실제 면접 전에,<br><em>먼저 만나보는 AI 면접관</em></p>'
+    '<p class="ld-hero-quote"><em>Meet your interview before the real interview.</em></p>'
     '<p class="ld-hero-sub">'
     '이력서를 읽고 던지는 첫 질문이 아니라, 방금 한 대답을 듣고 더 깊이 파고드는 다음 질문.<br>'
     'intro는 정해진 대본이 아니라 진짜 대화를 합니다.'
@@ -100,7 +99,6 @@ st.markdown(
     '<div class="ld-thread-section"><div class="ld-thread-grid">'
 
     '<div class="ld-thread-copy">'
-    '<span class="ld-eyebrow"><span class="dot"></span>시그니처 · 실제 대화 흐름</span>'
     '<p class="ld-title-lg">답변을 듣고,<br>그 자리에서 더 물어봅니다</p>'
     '<p>일반적인 모의면접은 미리 정해둔 질문지를 순서대로 읽는 것에 가깝습니다. '
     'intro는 다릅니다 — 방금 보낸 답변을 채점하고, 근거가 부족하거나 애매한 부분이 있으면 '
@@ -150,7 +148,6 @@ st.markdown(
 st.markdown(
     '<div class="ld-compare-section">'
     '<div class="ld-compare-head">'
-    '<span class="ld-eyebrow"><span class="dot"></span>왜 다른가</span>'
     '<p class="ld-title-lg">스터디 모의면접과는, 시작부터 다릅니다</p>'
     '</div>'
     '<div class="ld-compare-grid">'
@@ -204,7 +201,6 @@ feat_html = "".join(
 st.markdown(
     '<div class="ld-features-section">'
     '<div class="ld-section-head">'
-    '<span class="ld-eyebrow"><span class="dot"></span>기능</span>'
     '<p class="ld-title-lg">겉핥기 질문으로는 알 수 없는 것들</p>'
     '</div>'
     f'<div class="ld-features-grid">{feat_html}</div>'
@@ -243,7 +239,6 @@ persona_html = "".join(
 st.markdown(
     '<div class="ld-persona-section">'
     '<div class="ld-section-head">'
-    '<span class="ld-eyebrow"><span class="dot"></span>면접관 페르소나</span>'
     '<p class="ld-title-lg">세 가지 스타일 중에 골라보세요</p>'
     '</div>'
     f'<div class="ld-persona-row">{persona_html}</div>'
@@ -267,7 +262,6 @@ steps_html = "".join(
 st.markdown(
     '<div class="ld-steps-section">'
     '<div class="ld-section-head">'
-    '<span class="ld-eyebrow"><span class="dot"></span>진행 방식</span>'
     '<p class="ld-title-lg">4단계면 충분합니다</p>'
     '</div>'
     f'<div class="ld-step-list">{steps_html}</div>'
@@ -292,7 +286,6 @@ faq_html = "".join(
 st.markdown(
     '<div class="ld-faq-section">'
     '<div class="ld-section-head">'
-    '<span class="ld-eyebrow"><span class="dot"></span>FAQ</span>'
     '<p class="ld-title-lg">자주 묻는 질문</p>'
     '</div>'
     f'<div class="ld-faq-list">{faq_html}</div>'
