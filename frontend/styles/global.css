@@ -330,7 +330,7 @@ header,
 .ld-hero-title {
     font-weight: 700 !important;
     font-size: clamp(32px, 5.4vw, 56px) !important;
-    line-height: 1.14 !important;
+    line-height: 1.24 !important;
     letter-spacing: -.045em;
     color: var(--ld-ink);
     margin: 18px 0 0;
@@ -373,7 +373,7 @@ header,
 /* --- 시그니처: 대화 스레드 데모 (2열 비대칭) --- */
 .ld-thread-section { background: var(--ld-bg); padding: 20px 40px 100px; }
 .ld-thread-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: .82fr 1fr; gap: 56px; align-items: center; }
-.ld-title-lg { font-weight: 700; font-size: 32px !important; letter-spacing: -.02em; color: var(--ld-ink); margin: 12px 0 0; word-break: keep-all; }
+.ld-title-lg { font-weight: 700; font-size: 32px !important; line-height: 1.35 !important; letter-spacing: -.02em; color: var(--ld-ink); margin: 12px 0 0; word-break: keep-all; }
 .ld-title-card { font-weight: 700; font-size: 18px !important; color: var(--ld-ink); margin: 0 0 9px; letter-spacing: -.01em; word-break: keep-all; }
 .ld-title-step { font-weight: 700; font-size: 16.5px !important; color: var(--ld-ink); margin: 0 0 6px; word-break: keep-all; }
 .ld-title-cta { color: var(--ld-on-forest) !important; font-weight: 700; font-size: 28px !important; letter-spacing: -.02em; margin: 0; word-break: keep-all; }
