@@ -148,10 +148,5 @@ else:
         )
         st.markdown('<div style="height:40px"></div>', unsafe_allow_html=True)
 
-    st.markdown('<div style="height:36px"></div>', unsafe_allow_html=True)
-
-    with st.container(key="bottom_row"):
-        if st.button("건너뛰기", key="skip_btn"):
-            st.switch_page("pages/08_마이페이지.py")
 
 render_session_expired_banner()
