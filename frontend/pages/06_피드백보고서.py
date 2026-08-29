@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
@@ -15,10 +14,6 @@ st.set_page_config(
 init_session()
 render_sidebar(active="피드백 보고서")
 
-st.markdown(
-    "<style>.intro-account-menu { display:none !important; }</style>",
-    unsafe_allow_html=True,
-)
 
 _sid_param = st.query_params.get("sid")
 if _sid_param and _sid_param != get("session_id"):
@@ -37,28 +32,6 @@ if session_id:
         mark_session_expired()
     except Exception:
         feedback_data = None
-
-st.markdown("""
-<div style="position:fixed;top:0;right:0;height:60px;
-            display:flex;align-items:center;padding:0 24px;z-index:600;">
-  <div data-pdf-btn style="background:#3b6def;color:white;font-size:13px;font-weight:500;
-              height:36px;padding:0 18px;border-radius:8px;cursor:pointer;
-              display:flex;align-items:center;user-select:none;">PDF 다운로드</div>
-</div>
-""", unsafe_allow_html=True)
-components.html("""
-<script>
-(function () {
-    function attach() {
-        var doc = window.parent.document;
-        var btn = doc.querySelector('[data-pdf-btn]');
-        if (!btn) { setTimeout(attach, 300); return; }
-        btn.onclick = function () { window.parent.print(); };
-    }
-    attach();
-}());
-</script>
-""", height=0)
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 st.markdown("""<style>
