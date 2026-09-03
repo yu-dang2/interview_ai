@@ -86,10 +86,14 @@ async def transcribe(
             temp_path = temp_file.name
 
         # OpenAI STT 호출
+        # language 를 주지 않으면 언어 자동 감지가 돈다. 짧은 발화나 무음 구간에서
+        # 다른 언어로 오인해 아랍 문자·키릴 문자가 섞여 나오는 일이 있었다.
+        # 면접 답변은 항상 한국어라 고정한다. (2026-09-03 지원님 제보)
         with open(temp_path, "rb") as f:
             transcript = client.audio.transcriptions.create(
                 model="gpt-4o-transcribe",
                 file=f,
+                language="ko",
             )
 
         # 임시파일 삭제
