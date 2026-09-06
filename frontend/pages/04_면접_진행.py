@@ -887,6 +887,15 @@ body{{
     }}
   }}
 
+  function pickKoreanVoice(pWin) {{
+    var voices = pWin.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    var picked = voices.find(function(v) {{
+      return /^ko/i.test(v.lang) && !v.localService;
+    }});
+    return picked || voices[0];
+  }}
+
   function speakText(text, msgIdx) {{
     var pWin = window.parent;
     if (!pWin.speechSynthesis) return;
@@ -897,6 +906,10 @@ body{{
     var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
     var u = new (pWin.SpeechSynthesisUtterance)(text);
     u.lang = 'ko-KR';
+    var voice = pickKoreanVoice(pWin);
+    if (voice) u.voice = voice;
+    u.rate = 1.0;   
+    u.pitch = 0.8; 
     u.onstart = function() {{ if (row) row.classList.add('playing'); }};
     u.onend   = function() {{ if (row) row.classList.remove('playing'); }};
     u.onerror = function() {{ if (row) row.classList.remove('playing'); }};
