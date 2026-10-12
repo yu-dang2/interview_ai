@@ -9,8 +9,8 @@
 
 | 항목 | 값 | 이유 |
 |---|---|---|
-| 리전 | 서울 (ap-northeast-2) | 응답이 빠르다 |
-| AMI | Ubuntu Server 22.04 LTS | Docker 설치 명령이 이 기준이다 |
+| 리전 | 시드니 (ap-southeast-2) | 한이음 계정에서 이 리전만 쓸 수 있다 |
+| AMI | Ubuntu Server 24.04 LTS (x86) | Docker 공식 저장소가 지원한다. 콘솔 목록에 22.04 일반판이 없다 |
 | 인스턴스 타입 | t3.medium (2vCPU / 4GB) | t2.micro 는 빌드 중 메모리 부족으로 죽는다 |
 | 스토리지 | 30 GiB gp3 | 이미지 3.1GB + 빌드 캐시 + 영상. 8GB 로는 부족하다 |
 | 키 페어 | 새로 생성 → .pem 저장 | 다시 받을 수 없다 |
