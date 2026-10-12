@@ -131,7 +131,7 @@ def end_session(session_id: str) -> None:
     res = requests.post(
         f"{BASE_URL}/interview/sessions/{session_id}/end",
         headers=_headers(),
-        timeout=30,
+        timeout=180,
     )
     _check(res)
 

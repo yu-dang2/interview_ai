@@ -86,9 +86,10 @@ async def transcribe(
             temp_path = temp_file.name
 
         # OpenAI STT 호출
-        # language 를 주지 않으면 언어 자동 감지가 돈다. 짧은 발화나 무음 구간에서
-        # 다른 언어로 오인해 아랍 문자·키릴 문자가 섞여 나오는 일이 있었다.
-        # 면접 답변은 항상 한국어라 고정한다. (2026-09-03 지원님 제보)
+        # language 를 주지 않으면 언어 자동 감지가 돈다.
+        # 다양한 언어로 면접을 진행할 수도 있어 한국어로 고정하지 않았으나,
+        # 짧은 발화나 무음 구간에서 주변 소음을 다른 언어로 오인해 아랍 문자 키릴 문자가 섞여 나오는 일이 있었다.
+        # 따라서 면접 답변은 한국어로 고정한다.
         with open(temp_path, "rb") as f:
             transcript = client.audio.transcriptions.create(
                 model="gpt-4o-transcribe",
@@ -110,8 +111,8 @@ async def transcribe(
     except HTTPException:
         raise
     except Exception as e:
-        # 원본 예외는 로그로만 남긴다. detail 은 화면에 그대로 나가는데,
-        # OpenAI 예외 문자열에는 요청 URL·모델명·요청 ID 가 섞여 있다.
+        # 원본 예외는 로그로만 남긴다.
+        # detail 은 화면에 그대로 나가는데, OpenAI 예외 문자열에는 요청 URL·모델명·요청 ID 가 섞여 있다.
         logger.error("STT 변환 실패: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=500,

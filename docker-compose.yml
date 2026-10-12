@@ -100,6 +100,18 @@ services:
       TZ: ${TZ:-Asia/Seoul}
       API_BASE_URL: ${API_BASE_URL:-http://api:8000}
       PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8000}
+
+      # 질문 음성 안내(Google Cloud TTS). Streamlit 서버가 직접 호출하므로
+      # api 가 아니라 여기에 둔다. 브라우저에서 부르면 키가 그대로 노출된다.
+      #
+      # 키는 일부러 필수값(:?)으로 두지 않는다.
+      # 없으면 화면이 브라우저 내장 음성으로 넘어가도록 되어 있어, 키가 없어도 동작한다.
+      GOOGLE_TTS_API_KEY: ${GOOGLE_TTS_API_KEY:-}
+      GOOGLE_TTS_VOICE_TECH: ${GOOGLE_TTS_VOICE_TECH:-ko-KR-Chirp3-HD-Iapetus}
+      GOOGLE_TTS_VOICE_HR: ${GOOGLE_TTS_VOICE_HR:-ko-KR-Chirp3-HD-Vindemiatrix}
+      GOOGLE_TTS_VOICE_EXEC: ${GOOGLE_TTS_VOICE_EXEC:-ko-KR-Chirp3-HD-Algieba}
+      GOOGLE_TTS_SPEAKING_RATE: ${GOOGLE_TTS_SPEAKING_RATE:-1.0}
+      TTS_MAX_CHARS: ${TTS_MAX_CHARS:-600}
     ports:
       - "8501:8501"
     command:
