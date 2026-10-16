@@ -1,813 +1,735 @@
-/* =============================================
-   intro — 전역 스타일
-   =============================================
+import base64
+import os
+import streamlit as st
+from utils.brand import FAVICON, logo_img
+import streamlit.components.v1 as components
+from utils.paths import resource
+from utils.state import restore_access_token_nonblocking
 
-   구성
-   ① 폰트 & 리셋
-   ② Streamlit 기본 요소 숨기기
-   ③ 색상 변수 (CSS Custom Properties)
-   ④ 공통 컴포넌트 스타일
-   ⑤ 네비게이션 바 (app.py / 09_사용법.py 공용)
-   ⑥ 랜딩 페이지 (app.py 전용 — ld- 접두사)
-   ============================================= */
+st.set_page_config(
+    page_title="intro",
+    page_icon=FAVICON,
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
+logged_in = bool(restore_access_token_nonblocking())
 
-/* ① 폰트 & 리셋 */
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css');
-.ph, [class^="ph-"], [class*=" ph-"] { line-height: 1; vertical-align: middle; }
-.ph-bold::before { font-family: "Phosphor-Bold" !important; }
-.ph-fill::before { font-family: "Phosphor-Fill" !important; }
+# 면접 제한 시간(분) — 백엔드·면접 화면과 같은 환경변수. 안내 문구의 숫자를 맞추는 데만 쓴다.
+try:
+    _INTERVIEW_LIMIT_MIN = max(1, int(os.getenv("INTERVIEW_TIME_LIMIT_MIN", "30")))
+except ValueError:
+    _INTERVIEW_LIMIT_MIN = 30
 
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2') format('woff2');
-    font-weight: 100;
-    font-display: swap;
+# ── 스타일 ───────────────────────────────────────────────────────────
+css = resource("styles/global.css").read_text(encoding="utf-8")
+st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+[data-testid="stSidebar"],
+[data-testid="collapsedControl"],
+[data-testid="stExpandSidebarButton"] { display: none !important; }
+
+.main .block-container,
+[data-testid="stMainBlockContainer"] {
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
 }
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2') format('woff2');
-    font-weight: 200;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2') format('woff2');
-    font-weight: 300;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2');
-    font-weight: 400;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2') format('woff2');
-    font-weight: 500;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2') format('woff2');
-    font-weight: 600;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2');
-    font-weight: 700;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2') format('woff2');
-    font-weight: 800;
-    font-display: swap;
-}
-@font-face {
-    font-family: 'Pretendard';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2') format('woff2');
-    font-weight: 900;
-    font-display: swap;
-}
-
-*, *::before, *::after {
-    font-family: 'Pretendard', -apple-system, sans-serif;
-    box-sizing: border-box;
-}
-
-
-/* ② Streamlit 기본 요소 숨기기 */
-#MainMenu,
-footer,
-[data-testid="stDecoration"],
-[data-testid="stSidebarNav"] { display: none !important; }
-
-header,
-[data-testid="stToolbar"] {
-    visibility: hidden !important;
-    height: 0 !important;
-}
-
-
-/* ③ 색상 변수 */
-:root {
-    --blue:      #3b6def;  /* = --ld-forest */
-    --blue-dark: #2563eb;
-    --blue-soft: #eef3ff;  /* 옅은 블루 틴트 (배지·인포 배경용) */
-
-    --green:     #16a34a;
-    --orange:    #d97706;
-    --red:       #dc2626;
-
-    --gray-900:  #111827;  /* = --ld-ink */
-    --gray-700:  #374151;  /* = --ld-body */
-    --gray-500:  #6b7280;  /* = --ld-muted */
-    --gray-300:  #d1d5db;  /* = --ld-border 톤과 통일 */
-    --gray-100:  #f9fafb;  /* = --ld-card */
-
-    --accent:       #7c3aed;  /* 보라 — 포인트 강조용, blue 자리 대신 별도 보탠 것 */
-    --accent-deep:  #5b21b6;
-
-    --border:    #e5e7eb;  /* = --ld-border */
-    --bg:        #f8fafc;  /* = --ld-bg */
-
-    /* 간격 스케일 (4px 기준) */
-    --space-1:  4px;
-    --space-2:  8px;
-    --space-3:  12px;
-    --space-4:  16px;
-    --space-5:  20px;
-    --space-6:  24px;
-    --space-8:  32px;
-    --space-10: 40px;
-    --space-12: 48px;
-    --space-16: 64px;
-    --space-20: 80px;
-
-    /* 모서리 반경 */
-    --radius-sm:   4px;
-    --radius-md:   8px;
-    --radius-lg:   12px;
-    --radius-xl:   16px;
-    --radius-pill: 999px;
-
-    /* 타입 스케일 */
-    --text-xs:   11px;
-    --text-sm:   12px;
-    --text-base: 13px;
-    --text-md:   14px;
-    --text-lg:   16px;
-    --text-xl:   18px;
-    --text-2xl:  22px;
-    --text-3xl:  27px;
-    --text-4xl:  38px;
-    --text-5xl:  54px;
-
-    /* 그림자 */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-    --shadow-md: 0 4px 10px rgba(0,0,0,0.08);
-    --shadow-lg: 0 10px 24px rgba(18,32,62,0.10);
-
-    --ld-bg:             #f8fafc;
-    --ld-card:           #f9fafb;
-    --ld-border:         #e5e7eb;
-    --ld-ink:            #111827;
-    --ld-body:           #374151;
-    --ld-muted:          #6b7280;
-    --ld-label:          #6b7280;
-    --ld-forest:         #3b6def;
-    --ld-on-forest:      #ffffff;
-    --ld-on-forest-dim:  #dbeafe;
-    --ld-mustard:        #3b6def;
-    --ld-mustard-deep:   #2453c9;
-    --ld-mustard-bubble: #eef3ff;
-    --ld-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-}
-
-
-/* ④ 공통 컴포넌트 */
-
-/* 페이지 타이틀 */
-.page-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--gray-900);
-    margin: 0 0 4px;
-}
-.page-subtitle {
-    font-size: 13px;
-    color: var(--gray-500);
-    margin: 0 0 28px;
-}
-
-/* 섹션 제목 */
-.section-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--gray-900);
-    margin: 0 0 12px;
-}
-
-/* 기본 카드 */
-.card {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-}
-
-/* 알림 박스 (st.error/warning/success/info) — streamlit 기본 색배경 대신 화이트카드, 좌측 색띠는 쓰지 않고 텍스트 색으로만 상태 구분 */
-[data-testid="stAlertContainer"] {
-    background: white !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-    padding: 14px 18px !important;
-}
-[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"])   [data-testid="stMarkdownContainer"] p { color: var(--red)    !important; }
-[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) [data-testid="stMarkdownContainer"] p { color: var(--orange) !important; }
-[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) [data-testid="stMarkdownContainer"] p { color: var(--green)  !important; }
-[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"])    [data-testid="stMarkdownContainer"] p { color: var(--gray-700) !important; }
-[data-testid="stAlertContainer"] [data-testid="stMarkdownContainer"] p {
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    color: var(--gray-900) !important;
-    margin: 0 !important;
+[data-testid="stMain"],
+[data-testid="stAppViewContainer"] { background: var(--ld-bg) !important; }
+[data-testid="stMainBlockContainer"] { background: var(--ld-bg) !important; }
+[data-testid="stVerticalBlock"] { gap: 0 !important; }
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] > div,
+[data-testid="stVerticalBlock"],
+[data-testid="stMainBlockContainer"] { overflow: visible !important; }
+[data-testid="stMainBlockContainer"] {
     word-break: keep-all !important;
+    overflow-wrap: break-word !important;
 }
 
-/* 배지 */
-.badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
+/* 페르소나 스위처 (대화 스레드 데모 위) */
+.st-key-ld_persona_switch {
+    max-width: 1100px;
+    margin: -24px auto 0;  
+    padding: 0 40px 12px;
 }
-.badge-green  { background: #dcfce7; color: var(--green); }
-.badge-orange { background: #fef3c7; color: var(--orange); }
-.badge-red    { background: #fee2e2; color: var(--red); }
-.badge-blue   { background: var(--blue-soft); color: var(--blue); }
-
-
-/* =============================================
-   ⑤ 네비게이션 바 — app.py, 09_사용법.py 공용
-   ============================================= */
-.navbar {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    z-index: 1000;
-    height: 64px;
-    background: white;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 40px;
+.st-key-ld_persona_switch [data-testid="stHorizontalBlock"] {
+    max-width: 420px;
+    margin: 0 auto;
+    gap: 8px !important;
 }
-.navbar-brand {
-    font-size: 21px;
-    font-weight: 800;
-    letter-spacing: -0.3px;
-    color: var(--blue) !important;
-    white-space: nowrap;
+.st-key-ld_persona_switch [data-testid="stBaseButton-primary"],
+.st-key-ld_persona_switch [data-testid="stBaseButton-secondary"] {
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    padding: 0.55em 0.4em !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
 }
-.navbar-brand em { font-style: normal; }
-.navbar-brand { display: flex; align-items: center; text-decoration: none !important; }
-.navbar-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
+.st-key-ld_persona_switch [data-testid="stBaseButton-primary"] p,
+.st-key-ld_persona_switch [data-testid="stBaseButton-secondary"] p {
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
 }
-.btn-ghost,
-.btn-ghost:visited,
-.btn-ghost:active {
-    padding: 6px 20px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--gray-700) !important;
-    background: white;
-    text-decoration: none !important;
-    display: inline-block;
-    white-space: nowrap;
-}
-.btn-filled,
-.btn-filled:visited,
-.btn-filled:active {
-    padding: 6px 20px;
-    background: var(--blue);
-    border-radius: 6px;
-    font-size: 13px;
-    color: white !important;
-    text-decoration: none !important;
-    display: inline-block;
-    white-space: nowrap;
-}
-.btn-filled:hover { background: var(--blue-dark); }
-
-.navbar-link,
-.navbar-link:visited,
-.navbar-link:active {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--gray-700) !important;
-    text-decoration: none !important;
-    white-space: nowrap;
-    margin-right: 4px;
-}
-.navbar-link:hover { color: var(--blue) !important; }
-
-.ld-navbar.navbar { background: rgba(248,250,252,.88); backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: box-shadow .2s ease, border-color .2s ease; }
-.ld-navbar.navbar.is-scrolled { border-color: var(--ld-border); box-shadow: 0 1px 0 rgba(17,24,39,0.04), 0 8px 24px rgba(17,24,39,0.05); }
-.ld-navbar .navbar-link:hover { color: var(--ld-mustard-deep) !important; }
-.ld-navbar .btn-ghost { border-color: var(--ld-border) !important; color: var(--ld-ink) !important; background: transparent !important; }
-.ld-navbar .btn-filled { background: var(--ld-forest) !important; color: var(--ld-on-forest) !important; border-radius: 999px !important; }
-.ld-navbar .btn-filled:hover { background: var(--blue-dark) !important; }
-
-
-/* =============================================
-   ⑥ 랜딩 페이지 — app.py 전용 
-   ============================================= */
-
-.ld-eyebrow {
-    font-family: var(--ld-mono);
-    font-weight: 500;
-    font-size: 11px;
-    letter-spacing: .05em;
-    text-transform: uppercase;
-    color: var(--ld-label);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-.ld-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ld-mustard); flex-shrink: 0; }
-
-[data-testid="stMarkdownContainer"] [class*="ld-"],
-[data-testid="stMarkdownContainer"] [class*="ld-"] p { word-break: keep-all !important; }
-
-/* --- 히어로 (왼쪽 헤드라인+CTA / 오른쪽 면접관 카드) --- */
-.ld-hero {
-    background: var(--ld-bg);
-    padding: 148px 40px 132px;
-    position: relative;
+.st-key-ld_persona_switch [data-testid="stBaseButton-secondary"] {
+    background: white !important;
+    border-color: var(--border) !important;
+    color: var(--gray-500) !important;
 }
 
-[data-testid="stMarkdownContainer"] > div.ld-hero { overflow: hidden !important; }
-.ld-hero::before {
-    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background: radial-gradient(560px circle at 78% 46%, rgba(59,109,239,0.10), transparent 70%);
-}
-.ld-hero-grid {
-    position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background-image: radial-gradient(rgba(59,109,239,0.20) 1px, transparent 1px);
-    background-size: 26px 26px;
-    -webkit-mask-image: radial-gradient(ellipse 55% 70% at 78% 45%, black 0%, transparent 75%);
-    mask-image: radial-gradient(ellipse 55% 70% at 78% 45%, black 0%, transparent 75%);
-    opacity: .6;
-}
-.ld-hero-wrap {
-    max-width: 1160px; margin: 0 auto; position: relative; z-index: 2;
-    display: grid; grid-template-columns: 1.08fr .92fr; gap: 56px; align-items: end;
-}
-.ld-hero-inner { text-align: left; padding-bottom: 92px; }  /* 아래 92px는 CTA 줄이 끌어올려져 들어올 자리 */
-
-@keyframes ld-hero-rise {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.ld-hero-quote, .ld-hero-sub, .ld-hero-stage {
-    animation: ld-hero-rise .7s cubic-bezier(.16,1,.3,1) both;
-}
-.ld-hero-quote { animation-delay: 0s; }
-.ld-hero-sub { animation-delay: .7s; }
-.ld-hero-stage { animation-delay: .45s; animation-duration: .9s; }
-.st-key-ld_cta_row [data-testid="stHorizontalBlock"] {
-    animation: ld-hero-rise .7s cubic-bezier(.16,1,.3,1) both;
-    animation-delay: .85s;
-}
-@media (prefers-reduced-motion: reduce) {
-    .ld-hero-quote, .ld-hero-sub, .ld-hero-stage,
-    .st-key-ld_cta_row [data-testid="stHorizontalBlock"] { animation: none; }
-}
-
-.ld-hero-title {
-    font-weight: 800 !important;
-    font-size: clamp(34px, 4.6vw, 60px) !important;
-    line-height: 1.18 !important;
-    letter-spacing: -.05em;
-    color: var(--ld-ink);
-    margin: 16px 0 0;
-    word-break: keep-all;
-}
-.ld-hero-title em { font-style: normal; color: var(--ld-forest); }
-.ld-hero-quote {
-    font-family: var(--ld-mono) !important;
-    font-size: 13px !important;
-    letter-spacing: -.01em;
-    color: var(--ld-label);
-    margin: 0 !important;
-    word-break: keep-all;
-}
-.ld-hero-sub {
-    max-width: 30em;
-    margin: 24px 0 0 !important;
-    font-size: 17px !important;
-    line-height: 1.75;
-    color: var(--ld-body);
-    word-break: keep-all;
-}
-
-/* 오른쪽 — 실제 면접관 사진이 들어간 카드 3장 (앞: 기술 리드 대화, 뒤: 다른 두 면접관) */
-.ld-hero-stage { position: relative; height: 420px; }
-.ld-iv-card {
-    position: absolute; background: #fff; border: 1px solid var(--ld-border); border-radius: 20px;
-    box-shadow: 0 1px 2px rgba(17,24,39,.04), 0 24px 48px -12px rgba(36,83,201,.18);
-}
-.ld-iv-card img { border-radius: 12px; object-fit: cover; display: block; }
-.ld-iv-card.back {
-    width: 210px; padding: 12px; display: flex; align-items: center; gap: 10px;
-    font-size: 13px; color: var(--ld-body);
-}
-.ld-iv-card.back img { width: 40px; height: 40px; }
-.ld-iv-card.back b { font-weight: 600; }
-.ld-iv-card.b1 { top: 0; right: 0; transform: rotate(3deg); }
-.ld-iv-card.b2 { bottom: -30px; left: 0; transform: rotate(-3deg); }
-.ld-iv-card.front { top: 44px; left: 7%; right: 4%; padding: 22px 22px 20px; z-index: 2; }
-.ld-iv-head { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--ld-border); }
-.ld-iv-head img { width: 48px; height: 48px; }
-.ld-iv-who { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.ld-iv-who b { font-size: 15px; color: var(--ld-ink); }
-.ld-iv-who span { font-size: 12.5px; color: var(--ld-muted); }
-.ld-iv-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ld-forest); background: var(--blue-soft); padding: 5px 10px; border-radius: 8px; white-space: nowrap; }
-.ld-iv-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--ld-forest); animation: ld-live-pulse 1.6s ease-in-out infinite; }
-@keyframes ld-live-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-.ld-iv-q { margin-top: 16px; font-size: 14.5px; font-weight: 600; line-height: 1.6; color: var(--ld-ink); word-break: keep-all; }
-.ld-iv-a { margin: 12px 0 0 auto; width: fit-content; max-width: 86%; font-size: 13px; line-height: 1.6; color: var(--ld-body); background: var(--ld-bg); border: 1px solid var(--ld-border); border-radius: 12px 4px 12px 12px; padding: 9px 12px; word-break: keep-all; }
-.ld-iv-fu { margin-top: 14px; padding: 12px 14px; background: var(--ld-mustard-bubble); border-radius: 12px; }
-.ld-iv-fu-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--ld-mustard-deep); margin-bottom: 4px; }
-.ld-iv-fu-tag .ld-typing span { width: 4px; height: 4px; background: var(--ld-mustard-deep); }
-.ld-iv-fu p { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.55; color: var(--ld-mustard-deep); word-break: keep-all; }
-@media (prefers-reduced-motion: reduce) { .ld-iv-live i { animation: none; } }
-
-@media (max-width: 900px) {
-    .ld-hero { padding: 120px 24px 40px; }
-    .ld-hero-wrap { grid-template-columns: 1fr; }
-    .ld-hero-stage { display: none; }
-}
-
-/* --- 답변 피커(스토리 섹션 안에 끼워넣는 즉석 체험 위젯) --- */
-.ld-feature-split {
-    max-width: 1100px; margin: 40px auto 0; position: relative; z-index: 1;
-    display: flex; align-items: center; gap: 64px;
-}
-.ld-feature-left { flex: 0 0 42%; }
-.ld-feature-right { flex: 1; display: flex; justify-content: center; perspective: 1200px; }
-@media (max-width: 900px) {
-    .ld-feature-split { flex-direction: column; gap: 36px; }
-    .ld-feature-right { display: none; }
-}
-
-.ld-picker { position: relative; display: flex; flex-direction: column; gap: 10px; }
-.ld-opt {
-    position: relative; display: flex; align-items: center; gap: 12px;
-    border-radius: 14px; padding: 14px 16px; cursor: pointer;
-    background: transparent; border: 1.5px solid transparent;
-    transition: transform .15s, background-color .22s, border-color .22s, box-shadow .22s;
-}
-.ld-opt:hover { transform: translateX(2px); }
-.ld-opt.active {
-    background: #fff; border-color: var(--ld-forest);
-    box-shadow: 0 14px 30px rgba(59,109,239,.16);
-}
-.ld-opt-radio { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ld-border); position: relative; transition: border-color .2s; }
-.ld-opt.active .ld-opt-radio { border-color: var(--ld-forest); }
-.ld-opt.active .ld-opt-radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--ld-forest); transform: scale(0); animation: ld-opt-pop .25s ease-out forwards; }
-@keyframes ld-opt-pop { to { transform: scale(1); } }
-.ld-opt p { margin: 0; font-size: 13px; color: var(--ld-body); line-height: 1.55; word-break: keep-all; }
-.ld-opt.active p { color: var(--ld-ink); font-weight: 600; }
-
-.st-key-ld_cta_row {
-    max-width: 1240px;
-    margin: -184px auto 0;   
-    padding: 0 40px 120px;
-    position: relative; z-index: 3;
-    display: block;
-    box-sizing: border-box;
-}
-.st-key-ld_cta_row [data-testid="stHorizontalBlock"] { align-items: center; gap: 12px !important; }
-.st-key-ld_cta_row .stButton > button {
-    height: 54px !important;
-    border-radius: 14px !important;
-    background: var(--ld-forest) !important;
-    border: none !important;
-    color: var(--ld-on-forest) !important;
-    box-shadow: 0 10px 24px -8px rgba(36,83,201,.45);
-    transition: background .15s, transform .15s, box-shadow .15s;
-}
-.st-key-ld_cta_row .stButton > button:hover {
-    background: var(--blue-dark) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px -8px rgba(36,83,201,.5);
-}
-.st-key-ld_cta_row .stButton > button:active { transform: translateY(1px); }
-.st-key-ld_cta_row .stButton > button p { font-size: 15.5px !important; font-weight: 700 !important; }
-@media (max-width: 900px) {
-    .st-key-ld_cta_row { margin-top: -100px; padding: 0 24px 72px; }
-}
-
-/* 히어로 오른쪽 — 답변 선택에 실시간으로 반응하는 미니 제품 패널 (마우스로 살짝 기울어짐) */
-.ld-mini-panel {
-    width: 100%; max-width: 440px; background: #fff; border: 1px solid var(--ld-border); border-radius: 22px;
-    box-shadow: 0 30px 70px rgba(17,24,39,.1); overflow: hidden;
-    transition: transform .15s ease-out; transform-style: preserve-3d;
-}
-.ld-mini-panel-chrome { height: 40px; background: var(--ld-bg); border-bottom: 1px solid var(--ld-border); display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
-.ld-mini-panel-chrome .dots { display: flex; gap: 6px; }
-.ld-mini-panel-chrome .dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--ld-border); }
-.ld-mini-panel-chrome .live { display: flex; align-items: center; gap: 6px; font-family: var(--ld-mono); font-size: 10.5px; font-weight: 700; color: var(--ld-muted); }
-.ld-mini-panel-chrome .live .d { width: 6px; height: 6px; border-radius: 50%; background: #16a34a; }
-.ld-mini-panel-body { padding: 26px 26px 30px; }
-.ld-mini-panel-body .pb-label { font-size: 11px; color: var(--ld-muted); font-family: var(--ld-mono); margin-bottom: 8px; }
-.ld-mini-panel-body .pb-q-text { font-size: 14px; font-weight: 600; color: var(--ld-ink); line-height: 1.55; padding-bottom: 18px; border-bottom: 1px dashed var(--ld-border); margin-bottom: 18px; word-break: keep-all; }
-.ld-mini-panel-body .pb-a-text { font-size: 13px; color: var(--ld-body); line-height: 1.6; background: var(--ld-bg); border-radius: 10px; padding: 12px 14px; min-height: 20px; transition: opacity .2s; word-break: keep-all; }
-.ld-mini-panel-body .pb-arrow { display: flex; justify-content: center; margin: 16px 0; color: var(--ld-mustard); font-size: 18px; }
-.ld-mini-panel-body .pb-fu-tag { font-family: var(--ld-mono); font-size: 10px; font-weight: 700; color: var(--ld-mustard-deep); background: var(--ld-mustard-bubble); padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-.ld-mini-panel-body .pb-fu-tag .typing { display: inline-flex; gap: 2px; }
-.ld-mini-panel-body .pb-fu-tag .typing span { width: 3px; height: 3px; border-radius: 50%; background: var(--ld-mustard-deep); animation: ld-fu-bounce 1s infinite; }
-.ld-mini-panel-body .pb-fu-tag .typing span:nth-child(2) { animation-delay: .15s; }
-.ld-mini-panel-body .pb-fu-tag .typing span:nth-child(3) { animation-delay: .3s; }
-@keyframes ld-fu-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
-.ld-mini-panel-body .pb-fu-text { font-size: 16px; font-weight: 700; color: var(--ld-ink); line-height: 1.5; min-height: 48px; word-break: keep-all; }
-.ld-mini-panel-body .pb-fu-text .caret { display: inline-block; width: 2px; height: 15px; background: var(--ld-forest); margin-left: 2px; vertical-align: middle; animation: ld-caret-blink 1s step-end infinite; }
-@keyframes ld-caret-blink { 50% { opacity: 0; } }
-
-/* --- 시그니처: 대화 스레드 데모 (2열 비대칭) --- */
-.ld-thread-section { background: var(--ld-bg); padding: 12px 40px 36px; }
-.ld-thread-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: .82fr 1fr; gap: 56px; align-items: center; }
-.ld-thread-grid-solo { grid-template-columns: 1fr; max-width: 620px; gap: 0; }
-.ld-story-head { max-width: 640px; margin: 0 auto 8px; text-align: center; }
-.ld-story-head .ld-title-lg { margin: 12px 0 16px; }
-.ld-story-head p:not(.ld-title-lg) { font-size: 15px; line-height: 1.85; color: var(--ld-body); word-break: keep-all; margin-bottom: 0; }
-.ld-title-lg { font-weight: 700; font-size: 32px !important; line-height: 1.35 !important; letter-spacing: -.02em; color: var(--ld-ink); margin: 12px 0 0; word-break: keep-all; }
-.ld-title-card { font-weight: 700; font-size: 18px !important; color: var(--ld-ink); margin: 0 0 9px; letter-spacing: -.01em; word-break: keep-all; }
-.ld-title-step { font-weight: 700; font-size: 16.5px !important; color: var(--ld-ink); margin: 0 0 6px; word-break: keep-all; }
-.ld-title-cta { color: var(--ld-on-forest) !important; font-weight: 700; font-size: 28px !important; letter-spacing: -.02em; margin: 0; word-break: keep-all; }
-.ld-thread-copy .ld-title-lg { margin: 12px 0 16px; }
-.ld-thread-copy p { font-size: 15px; line-height: 1.85; color: var(--ld-body); word-break: keep-all; }
-.ld-thread-panel { background: var(--ld-card); border: 1px solid var(--ld-border); border-radius: 18px; padding: 30px 32px 34px; }
-.ld-thread-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.ld-thread-who { display: flex; align-items: center; gap: 12px; }
-.ld-thread-who img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; display: block; }
-.ld-thread-who div { display: flex; flex-direction: column; gap: 2px; }
-.ld-thread-who b { font-size: 15px; color: var(--ld-ink); }
-.ld-thread-who span { font-size: 12.5px; color: var(--ld-muted); }
-.ld-thread-traits { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 24px; padding-bottom: 20px; border-bottom: 1px solid var(--ld-border); }
-.ld-thread-traits span { font-size: 12px; color: var(--ld-body); background: #fff; border: 1px solid var(--ld-border); border-radius: 8px; padding: 4px 9px; }
-.ld-section-head.ld-switch-head { margin: 112px auto 20px; }
-.ld-switch-head .ld-switch-label { margin: 10px 0 0 !important; font-size: 14px !important; }
-.ld-thread-timer { font-family: var(--ld-mono); font-weight: 500; font-size: 11px; color: var(--ld-muted); background: var(--ld-bg); border: 1px solid var(--ld-border); padding: 4px 10px; border-radius: 999px; }
-
-.ld-msg { display: flex; gap: 11px; margin-bottom: 18px; align-items: flex-start; }
-.ld-msg.user { flex-direction: row-reverse; }
-.ld-avatar { width: 27px; height: 27px; border-radius: 50%; flex-shrink: 0; background: var(--ld-forest); }
-.ld-msg.user .ld-avatar { background: var(--gray-300); }
-.ld-bubble { font-size: 13.5px; line-height: 1.65; padding: 12px 15px; max-width: 78%; word-break: keep-all; }
-.ld-bubble.ai { background: var(--ld-forest); color: var(--ld-on-forest); border-radius: 4px 14px 14px 14px; }
-.ld-bubble.user { background: var(--ld-bg); color: var(--ld-ink); border: 1px solid var(--ld-border); border-radius: 14px 4px 14px 14px; }
-
-.ld-followup { border-left: 2px solid var(--ld-mustard); margin-left: 12px; padding-left: 20px; margin-top: 4px; margin-bottom: 18px; }
-.ld-followup-tag { font-family: var(--ld-mono); font-weight: 500; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--ld-mustard-deep); background: var(--ld-mustard-bubble); display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; margin-bottom: 9px; }
-.ld-followup-tag .ld-typing span { background: var(--ld-mustard-deep); }
-.ld-followup .ld-bubble.ai { background: var(--ld-mustard-bubble); color: var(--ld-mustard-deep); }
-.ld-followup .ld-avatar { background: var(--ld-mustard); }
-
-.ld-gaze-inline { display: flex; align-items: center; gap: 8px; margin: 18px 0 2px 39px; padding: 8px 12px; background: var(--ld-bg); border: 1px dashed var(--ld-border); border-radius: 10px; }
-.ld-gaze-inline .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ld-label); flex-shrink: 0; }
-.ld-gaze-inline span { font-size: 12px; color: var(--ld-muted); word-break: keep-all; }
-.ld-gaze-inline b { font-weight: 700; font-size: 12px; color: var(--ld-forest); margin-right: 8px; white-space: nowrap; }
-
-/* --- 비교: 일반 모의면접 vs intro (2열 패널) --- */
-.ld-compare-section { background: white; padding: 100px 40px; }
-.ld-compare-head { max-width: 640px; margin: 0 auto 44px; text-align: center; }
-.ld-compare-grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.ld-compare-panel { border-radius: 18px; padding: 30px 30px 26px; }
-.ld-compare-panel.old { background: var(--ld-bg); border: 1px solid var(--ld-border); }
-.ld-compare-panel.new { background: var(--ld-forest); }
-.ld-compare-panel-title { font-weight: 700; font-size: 15px; margin-bottom: 20px; }
-.ld-compare-panel.old .ld-compare-panel-title { color: var(--ld-muted); }
-.ld-compare-panel.new .ld-compare-panel-title { color: #ffffff; }
-.ld-compare-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-top: 1px solid; }
-.ld-compare-panel.old .ld-compare-row { border-color: var(--ld-border); }
-.ld-compare-panel.new .ld-compare-row { border-color: rgba(239,241,233,.14); }
-.ld-compare-row:first-of-type { border-top: none; padding-top: 0; }
-.ld-compare-mark { font-family: var(--ld-mono); font-weight: 700; font-size: 12px !important; flex-shrink: 0; margin-top: 1px; }
-.ld-compare-panel.old .ld-compare-mark { color: #9CA3AF; }
-.ld-compare-panel.new .ld-compare-mark { color: var(--ld-on-forest-dim); }
-.ld-compare-row span { font-size: 13.5px; line-height: 1.6; word-break: keep-all; }
-.ld-compare-panel.old .ld-compare-row span { color: var(--ld-body); }
-.ld-compare-panel.new .ld-compare-row span { color: var(--ld-on-forest); }
-
-/* --- 기능 (2x2) --- */
-.ld-features-section { background: var(--ld-bg); padding: 100px 40px; }
-.ld-section-head { max-width: 620px; margin: 0 auto 44px; text-align: center; }
-.ld-bento { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: stretch; }
-.ld-bento-main { background: #fff; border: 1px solid var(--ld-border); border-radius: 20px; padding: 32px 30px 30px; }
-.ld-bento-main > p:not(.ld-title-card) { font-size: 14px; line-height: 1.75; color: var(--ld-body); word-break: keep-all; max-width: 30em; }
-.ld-feat-icon { display: block; font-size: 24px; color: var(--ld-forest); margin-bottom: 12px; }
-.ld-axis-card { margin-top: 24px; background: var(--ld-bg); border-radius: 14px; padding: 18px 18px 14px; }
-.ld-axis-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; font-size: 12.5px; color: var(--ld-muted); }
-.ld-axis-total { font-size: 26px; font-weight: 800; color: var(--ld-ink); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.ld-axis-total small { font-size: 13px; font-weight: 600; color: var(--ld-muted); margin-left: 2px; }
-.ld-axis { display: grid; grid-template-columns: 84px 1fr 28px; align-items: center; gap: 10px; padding: 6px 0; }
-.ld-axis span { font-size: 13px; color: var(--ld-body); }
-.ld-axis b { font-size: 13px; font-weight: 700; color: var(--ld-ink); text-align: right; font-variant-numeric: tabular-nums; }
-.ld-axis-bar { height: 8px; background: #e3e8f2; border-radius: 4px; overflow: hidden; }
-.ld-axis-bar i { display: block; height: 100%; background: var(--ld-forest); border-radius: 4px; transform-origin: left; transition: transform .9s cubic-bezier(.16,1,.3,1) .3s; }
-.ld-stagger:not(.is-visible) .ld-axis-bar i { transform: scaleX(0); }
-.ld-bento-side { display: flex; flex-direction: column; gap: 20px; }
-.ld-feat-row { flex: 1; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--ld-border); border-radius: 20px; padding: 26px 28px; }
-.ld-feat-row-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.ld-feat-row-head .ld-feat-icon { font-size: 22px; margin: 0; flex-shrink: 0; }
-.ld-feat-row-head .ld-title-card { font-size: 16.5px !important; margin: 0; }
-.ld-feat-row > p { margin: 0; font-size: 13.5px; line-height: 1.75; color: var(--ld-body); word-break: keep-all; }
-
-/* 오른쪽 카드 미리보기 (영상 지표 / 이력서 수정 전·후) — 카드 아래쪽에 붙어 빈 공간을 채움 */
-.ld-mini-preview { margin-top: auto; padding-top: 16px; }
-.ld-mini-preview > * { background: var(--ld-bg); }
-.ld-video-preview { display: flex; flex-direction: column; gap: 8px; }
-.ld-mini-metric { border-radius: 12px; padding: 10px 14px; display: grid; grid-template-columns: 60px 1fr; align-items: baseline; gap: 10px; }
-.ld-mini-metric span { font-size: 12px; color: var(--ld-muted); }
-.ld-mini-metric p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ld-ink); word-break: keep-all; }
-.ld-mini-metric .ld-level { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--ld-forest); background: var(--blue-soft); border-radius: 6px; padding: 1px 7px; margin-right: 6px; }
-.ld-resume-preview { display: flex; flex-direction: column; gap: 8px; }
-.ld-resume-line { border-radius: 12px; padding: 10px 14px; display: flex; gap: 10px; align-items: baseline; }
-.ld-resume-line span { flex-shrink: 0; font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
-.ld-resume-line p { margin: 0; font-size: 13px; line-height: 1.6; word-break: keep-all; }
-.ld-resume-line.before span { color: var(--ld-muted); background: #e9ecf2; }
-.ld-resume-line.before p { color: var(--ld-muted); text-decoration: line-through; text-decoration-color: rgba(107,114,128,.5); }
-.ld-resume-line.after { background: var(--ld-mustard-bubble) !important; }
-.ld-resume-line.after span { color: #fff; background: var(--ld-forest); }
-.ld-resume-line.after p { color: var(--ld-ink); font-weight: 600; }
-@media (prefers-reduced-motion: reduce) { .ld-axis-bar i { transition: none; } .ld-stagger:not(.is-visible) .ld-axis-bar i { transform: none; } }
-
-/* --- 진행 단계 (세로 리스트) --- */
-.ld-steps-section { background: var(--ld-bg); padding: 100px 40px; }
-.ld-step-list { max-width: 720px; margin: 0 auto; }
-.ld-step { display: grid; grid-template-columns: 96px 1fr; gap: 22px; padding: 26px 0 26px 20px; border-top: 1px solid var(--ld-border); position: relative; }
-.ld-step:last-child { border-bottom: 1px solid var(--ld-border); }
-.ld-step::before { content: ""; position: absolute; left: 0; top: 26px; bottom: 26px; width: 2px; background: var(--ld-mustard); }
-.ld-step-idx { font-family: var(--ld-mono); font-weight: 500; font-size: 11px; color: var(--ld-mustard-deep); letter-spacing: .04em; padding-top: 2px; }
-.ld-step p { font-size: 14px; color: var(--ld-body); line-height: 1.75; word-break: keep-all; }
-.ld-step p.ld-title-step { color: var(--ld-ink); }
-
-/* --- FAQ --- */
-.ld-faq-section { background: white; padding: 100px 40px; }
-.ld-faq-list { max-width: 700px; margin: 0 auto; }
-.ld-faq-item { border-top: 1px solid var(--ld-border); padding: 22px 4px; }
-.ld-faq-item:last-child { border-bottom: 1px solid var(--ld-border); }
-.ld-faq-item summary { font-weight: 600; font-size: 15px; color: var(--ld-ink); cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; word-break: keep-all; }
-.ld-faq-item summary::-webkit-details-marker { display: none; }
-.ld-faq-mark { font-family: var(--ld-mono); font-weight: 500; color: var(--ld-mustard-deep); flex-shrink: 0; transition: transform .15s; }
-.ld-faq-item[open] .ld-faq-mark { transform: rotate(45deg); }
-.ld-faq-item p { margin: 12px 0 0; font-size: 13.5px; color: var(--ld-muted); line-height: 1.8; max-width: 580px; word-break: keep-all; }
-
-/* --- 마무리 CTA --- */
-.ld-final-cta-wrap { background: var(--ld-bg); padding: 56px 40px 28px; }
-.ld-final-cta { max-width: 1000px; margin: 0 auto; background: var(--ld-forest); border-radius: 26px; padding: 64px 56px 132px; text-align: center; }
-.ld-final-cta p { color: var(--ld-on-forest-dim) !important; font-size: 14px; margin-top: 8px; word-break: keep-all; }
-.st-key-ld_final_cta_row { max-width: 1000px; margin: -108px auto 0; padding: 0 40px 96px; display: block; width: 100%; box-sizing: border-box; position: relative; z-index: 3; }
-.st-key-ld_final_cta_row .stButton > button {
-    height: 54px !important;
-    border-radius: 14px !important;
-    background: #ffffff !important;
-    color: var(--ld-forest) !important;
-    border: none !important;
-    box-shadow: 0 10px 24px -10px rgba(17,24,39,.35);
-}
-.st-key-ld_final_cta_row .stButton > button p { font-size: 15px !important; font-weight: 700 !important; }
-.st-key-ld_final_cta_row .stButton > button:hover { background: var(--blue-soft) !important; transform: translateY(-1px); }
-.st-key-ld_final_cta_row .stButton > button:active { transform: translateY(1px); }
-
-/* --- 푸터 --- */
-.ld-footer { background: var(--ld-bg); border-top: 1px solid var(--ld-border); padding: 26px 40px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--ld-label); }
-
-@media (max-width: 900px) {
-    .ld-bento { grid-template-columns: 1fr; }
-    .ld-thread-grid { grid-template-columns: 1fr; gap: 36px; }
-    .ld-compare-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 560px) {
-    .ld-bento { grid-template-columns: 1fr; }
-    .ld-step { grid-template-columns: 1fr; gap: 6px; }
-    .ld-final-cta { padding: 40px 28px; }
-    .ld-hero { padding: 108px 20px 44px; }
-    .ld-thread-section, .ld-compare-section, .ld-features-section, .ld-steps-section, .ld-faq-section { padding-left: 20px; padding-right: 20px; }
-}
-
-
-/* =============================================
-   ⑦ 인터랙티브 리뉴얼 — 스크롤 스토리텔링 레이어
-   ============================================= */
-
-/* 스크롤 진행 바 (상단 고정) */
-.ld-scrollbar {
-    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
-    background: var(--ld-forest);
-    z-index: 2000; transition: width .08s linear;
-    pointer-events: none;
-}
-
-/* 히어로 타이틀 — 단어 단위 키네틱 리빌 */
-.ld-kinetic-word {
-    display: inline-block;
+/* 스크롤 리빌 (아래로 스크롤하면 섹션이 떠오르듯 나타남) */
+.ld-reveal {
     opacity: 0;
-    transform: translateY(.5em) rotate(3deg);
-    animation: ld-word-rise .72s cubic-bezier(.16,1,.3,1) both;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
 }
-@keyframes ld-word-rise {
-    to { opacity: 1; transform: translateY(0) rotate(0deg); }
-}
+.ld-reveal.is-visible { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-    .ld-kinetic-word { opacity: 1; transform: none; animation: none; }
+    .ld-reveal { opacity: 1; transform: none; transition: none; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+def img_b64(path: str) -> str:
+    return base64.b64encode(resource(path).read_bytes()).decode()
+
+
+def go_to_start():
+    if logged_in:
+        st.switch_page("pages/03_면접_환경설정.py")
+    else:
+        st.switch_page("pages/01_로그인.py")
+
+
+# ── 0. 스크롤 진행 바 ────────────────────────────────────────────────
+st.markdown('<div class="ld-scrollbar" id="ld-scrollbar"></div>', unsafe_allow_html=True)
+
+
+# ── 1. 네비게이션 바 ─────────────────────────────────────────────────
+_auth_links = "" if logged_in else (
+    '<a class="btn-ghost"  href="/%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85" target="_self">회원가입</a>'
+    '<a class="btn-filled" href="/%EB%A1%9C%EA%B7%B8%EC%9D%B8"           target="_self">로그인</a>'
+)
+_nav_right = (
+    '<a class="navbar-link" href="/%EC%82%AC%EC%9A%A9%EB%B2%95" target="_self">사용법</a>'
+    f'{_auth_links}'
+)
+st.markdown(
+    f'<nav class="navbar ld-navbar">'
+    f'<a class="navbar-brand" href="/" target="_self" aria-label="intro 홈">{logo_img(25)}</a>'
+    f'<div class="navbar-right">{_nav_right}</div>'
+    f'</nav>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 2. 히어로 ────────────────────────────────────────────────────────
+PERSONA_IMG = {
+    "기술 리드": img_b64("assets/images/기술리드.png"),
+    "인사 담당자": img_b64("assets/images/인사 담당자.png"),
+    "임원 면접관": img_b64("assets/images/임원 면접관.png"),
+}
+hero_stage_html = (
+    '<div class="ld-hero-stage" aria-hidden="true">'
+    '<div class="ld-iv-card back b2">'
+    f'<img src="data:image/png;base64,{PERSONA_IMG["임원 면접관"]}" alt=""><b>임원 면접관</b></div>'
+    '<div class="ld-iv-card back b1">'
+    f'<img src="data:image/png;base64,{PERSONA_IMG["기술 리드"]}" alt=""><b>기술 리드</b></div>'
+    '<div class="ld-iv-card front">'
+    '<div class="ld-iv-head">'
+    f'<img src="data:image/png;base64,{PERSONA_IMG["인사 담당자"]}" alt="">'
+    '<div class="ld-iv-who"><b>인사 담당자</b><span>공감 중심 인성 면접</span></div>'
+    '<span class="ld-iv-live"><i></i>질문 중</span>'
+    '</div>'
+    '<div class="ld-iv-q">팀 내에서 의견 충돌이 있었던 경험과, 그걸 어떻게 풀어갔는지 말씀해주세요.</div>'
+    '<div class="ld-iv-a">일정 우선순위로 의견이 갈려서, 근거를 정리해 다시 논의했습니다.</div>'
+    '<div class="ld-iv-fu">'
+    '<span class="ld-iv-fu-tag"><span class="ld-typing"><span></span><span></span><span></span></span>꼬리질문</span>'
+    '<p>그 과정에서 상대방 의견은 어디까지 받아들이셨나요?</p>'
+    '</div>'
+    '</div>'
+    '</div>'
+)
+def _kinetic(text: str, start_delay: float, step: float = 0.045) -> str:
+    out = ""
+    i = 0
+    for word in text.split(" "):
+        d = start_delay + i * step
+        out += f'<span class="ld-kinetic-word" style="animation-delay:{d:.3f}s">{word}</span> '
+        i += 1
+    return out.strip()
+
+st.markdown(
+    '<div class="ld-hero">'
+    '<div class="ld-hero-grid"></div>'
+    '<div class="ld-hero-wrap">'
+    '<div class="ld-hero-inner">'
+    '<p class="ld-hero-quote"><em>Meet your interview before the real interview.</em></p>'
+    '<p class="ld-hero-title">'
+    f'{_kinetic("실제 면접 전에,", 0.05)}<br>'
+    f'<em>{_kinetic("먼저 만나보는 AI 면접관", 0.32)}</em>'
+    '</p>'
+    '<p class="ld-hero-sub">'
+    '이력서를 읽고 던지는 첫 질문이 아니라, 방금 한 대답을 듣고 더 깊이 파고드는 다음 질문. '
+    'intro는 정해진 대본이 아니라 진짜 대화를 합니다.'
+    '</p>'
+    '</div>'
+    f'{hero_stage_html}'
+    '</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+with st.container(key="ld_cta_row"):
+    cta_col, _ = st.columns([1, 4.4])
+    with cta_col:
+        if st.button("무료로 시작하기", type="primary", use_container_width=True, key="ld_cta_btn"):
+            go_to_start()
+
+
+# ── 3. 시그니처: 면접관 고르기 + 답변 고르기 → 꼬리질문 (한 섹션으로 합침) ────────
+DEMOS = {
+    "기술 리드": {
+        "timer": "27:14 남음",
+        "q": "캐싱을 도입했을 때 데이터 정합성은 어떻게 관리하셨나요?",
+        "options": [
+            ("TTL을 짧게 설정해서 자동으로 만료되게 했습니다.", "TTL을 얼마나 짧게 설정하셨고, 그 값은 어떻게 정하셨나요?"),
+            ("쓰기 시점에 관련 캐시를 즉시 무효화하는 방식을 썼습니다.", "무효화가 실패했을 때의 폴백 전략은 어떻게 설계하셨나요?"),
+            ("딱히 전략은 없었고, 필요할 때마다 수동으로 지웠습니다.", "수동으로 지우는 과정에서 누락된 적은 없었나요? 그건 어떻게 확인하세요?"),
+        ],
+        "speech": ("빠름", "말이 다소 빨라요. 조금 천천히 또박또박 말해보세요."),
+    },
+    "인사 담당자": {
+        "timer": "24:50 남음",
+        "q": "팀 내에서 의견 충돌이 있었던 경험과, 그걸 어떻게 풀어갔는지 말씀해주세요.",
+        "options": [
+            ("각자 근거를 정리해서 다시 논의하는 자리를 가졌습니다.", "그 과정에서 상대방 의견은 어디까지 받아들이셨나요?"),
+            ("팀장님께 판단을 맡겨서 빠르게 결정했습니다.", "직접 조율하지 않고 맡긴 이유가 있었나요? 결과에 팀원들은 만족했나요?"),
+            ("제 의견이 맞다고 생각해서 그대로 진행했습니다.", "상대방은 그 결정을 어떻게 받아들였나요? 다시 돌아간다면 어떻게 하시겠어요?"),
+        ],
+        "speech": ("느림", "말이 다소 느려요. 조금 더 또렷하고 빠르게 말해보세요."),
+    },
+    "임원 면접관": {
+        "timer": "21:02 남음",
+        "q": "지금까지 내린 결정 중 비즈니스에 가장 큰 영향을 준 선택은 무엇이었나요?",
+        "options": [
+            ("출시를 2주 미루고 기존 사용자 이탈 원인부터 분석하자고 제안했습니다.", "그 결정으로 포기한 것과 얻은 것을 숫자로 설명해주실 수 있나요?"),
+            ("광고 예산을 줄이고 그 비용을 재방문 기능 개발에 돌렸습니다.", "예산을 옮기자고 했을 때 반대 의견은 어떻게 설득하셨나요?"),
+            ("아직 큰 결정을 내려본 경험은 없습니다.", "그렇다면 작은 결정이라도 결과까지 책임졌던 경험을 하나 들려주시겠어요?"),
+        ],
+        "speech": ("적정", "발화 속도가 적정해요. 듣기 편한 속도입니다."),
+    },
+}
+PERSONAS = {
+    "기술 리드": {
+        "desc": "날카롭고 집요한 기술 검증",
+        "detail": ["기술 스택에 대한 심화 질문", "문제 해결 과정을 집중적으로 검증", "꼬리질문으로 논리 전개를 확인"],
+    },
+    "인사 담당자": {
+        "desc": "공감 중심 인성 면접",
+        "detail": ["조직 적합성과 인성 중심 평가", "협업 경험과 태도를 질문", "편안한 분위기의 대화형 진행"],
+    },
+    "임원 면접관": {
+        "desc": "전략적 비즈니스 역량 검증",
+        "detail": ["비즈니스 임팩트와 전략적 사고 검증", "의사결정 과정을 집중적으로 질문", "리더십과 책임감을 확인"],
+    },
 }
 
-/* 스토리 섹션 (데모+페르소나 스위처를 묶는 새 레이아웃) */
-.ld-story-section { background: var(--ld-bg); padding: 36px 40px 24px; }
-.ld-story-head { max-width: 680px; margin: 0 auto 36px; text-align: center; }
-.ld-story-switch-row { display: flex; justify-content: center; margin-bottom: 40px; }
+if "ld_demo_persona" not in st.session_state:
+    st.session_state["ld_demo_persona"] = "기술 리드"
+_active_persona = st.session_state["ld_demo_persona"]
+_demo = DEMOS[_active_persona]
+_persona_info = PERSONAS[_active_persona]
 
-/* 메시지 하나하나가 스크롤로 들어올 때 순차적으로(스태거) 떠오름 */
-.ld-thread-panel .ld-story-step {
-    opacity: 0; transform: translateY(14px) scale(.985);
-    transition: opacity .55s cubic-bezier(.16,1,.3,1), transform .55s cubic-bezier(.16,1,.3,1);
-}
-.ld-thread-panel.is-visible .ld-story-step { opacity: 1; transform: none; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="0"] { transition-delay: .05s; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="1"] { transition-delay: .32s; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="2"] { transition-delay: .58s; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="3"] { transition-delay: .88s; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="4"] { transition-delay: 1.14s; }
-.ld-thread-panel.is-visible .ld-story-step[data-order="5"] { transition-delay: 1.4s; }
-@media (prefers-reduced-motion: reduce) {
-    .ld-thread-panel .ld-story-step { opacity: 1; transform: none; transition: none; }
-}
+_opt_html = "".join(
+    f'<div class="ld-opt{" active" if i == 0 else ""}" data-i="{i}" data-a="{a}" data-fu="{fu}">'
+    '<div class="ld-opt-radio"></div>'
+    f'<p>&ldquo;{a}&rdquo;</p>'
+    '</div>'
+    for i, (a, fu) in enumerate(_demo["options"])
+)
 
-/* "AI가 분석 중..." 타이핑 펄스 (꼬리질문 등장 직전 잠깐 보여주는 연출) */
-.ld-typing { display: inline-flex; align-items: center; gap: 4px; padding: 2px 2px; }
-.ld-typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--ld-on-forest); opacity: .6; animation: ld-typing-bounce 1.1s ease-in-out infinite; }
-.ld-typing span:nth-child(2) { animation-delay: .15s; }
-.ld-typing span:nth-child(3) { animation-delay: .3s; }
-@keyframes ld-typing-bounce { 0%,60%,100% { transform: translateY(0); opacity:.5; } 30% { transform: translateY(-4px); opacity:1; } }
+st.markdown('<div id="thread"></div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="ld-story-section">'
+    '<div class="ld-story-head ld-reveal">'
+    '<p class="ld-title-lg">답변을 듣고,<br>그 자리에서 더 물어봅니다</p>'
+    '<p>면접관을 고르고 답변을 직접 골라보세요. 답변에 따라 꼬리질문이 바로 바뀝니다.</p>'
+    '</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+with st.container(key="ld_persona_switch"):
+    _cols = st.columns(3)
+    for _col, _persona in zip(_cols, DEMOS.keys()):
+        with _col:
+            _is_active = _persona == _active_persona
+            if st.button(
+                _persona, key=f"ld_switch_{_persona}", use_container_width=True,
+                type="primary" if _is_active else "secondary",
+            ):
+                st.session_state["ld_demo_persona"] = _persona
+                st.rerun()
 
-/* 점수 카운트업 배지 */
-.ld-score-badge {
-    display: inline-flex; align-items: baseline; gap: 4px;
-    margin-top: 4px; padding: 8px 16px;
-    background: var(--ld-forest); border-radius: 999px;
-    box-shadow: 0 8px 20px rgba(59,109,239,0.28);
-}
-.ld-score-badge .num { font-family: var(--ld-mono); font-weight: 700; font-size: 20px; color: white; }
-.ld-score-badge .unit { font-size: 12px; font-weight: 600; color: var(--ld-on-forest-dim); }
+st.markdown(
+    '<div class="ld-story-section ld-story-body">'
+    '<div class="ld-feature-split" id="ld-feature-area">'
 
-/* 카드 틸트(마우스 추적) — 비교/기능/페르소나 카드 공용 */
-.ld-tilt { transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s ease; will-change: transform; }
-.ld-tilt:hover { box-shadow: 0 20px 40px rgba(17,24,39,0.10); }
-@media (prefers-reduced-motion: reduce) { .ld-tilt { transition: none !important; transform: none !important; } }
+    '<div class="ld-feature-left">'
+    '<div class="ld-pick-card">'
+    '<div class="ld-thread-meta">'
+    '<div class="ld-thread-who">'
+    f'<img src="data:image/png;base64,{PERSONA_IMG[_active_persona]}" alt="{_active_persona} 면접관">'
+    f'<div><b>{_active_persona}</b><span>{_persona_info["desc"]}</span></div>'
+    '</div>'
+    f'<span class="ld-thread-timer">{_demo["timer"]}</span>'
+    '</div>'
+    '<div class="ld-thread-traits">'
+    + "".join(f'<span>{d}</span>' for d in _persona_info["detail"]) +
+    '</div>'
+    '<div class="ld-ask-label">면접관의 질문</div>'
+    f'<div class="ld-ask-q">{_demo["q"]}</div>'
+    '<div class="ld-ask-label">답변을 골라보세요</div>'
+    f'<div class="ld-picker" id="ld-picker" data-persona="{_active_persona}">{_opt_html}</div>'
+    '</div>'
+    '</div>'
 
-/* 스태거 리빌 (그리드 안 아이템이 순서대로 떠오름) */
-.ld-stagger > * {
-    opacity: 0; transform: translateY(16px);
-    transition: opacity .55s cubic-bezier(.16,1,.3,1), transform .55s cubic-bezier(.16,1,.3,1);
-}
-.ld-stagger.is-visible > *:nth-child(1) { transition-delay: .02s; }
-.ld-stagger.is-visible > *:nth-child(2) { transition-delay: .12s; }
-.ld-stagger.is-visible > *:nth-child(3) { transition-delay: .22s; }
-.ld-stagger.is-visible > *:nth-child(4) { transition-delay: .32s; }
-.ld-stagger.is-visible > * { opacity: 1; transform: none; }
-.ld-stagger.is-visible > *:not(.is-visible-override) {}
-@media (prefers-reduced-motion: reduce) {
-    .ld-stagger > * { opacity: 1; transform: none; transition: none; }
-}
+    '<div class="ld-feature-right" id="ld-tilt-area">'
+    '<div class="ld-mini-panel" id="ld-mini-panel">'
+    '<div class="ld-mini-panel-chrome">'
+    '<div class="dots"><span></span><span></span><span></span></div>'
+    '<div class="live"><span class="d"></span>intro 면접 세션</div>'
+    '</div>'
+    '<div class="ld-mini-panel-body">'
+    '<div class="pb-label">선택한 답변</div>'
+    f'<div class="pb-a-text" id="ld-pb-a">{_demo["options"][0][0]}</div>'
+    '<div class="pb-arrow">↓</div>'
+    '<div class="pb-fu-tag"><span class="typing"><span></span><span></span><span></span></span>꼬리질문</div>'
+    f'<div class="pb-fu-text" id="ld-pb-fu">{_demo["options"][0][1]}</div>'
+    '<div class="ld-gaze-inline ld-panel-speech">'
+    f'<span><b>발화 속도 · {_demo["speech"][0]}</b>{_demo["speech"][1]}</span></div>'
+    '</div>'
+    '</div>'
+    '</div>'
 
-/* Steps — 스크롤에 따라 채워지는 연결선 */
-.ld-step-list { position: relative; }
-.ld-step-list::before {
-    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
-    background: var(--ld-border);
-}
-.ld-step-fill {
-    position: absolute; left: 0; top: 0; width: 2px; height: 0%;
-    background: var(--ld-forest);
-    transition: height .25s linear; z-index: 1;
-}
-.ld-step { position: relative; z-index: 2; }
-.ld-step::before { display: none; }
+    '</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
-/* 최종 CTA */
-.ld-final-cta { position: relative; overflow: hidden; }
-.ld-final-cta > div { position: relative; z-index: 2; }
 
-/* --- 면접관 + 답변 고르기 합친 섹션 (2026-10-16) --- */
-.ld-story-body { padding: 4px 40px 72px; }
-.ld-story-body .ld-feature-split { margin-top: 20px; align-items: stretch; }
-.ld-story-body .ld-feature-left { flex: 0 0 50%; }
-.ld-story-body .ld-feature-right { align-items: center; }
-.ld-pick-card { background: #fff; border: 1px solid var(--ld-border); border-radius: 20px; padding: 26px 26px 22px; }
-.ld-pick-card .ld-thread-traits { margin: -6px 0 20px; }
-.ld-ask-label { font-size: 12.5px; font-weight: 600; color: var(--ld-muted); margin: 0 0 8px; }
-.ld-ask-q { font-size: 16px; font-weight: 700; line-height: 1.55; color: var(--ld-ink); background: var(--ld-bg);
-    border-radius: 4px 14px 14px 14px; padding: 14px 16px; margin-bottom: 20px; word-break: keep-all; }
-.ld-pick-card .ld-opt { border-color: var(--ld-border); background: #fff; }
-.ld-pick-card .ld-opt:hover { border-color: #c7d4fb; }
-.ld-pick-card .ld-opt.active { border-color: var(--ld-forest); }
-.ld-panel-speech { margin: 22px 0 0 !important; }
-@media (max-width: 900px) {
-    .ld-story-body { padding: 4px 20px 56px; }
-    .ld-story-body .ld-feature-right { display: flex !important; width: 100%; }   /* 모바일에서도 꼬리질문 패널 표시 */
+# ── 4. 비교: 일반 모의면접 vs intro ─────────────────────────────────────
+st.markdown(
+    '<div class="ld-compare-section ld-reveal">'
+    '<div class="ld-compare-head">'
+    '<p class="ld-title-lg">스터디 모의면접과는, 시작부터 다릅니다</p>'
+    '</div>'
+    '<div class="ld-compare-grid ld-stagger">'
+
+    '<div class="ld-compare-panel old ld-tilt">'
+    '<div class="ld-compare-panel-title">일반 모의면접</div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">–</span><span>미리 정해둔 질문지를 순서대로 읽는다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">–</span><span>피드백은 다 끝난 뒤 한꺼번에 받는다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">–</span><span>스터디원 일정을 맞춰야 한 번 볼 수 있다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">–</span><span>같은 사람이 계속 봐줘서 질문이 반복된다</span></div>'
+    '</div>'
+
+    '<div class="ld-compare-panel new ld-tilt">'
+    '<div class="ld-compare-panel-title">intro</div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">＋</span><span>답변에 따라 그 자리에서 꼬리질문이 이어진다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">＋</span><span>논리성 등 5개 항목을 답변마다 즉시 채점한다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">＋</span><span>이력서와 채용공고만 있으면 3분 안에 시작한다</span></div>'
+    '<div class="ld-compare-row"><span class="ld-compare-mark">＋</span><span>매번 새로운 조합의 질문을 받는다</span></div>'
+    '</div>'
+
+    '</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 5. 기능 (큰 카드 1 + 줄 목록 2) ──────────────────────────────────────────
+FEATURES = [
+    {
+        "title": "실시간 5축 피드백",
+        "desc": "논리성 · 커뮤니케이션 · 전문지식 · 태도 · 문제해결력, 답변마다 다섯 항목을 즉시 채점합니다.",
+        "icon": "ph-bold ph-gauge",
+    },
+    {
+        "title": "영상 참고 리포트",
+        "desc": "시선 처리와 발화 속도를 참고용으로 기록해 보여드려요.",
+        "icon": "ph-bold ph-video-camera",
+    },
+    {
+        "title": "이력서 최적화 제안",
+        "desc": "면접에서 드러난 강점과 약점을 반영해 이력서 문장을 다듬은 제안을 함께 받습니다.",
+        "icon": "ph-bold ph-note-pencil",
+    },
+]
+
+FEATURE_AXES = [("논리성", 88), ("커뮤니케이션", 74), ("전문 지식", 91), ("태도", 83), ("문제 해결력", 69)]
+_main_feat = FEATURES[0]
+_axes_html = "".join(
+    f'<div class="ld-axis"><span>{name}</span>'
+    f'<div class="ld-axis-bar"><i style="width:{score}%"></i></div>'
+    f'<b>{score}</b></div>'
+    for name, score in FEATURE_AXES
+)
+
+_FEATURE_PREVIEWS = {
+    "영상 참고 리포트": (
+        '<div class="ld-mini-preview ld-video-preview">'
+        '<div class="ld-mini-metric"><span>시선 처리</span>'
+        '<p><b class="ld-level">보통</b>대체로 좋지만 시선이 가끔 흔들려요.</p></div>'
+        '<div class="ld-mini-metric"><span>발화 속도</span>'
+        '<p><b class="ld-level">적정</b>발화 속도가 적정해요. 듣기 편한 속도입니다.</p></div>'
+        '</div>'
+    ),
+    "이력서 최적화 제안": (
+        '<div class="ld-mini-preview ld-resume-preview">'
+        '<div class="ld-resume-line before"><span>기존</span><p>API 성능을 개선했습니다.</p></div>'
+        '<div class="ld-resume-line after"><span>개선 제안</span>'
+        '<p>캐싱을 도입해 API 응답 속도를 개선한 경험을 구체적으로 서술했습니다.</p></div>'
+        '</div>'
+    ),
 }
+_side_html = "".join(
+    f'<div class="ld-feat-row">'
+    f'<div class="ld-feat-row-head"><i class="ld-feat-icon {f["icon"]}"></i>'
+    f'<p class="ld-title-card">{f["title"]}</p></div>'
+    f'<p>{f["desc"]}</p>'
+    f'{_FEATURE_PREVIEWS.get(f["title"], "")}'
+    f'</div>'
+    for f in FEATURES[1:]
+)
+st.markdown(
+    '<div class="ld-features-section ld-reveal">'
+    '<div class="ld-section-head">'
+    '<p class="ld-title-lg">겉핥기 질문으로는 알 수 없는 것들</p>'
+    '</div>'
+    '<div class="ld-bento ld-stagger">'
+    '<div class="ld-bento-main">'
+    f'<i class="ld-feat-icon {_main_feat["icon"]}"></i>'
+    f'<p class="ld-title-card">{_main_feat["title"]}</p><p>{_main_feat["desc"]}</p>'
+    '<div class="ld-axis-card">'
+    '<div class="ld-axis-head"><span>방금 한 답변</span><span class="ld-axis-total">81<small>점</small></span></div>'
+    f'{_axes_html}'
+    '</div>'
+    '</div>'
+    f'<div class="ld-bento-side">{_side_html}</div>'
+    '</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 7. 진행 단계 (세로 리스트) ───────────────────────────────────────
+STEPS = [
+    {"idx": "STEP 01", "title": "이력서 · 채용공고 업로드", "desc": "지원하려는 공고와 이력서를 올리면 AI가 핵심 키워드와 요구 역량을 자동으로 분석해요."},
+    {"idx": "STEP 02", "title": "면접관 선택", "desc": "기술 리드 · 인사 담당자 · 임원 중 원하는 면접관 페르소나를 고릅니다."},
+    {"idx": "STEP 03", "title": "실전 면접 진행", "desc": f"자기소개로 긴장을 풀고, 답변에 따라 꼬리질문까지 이어지는 대화를 최대 {_INTERVIEW_LIMIT_MIN}분간 진행해요."},
+    {"idx": "STEP 04", "title": "리포트 확인", "desc": "결과 리포트와 이력서 최적화 제안을 받고, 마이페이지에서 점수 추이를 관리해요."},
+]
+steps_html = "".join(
+    f'<div class="ld-step"><div class="ld-step-idx">{s["idx"]}</div>'
+    f'<div><p class="ld-title-step">{s["title"]}</p><p>{s["desc"]}</p></div></div>'
+    for s in STEPS
+)
+st.markdown(
+    '<div class="ld-steps-section ld-reveal">'
+    '<div class="ld-section-head">'
+    '<p class="ld-title-lg">4단계면 충분합니다</p>'
+    '</div>'
+    f'<div class="ld-step-list" id="ld-step-list"><div class="ld-step-fill" id="ld-step-fill"></div>{steps_html}</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 8. FAQ ───────────────────────────────────────────────────────────
+FAQS = [
+    ("꼬리질문은 몇 개까지 오나요?", "답변이 좋으면 오지 않습니다. 기준 점수를 밑돌 때만, 한 질문당 최대 2개까지 이어집니다."),
+    ("첫 번째 자기소개 질문도 채점되나요?", "아니요. 긴장을 풀기 위한 라포 형성 질문이라 점수와 꼬리질문 대상 모두에서 제외됩니다."),
+    ("어떤 파일 형식을 지원하나요?", "이력서·채용공고 모두 PDF, DOCX, HWPX 파일을 지원해요. 구버전 HWP는 PDF로 저장한 뒤 업로드해주세요."),
+    ("웹캠 없이도 이용할 수 있나요?", "네, 웹캠 없이 텍스트·음성 답변만으로도 면접을 진행할 수 있어요. 답변 내용과 논리성 분석은 동일하게 제공돼요."),
+    ("면접 영상이 점수에 반영되나요?", "아니요, 영상은 시선 처리·발화 속도 등 참고용 피드백에만 쓰이고 점수에는 반영되지 않아요."),
+    ("면접 시간은 얼마나 걸리나요?", f"최대 {_INTERVIEW_LIMIT_MIN}분입니다. 시간이 다 되면 진행 중인 답변까지만 마무리하고 자동으로 종료됩니다."),
+]
+faq_html = "".join(
+    f'<details class="ld-faq-item"><summary>{q}<span class="ld-faq-mark">+</span></summary><p>{a}</p></details>'
+    for q, a in FAQS
+)
+st.markdown(
+    '<div class="ld-faq-section ld-reveal">'
+    '<div class="ld-section-head">'
+    '<p class="ld-title-lg">자주 묻는 질문</p>'
+    '</div>'
+    f'<div class="ld-faq-list">{faq_html}</div>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 9. 마무리 CTA ────────────────────────────────────────────────────
+st.markdown(
+    '<div class="ld-final-cta-wrap ld-reveal"><div class="ld-final-cta">'
+    '<div>'
+    '<p class="ld-title-cta">다음 질문을 받아볼 준비, 되셨나요?</p>'
+    '<p>이력서와 채용공고만 올리면 3분 안에 첫 질문이 시작됩니다.</p>'
+    '</div>'
+    '</div></div>',
+    unsafe_allow_html=True,
+)
+with st.container(key="ld_final_cta_row"):
+    _, fcenter, _ = st.columns([2, 1, 2])
+    with fcenter:
+        if st.button("무료로 시작하기", type="primary", use_container_width=True, key="ld_final_cta_btn"):
+            go_to_start()
+
+
+# ── 10. 푸터 ─────────────────────────────────────────────────────────
+st.markdown(
+    '<div class="ld-footer">'
+    '<span>intro · AI 면접 코칭</span>'
+    '<span>© 2026 intro</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ── 11. 스크롤 리빌 (섹션이 화면에 들어오면 떠오르듯 표시) ────────────────
+
+components.html(
+    """
+    <script>
+    (function () {
+        var win = window.parent;
+        var doc = win.document;
+
+        // ── 리빌(reveal) + 스태거 ────────────────────────────────────────
+        function check() {
+            var vh = win.innerHeight || doc.documentElement.clientHeight;
+
+            doc.querySelectorAll('.ld-reveal:not(.is-visible), .ld-stagger:not(.is-visible)')
+                .forEach(function (el) {
+                    var rect = el.getBoundingClientRect();
+                    if (rect.top < vh * 0.92) el.classList.add('is-visible');
+                });
+
+        }
+
+        // ── 스크롤 진행 바 ───────────────────────────────────────────────
+        function updateScrollbar(scroller) {
+            var bar = doc.getElementById('ld-scrollbar');
+            if (!bar) return;
+            var max = scroller.scrollHeight - scroller.clientHeight;
+            var pct = max > 0 ? Math.min(100, Math.max(0, (scroller.scrollTop / max) * 100)) : 0;
+            bar.style.width = pct + '%';
+        }
+
+        // ── Steps 연결선 채우기 ──────────────────────────────────────────
+        function updateStepFill() {
+            var list = doc.getElementById('ld-step-list');
+            var fill = doc.getElementById('ld-step-fill');
+            if (!list || !fill) return;
+            var vh = win.innerHeight || doc.documentElement.clientHeight;
+            var rect = list.getBoundingClientRect();
+            var total = rect.height;
+            var visible = (vh * 0.75) - rect.top;
+            var pct = total > 0 ? Math.min(100, Math.max(0, (visible / total) * 100)) : 0;
+            fill.style.height = pct + '%';
+        }
+
+        // ── 카드 틸트 (마우스 추적) ──────────────────────────────────────
+        function attachTilt() {
+            doc.querySelectorAll('.ld-tilt:not([data-tilt-bound])').forEach(function (el) {
+                el.setAttribute('data-tilt-bound', '1');
+                el.addEventListener('mousemove', function (e) {
+                    var r = el.getBoundingClientRect();
+                    var px = (e.clientX - r.left) / r.width - 0.5;
+                    var py = (e.clientY - r.top) / r.height - 0.5;
+                    el.style.transform =
+                        'perspective(700px) rotateX(' + (-py * 7) + 'deg) rotateY(' + (px * 7) + 'deg) translateY(-4px)';
+                });
+                el.addEventListener('mouseleave', function () {
+                    el.style.transform = '';
+                });
+            });
+        }
+
+        // ── 히어로 답변 피커: 슬라이딩 글라이더 + 라이브 타이핑 + 커서 스포트라이트
+        //    + 패널 3D 틸트 + 매그네틱 CTA ──────────────────────────────────
+        function attachHeroPicker() {
+            var picker = doc.getElementById('ld-picker');
+            var aEl = doc.getElementById('ld-pb-a');
+            var fuEl = doc.getElementById('ld-pb-fu');
+            if (!picker || !aEl || !fuEl) return;
+
+            var opts = Array.prototype.slice.call(picker.querySelectorAll('.ld-opt'));
+            if (!opts.length) return;
+
+            function typeInto(el, text, speed, token) {
+                el.textContent = '';
+                var i = 0;
+                function step() {
+                    if (token !== win.__ldHeroTypingToken) return;
+                    i++;
+                    el.textContent = text.slice(0, i);
+                    var caret = doc.createElement('span');
+                    caret.className = 'caret';
+                    el.appendChild(caret);
+                    if (i < text.length) {
+                        win.setTimeout(step, speed);
+                    } else {
+                        el.textContent = text;
+                    }
+                }
+                step();
+            }
+
+            function animateSelect(opt) {
+                var liveOpts = Array.prototype.slice.call(
+                    (doc.getElementById('ld-picker') || picker).querySelectorAll('.ld-opt')
+                );
+                var liveA = doc.getElementById('ld-pb-a') || aEl;
+                var liveFu = doc.getElementById('ld-pb-fu') || fuEl;
+                liveOpts.forEach(function (o) { o.classList.toggle('active', o === opt); });
+                win.__ldHeroTypingToken = (win.__ldHeroTypingToken || 0) + 1;
+                var token = win.__ldHeroTypingToken;
+                var a = opt.getAttribute('data-a');
+                var fu = opt.getAttribute('data-fu');
+                liveA.style.opacity = 0;
+                win.setTimeout(function () {
+                    if (token !== win.__ldHeroTypingToken) return;
+                    liveA.textContent = a;
+                    liveA.style.opacity = 1;
+                    typeInto(liveFu, fu, 18, token);
+                }, 150);
+            }
+            function syncInstant(opt) {
+                opts.forEach(function (o) { o.classList.toggle('active', o === opt); });
+                aEl.textContent = opt.getAttribute('data-a');
+                aEl.style.opacity = 1;
+                fuEl.textContent = opt.getAttribute('data-fu');
+            }
+
+            if (win.__ldHeroClickHandler) doc.body.removeEventListener('click', win.__ldHeroClickHandler);
+            win.__ldHeroClickHandler = function (e) {
+                var opt = e.target.closest ? e.target.closest('.ld-opt') : null;
+                if (!opt) return;
+                animateSelect(opt);
+            };
+            doc.body.addEventListener('click', win.__ldHeroClickHandler);
+
+            if (!win.__ldPersonaObs) {
+                win.__ldPersonaObs = new win.MutationObserver(function () {
+                    var pk = doc.getElementById('ld-picker');
+                    if (!pk) return;
+                    var per = pk.getAttribute('data-persona');
+                    if (!per || per === win.__ldPickerPersona) return;
+                    win.__ldPickerPersona = per;
+                    win.__ldHeroTypingToken = (win.__ldHeroTypingToken || 0) + 1;   // 진행 중인 타이핑 중단
+                    var os = pk.querySelectorAll('.ld-opt');
+                    os.forEach(function (o, i) { o.classList.toggle('active', i === 0); });
+                    var aE = doc.getElementById('ld-pb-a'), fE = doc.getElementById('ld-pb-fu');
+                    if (os[0] && aE && fE) {
+                        aE.textContent = os[0].getAttribute('data-a'); aE.style.opacity = 1;
+                        fE.textContent = os[0].getAttribute('data-fu');
+                    }
+                });
+                win.__ldPersonaObs.observe(doc.body, { subtree: true, childList: true, characterData: true,
+                                                       attributes: true, attributeFilter: ['data-persona'] });
+            }
+            if (!win.__ldPickerPersona) win.__ldPickerPersona = picker.getAttribute('data-persona');
+
+            syncInstant(picker.querySelector('.ld-opt.active') || opts[0]);
+
+            // 커서 스포트라이트 (히어로 전체 영역)
+            var heroArea = doc.getElementById('ld-feature-area');
+            if (heroArea) {
+                if (win.__ldHeroSpotlightHandler) heroArea.removeEventListener('mousemove', win.__ldHeroSpotlightHandler);
+                win.__ldHeroSpotlightHandler = function (e) {
+                    var r = heroArea.getBoundingClientRect();
+                    heroArea.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+                    heroArea.style.setProperty('--my', (e.clientY - r.top) + 'px');
+                };
+                heroArea.addEventListener('mousemove', win.__ldHeroSpotlightHandler);
+            }
+
+            // 미니 패널 3D 틸트
+            var tiltArea = doc.getElementById('ld-tilt-area');
+            var miniPanel = doc.getElementById('ld-mini-panel');
+            if (tiltArea && miniPanel) {
+                if (win.__ldHeroTiltMove) tiltArea.removeEventListener('mousemove', win.__ldHeroTiltMove);
+                if (win.__ldHeroTiltLeave) tiltArea.removeEventListener('mouseleave', win.__ldHeroTiltLeave);
+                win.__ldHeroTiltMove = function (e) {
+                    var r = tiltArea.getBoundingClientRect();
+                    var px = (e.clientX - r.left) / r.width - 0.5;
+                    var py = (e.clientY - r.top) / r.height - 0.5;
+                    miniPanel.style.transform = 'rotateX(' + (-py * 6) + 'deg) rotateY(' + (px * 6) + 'deg)';
+                };
+                win.__ldHeroTiltLeave = function () { miniPanel.style.transform = ''; };
+                tiltArea.addEventListener('mousemove', win.__ldHeroTiltMove);
+                tiltArea.addEventListener('mouseleave', win.__ldHeroTiltLeave);
+            }
+
+            // 매그네틱 CTA 버튼
+            var ctaRow = doc.querySelector('.st-key-ld_cta_row [data-testid="stHorizontalBlock"]');
+            var ctaBtn = doc.querySelector('.st-key-ld_cta_row .stButton > button');
+            if (ctaRow && ctaBtn) {
+                if (win.__ldHeroMagnetMove) ctaRow.removeEventListener('mousemove', win.__ldHeroMagnetMove);
+                if (win.__ldHeroMagnetLeave) ctaRow.removeEventListener('mouseleave', win.__ldHeroMagnetLeave);
+                win.__ldHeroMagnetMove = function (e) {
+                    var r = ctaBtn.getBoundingClientRect();
+                    var relX = e.clientX - (r.left + r.width / 2);
+                    var relY = e.clientY - (r.top + r.height / 2);
+                    if (Math.abs(relX) < r.width && Math.abs(relY) < r.height * 2) {
+                        ctaBtn.style.transform = 'translate(' + (relX * 0.2) + 'px, ' + (relY * 0.2) + 'px)';
+                    }
+                };
+                win.__ldHeroMagnetLeave = function () { ctaBtn.style.transform = ''; };
+                ctaRow.addEventListener('mousemove', win.__ldHeroMagnetMove);
+                ctaRow.addEventListener('mouseleave', win.__ldHeroMagnetLeave);
+            }
+        }
+
+        function onScrollFrame() {
+            var scroller = doc.querySelector('[data-testid="stMain"]');
+            if (scroller) {
+                updateScrollbar(scroller);
+                var nav = doc.querySelector('.ld-navbar');
+                if (nav) nav.classList.toggle('is-scrolled', scroller.scrollTop > 8);
+            }
+            check();
+            updateStepFill();
+        }
+
+        function attach() {
+            var scroller = doc.querySelector('[data-testid="stMain"]') || win;
+            var ticking = false;
+            function onScroll() {
+                if (ticking) return;
+                ticking = true;
+                win.requestAnimationFrame(function () { onScrollFrame(); ticking = false; });
+            }
+            scroller.addEventListener('scroll', onScroll, { passive: true });
+            win.addEventListener('resize', onScroll, { passive: true });
+            onScrollFrame();
+            attachTilt();
+            attachHeroPicker();
+        }
+
+        attach();
+        setTimeout(function () { onScrollFrame(); attachTilt(); attachHeroPicker(); }, 300);
+        setTimeout(function () { onScrollFrame(); attachTilt(); attachHeroPicker(); }, 1000);
+        var interval = win.setInterval(function () { onScrollFrame(); attachTilt(); attachHeroPicker(); }, 400);
+        setTimeout(function () { win.clearInterval(interval); }, 15000);
+    })();
+    </script>
+    """,
+    height=0,
+)
