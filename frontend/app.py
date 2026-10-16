@@ -1,16 +1,25 @@
 import base64
+import os
 import streamlit as st
+from utils.brand import FAVICON, logo_img
 import streamlit.components.v1 as components
 from utils.paths import resource
 from utils.state import restore_access_token_nonblocking
 
 st.set_page_config(
     page_title="intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 logged_in = bool(restore_access_token_nonblocking())
+
+# 면접 제한 시간(분) — 백엔드·면접 화면과 같은 환경변수. 안내 문구의 숫자를 맞추는 데만 쓴다.
+try:
+    _INTERVIEW_LIMIT_MIN = max(1, int(os.getenv("INTERVIEW_TIME_LIMIT_MIN", "30")))
+except ValueError:
+    _INTERVIEW_LIMIT_MIN = 30
 
 # ── 스타일 ───────────────────────────────────────────────────────────
 css = resource("styles/global.css").read_text(encoding="utf-8")
@@ -44,7 +53,7 @@ st.markdown("""
 /* 페르소나 스위처 (대화 스레드 데모 위) */
 .st-key-ld_persona_switch {
     max-width: 1100px;
-    margin: 0 auto;
+    margin: -24px auto 0;  
     padding: 0 40px 12px;
 }
 .st-key-ld_persona_switch [data-testid="stHorizontalBlock"] {
@@ -69,10 +78,6 @@ st.markdown("""
     background: white !important;
     border-color: var(--border) !important;
     color: var(--gray-500) !important;
-}
-.ld-switch-label {
-    text-align: center; font-size: 12.5px !important; color: var(--ld-muted);
-    margin: 0 0 22px !important; word-break: keep-all;
 }
 
 /* 스크롤 리빌 (아래로 스크롤하면 섹션이 떠오르듯 나타남) */
@@ -115,7 +120,7 @@ _nav_right = (
 )
 st.markdown(
     f'<nav class="navbar ld-navbar">'
-    f'<span class="navbar-brand">intr<em>o</em></span>'
+    f'<a class="navbar-brand" href="/" target="_self" aria-label="intro 홈">{logo_img(25)}</a>'
     f'<div class="navbar-right">{_nav_right}</div>'
     f'</nav>',
     unsafe_allow_html=True,
@@ -186,48 +191,37 @@ with st.container(key="ld_cta_row"):
             go_to_start()
 
 
-# ── 3. 시그니처: 답변 피커(즉석 체험) + 페르소나별 전체 대화 데모 ──────────────
-FEATURE_PICKER_Q = "캐싱 도입 시 데이터 정합성은 어떻게 관리하셨나요?"
-FEATURE_PICKER_OPTIONS = [
-    ("TTL을 짧게 설정해서 자동으로 만료되게 했습니다.", "TTL을 얼마나 짧게 설정하셨고, 그 값은 어떻게 정하셨나요?"),
-    ("쓰기 시점에 관련 캐시를 즉시 무효화하는 방식을 썼습니다.", "무효화가 실패했을 때의 폴백 전략은 어떻게 설계하셨나요?"),
-    ("딱히 전략은 없었고, 필요할 때마다 수동으로 지웠습니다.", "수동으로 지우는 과정에서 누락된 적은 없었나요? 그건 어떻게 확인하세요?"),
-]
-_feat_opt_html = "".join(
-    f'<div class="ld-opt" data-i="{i}" data-a="{a}" data-fu="{fu}">'
-    '<div class="ld-opt-radio"></div>'
-    f'<p>&ldquo;{a}&rdquo;</p>'
-    '</div>'
-    for i, (a, fu) in enumerate(FEATURE_PICKER_OPTIONS)
-)
-
-THREAD_DEMOS = {
+# ── 3. 시그니처: 면접관 고르기 + 답변 고르기 → 꼬리질문 (한 섹션으로 합침) ────────
+DEMOS = {
     "기술 리드": {
         "timer": "27:14 남음",
-        "q1": "본인이 겪었던 가장 어려운 기술적 문제와, 그걸 해결한 과정을 설명해주세요.",
-        "a1": "이전 프로젝트에서 API 응답 속도가 느려서 캐싱을 도입해 해결했습니다.",
+        "q": "캐싱을 도입했을 때 데이터 정합성은 어떻게 관리하셨나요?",
+        "options": [
+            ("TTL을 짧게 설정해서 자동으로 만료되게 했습니다.", "TTL을 얼마나 짧게 설정하셨고, 그 값은 어떻게 정하셨나요?"),
+            ("쓰기 시점에 관련 캐시를 즉시 무효화하는 방식을 썼습니다.", "무효화가 실패했을 때의 폴백 전략은 어떻게 설계하셨나요?"),
+            ("딱히 전략은 없었고, 필요할 때마다 수동으로 지웠습니다.", "수동으로 지우는 과정에서 누락된 적은 없었나요? 그건 어떻게 확인하세요?"),
+        ],
         "speech": ("빠름", "말이 다소 빨라요. 조금 천천히 또박또박 말해보세요."),
-        "q2": "캐싱을 도입했을 때 데이터 정합성은 어떻게 관리하셨나요? 구체적인 무효화 전략이 궁금해요.",
-        "a2": "TTL을 짧게 두고, 쓰기 발생 시점에 관련 키를 즉시 무효화하는 방식으로 처리했습니다.",
-        "score": 87,
     },
     "인사 담당자": {
         "timer": "24:50 남음",
-        "q1": "팀 내에서 의견 충돌이 있었던 경험과, 그걸 어떻게 풀어갔는지 말씀해주세요.",
-        "a1": "일정 우선순위를 두고 동료와 의견이 갈렸는데, 각자 근거를 정리해서 다시 논의하는 자리를 가졌습니다.",
+        "q": "팀 내에서 의견 충돌이 있었던 경험과, 그걸 어떻게 풀어갔는지 말씀해주세요.",
+        "options": [
+            ("각자 근거를 정리해서 다시 논의하는 자리를 가졌습니다.", "그 과정에서 상대방 의견은 어디까지 받아들이셨나요?"),
+            ("팀장님께 판단을 맡겨서 빠르게 결정했습니다.", "직접 조율하지 않고 맡긴 이유가 있었나요? 결과에 팀원들은 만족했나요?"),
+            ("제 의견이 맞다고 생각해서 그대로 진행했습니다.", "상대방은 그 결정을 어떻게 받아들였나요? 다시 돌아간다면 어떻게 하시겠어요?"),
+        ],
         "speech": ("느림", "말이 다소 느려요. 조금 더 또렷하고 빠르게 말해보세요."),
-        "q2": "그 과정에서 상대방 의견을 어디까지 수용하셨나요? 본인 생각과 다른 부분은 어떻게 받아들이셨어요?",
-        "a2": "제 쪽 일정 추정이 낙관적이었다는 걸 인정하고, 상대방 제안대로 버퍼를 늘려서 진행했습니다.",
-        "score": 91,
     },
     "임원 면접관": {
         "timer": "21:02 남음",
-        "q1": "지금까지 내린 결정 중 비즈니스에 가장 큰 영향을 준 선택은 무엇이었나요?",
-        "a1": "신규 기능 출시를 2주 미루고, 기존 사용자 이탈 원인부터 분석하자고 제안했습니다.",
+        "q": "지금까지 내린 결정 중 비즈니스에 가장 큰 영향을 준 선택은 무엇이었나요?",
+        "options": [
+            ("출시를 2주 미루고 기존 사용자 이탈 원인부터 분석하자고 제안했습니다.", "그 결정으로 포기한 것과 얻은 것을 숫자로 설명해주실 수 있나요?"),
+            ("광고 예산을 줄이고 그 비용을 재방문 기능 개발에 돌렸습니다.", "예산을 옮기자고 했을 때 반대 의견은 어떻게 설득하셨나요?"),
+            ("아직 큰 결정을 내려본 경험은 없습니다.", "그렇다면 작은 결정이라도 결과까지 책임졌던 경험을 하나 들려주시겠어요?"),
+        ],
         "speech": ("적정", "발화 속도가 적정해요. 듣기 편한 속도입니다."),
-        "q2": "그 결정으로 포기한 것과 얻은 것을 숫자로 설명해주실 수 있나요?",
-        "a2": "출시는 2주 늦었지만, 이탈 원인을 고쳐서 재방문율이 18% 올랐습니다.",
-        "score": 84,
     },
 }
 PERSONAS = {
@@ -248,59 +242,30 @@ PERSONAS = {
 if "ld_demo_persona" not in st.session_state:
     st.session_state["ld_demo_persona"] = "기술 리드"
 _active_persona = st.session_state["ld_demo_persona"]
-_demo = THREAD_DEMOS[_active_persona]
+_demo = DEMOS[_active_persona]
 _persona_info = PERSONAS[_active_persona]
 
-st.markdown('<div id="thread"></div>', unsafe_allow_html=True)
+_opt_html = "".join(
+    f'<div class="ld-opt{" active" if i == 0 else ""}" data-i="{i}" data-a="{a}" data-fu="{fu}">'
+    '<div class="ld-opt-radio"></div>'
+    f'<p>&ldquo;{a}&rdquo;</p>'
+    '</div>'
+    for i, (a, fu) in enumerate(_demo["options"])
+)
 
+st.markdown('<div id="thread"></div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="ld-story-section">'
     '<div class="ld-story-head ld-reveal">'
     '<p class="ld-title-lg">답변을 듣고,<br>그 자리에서 더 물어봅니다</p>'
-    '<p>방금 보낸 답변을 채점하고, 근거가 부족한 부분을 그 자리에서 파고듭니다. '
-    '아래에서 답변을 직접 골라보세요.</p>'
+    '<p>면접관을 고르고 답변을 직접 골라보세요. 답변에 따라 꼬리질문이 바로 바뀝니다.</p>'
     '</div>'
-    '<div class="ld-feature-split ld-reveal" id="ld-feature-area">'
-
-    '<div class="ld-feature-left">'
-    '<div class="ld-picker" id="ld-picker">'
-    f'{_feat_opt_html}'
-    '</div>'
-    '</div>'
-
-    '<div class="ld-feature-right" id="ld-tilt-area">'
-    '<div class="ld-mini-panel" id="ld-mini-panel">'
-    '<div class="ld-mini-panel-chrome">'
-    '<div class="dots"><span></span><span></span><span></span></div>'
-    '<div class="live"><span class="d"></span>intro 면접 세션</div>'
-    '</div>'
-    '<div class="ld-mini-panel-body">'
-    '<div class="pb-label">AI 면접관의 질문</div>'
-    f'<div class="pb-q-text">{FEATURE_PICKER_Q}</div>'
-    '<div class="pb-label">선택한 답변</div>'
-    f'<div class="pb-a-text" id="ld-pb-a">{FEATURE_PICKER_OPTIONS[0][0]}</div>'
-    '<div class="pb-arrow">↓</div>'
-    '<div class="pb-fu-tag"><span class="typing"><span></span><span></span><span></span></span>꼬리질문</div>'
-    f'<div class="pb-fu-text" id="ld-pb-fu">{FEATURE_PICKER_OPTIONS[0][1]}</div>'
-    '</div>'
-    '</div>'
-    '</div>'
-
-    '</div>'
-    '</div>',
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    '<div class="ld-section-head ld-switch-head">'
-    '<p class="ld-title-lg">세 가지 스타일 중에 골라보세요</p>'
-    '<p class="ld-switch-label">면접관을 바꾸면 같은 흐름이라도 질문이 달라집니다</p>'
     '</div>',
     unsafe_allow_html=True,
 )
 with st.container(key="ld_persona_switch"):
     _cols = st.columns(3)
-    for _col, _persona in zip(_cols, THREAD_DEMOS.keys()):
+    for _col, _persona in zip(_cols, DEMOS.keys()):
         with _col:
             _is_active = _persona == _active_persona
             if st.button(
@@ -311,9 +276,11 @@ with st.container(key="ld_persona_switch"):
                 st.rerun()
 
 st.markdown(
-    '<div class="ld-thread-section"><div class="ld-thread-grid ld-thread-grid-solo">'
+    '<div class="ld-story-section ld-story-body">'
+    '<div class="ld-feature-split" id="ld-feature-area">'
 
-    '<div class="ld-thread-panel">'
+    '<div class="ld-feature-left">'
+    '<div class="ld-pick-card">'
     '<div class="ld-thread-meta">'
     '<div class="ld-thread-who">'
     f'<img src="data:image/png;base64,{PERSONA_IMG[_active_persona]}" alt="{_active_persona} 면접관">'
@@ -324,48 +291,33 @@ st.markdown(
     '<div class="ld-thread-traits">'
     + "".join(f'<span>{d}</span>' for d in _persona_info["detail"]) +
     '</div>'
+    '<div class="ld-ask-label">면접관의 질문</div>'
+    f'<div class="ld-ask-q">{_demo["q"]}</div>'
+    '<div class="ld-ask-label">답변을 골라보세요</div>'
+    f'<div class="ld-picker" id="ld-picker" data-persona="{_active_persona}">{_opt_html}</div>'
+    '</div>'
+    '</div>'
 
-    '<div class="ld-story-step" data-order="0">'
-    '<div class="ld-msg ai">'
-    '<div class="ld-avatar"></div>'
-    f'<div class="ld-bubble ai">{_demo["q1"]}</div>'
-    '</div></div>'
-
-    '<div class="ld-story-step" data-order="1">'
-    '<div class="ld-msg user">'
-    '<div class="ld-avatar"></div>'
-    f'<div class="ld-bubble user">{_demo["a1"]}</div>'
-    '</div></div>'
-
-    '<div class="ld-story-step" data-order="2">'
-    '<div class="ld-gaze-inline">'
+    '<div class="ld-feature-right" id="ld-tilt-area">'
+    '<div class="ld-mini-panel" id="ld-mini-panel">'
+    '<div class="ld-mini-panel-chrome">'
+    '<div class="dots"><span></span><span></span><span></span></div>'
+    '<div class="live"><span class="d"></span>intro 면접 세션</div>'
+    '</div>'
+    '<div class="ld-mini-panel-body">'
+    '<div class="pb-label">선택한 답변</div>'
+    f'<div class="pb-a-text" id="ld-pb-a">{_demo["options"][0][0]}</div>'
+    '<div class="pb-arrow">↓</div>'
+    '<div class="pb-fu-tag"><span class="typing"><span></span><span></span><span></span></span>꼬리질문</div>'
+    f'<div class="pb-fu-text" id="ld-pb-fu">{_demo["options"][0][1]}</div>'
+    '<div class="ld-gaze-inline ld-panel-speech">'
     f'<span><b>발화 속도 · {_demo["speech"][0]}</b>{_demo["speech"][1]}</span></div>'
     '</div>'
-
-    '<div class="ld-story-step" data-order="3">'
-    '<div class="ld-followup">'
-    '<span class="ld-followup-tag"><span class="ld-typing"><span></span><span></span><span></span></span>&nbsp; 꼬리질문 생성 중</span>'
-    '<div class="ld-msg ai" style="margin-bottom:0;">'
-    '<div class="ld-avatar"></div>'
-    f'<div class="ld-bubble ai">{_demo["q2"]}</div>'
     '</div>'
-    '</div></div>'
-
-    '<div class="ld-story-step" data-order="4">'
-    '<div class="ld-msg user" style="margin-bottom:0;">'
-    '<div class="ld-avatar"></div>'
-    f'<div class="ld-bubble user">{_demo["a2"]}</div>'
-    '</div></div>'
-
-    '<div class="ld-story-step" data-order="5">'
-    '<div style="text-align:center;padding-top:6px;">'
-    '<span class="ld-score-badge"><span class="ld-count-num" data-target="' + str(_demo["score"]) + '">0</span>'
-    '<span class="unit">점 · 종합 평가</span></span>'
-    '</div></div>'
-
     '</div>'
 
-    '</div></div>',
+    '</div>'
+    '</div>',
     unsafe_allow_html=True,
 )
 
@@ -479,7 +431,7 @@ st.markdown(
 STEPS = [
     {"idx": "STEP 01", "title": "이력서 · 채용공고 업로드", "desc": "지원하려는 공고와 이력서를 올리면 AI가 핵심 키워드와 요구 역량을 자동으로 분석해요."},
     {"idx": "STEP 02", "title": "면접관 선택", "desc": "기술 리드 · 인사 담당자 · 임원 중 원하는 면접관 페르소나를 고릅니다."},
-    {"idx": "STEP 03", "title": "실전 면접 진행", "desc": "자기소개로 긴장을 풀고, 답변에 따라 꼬리질문까지 이어지는 대화를 최대 30분간 진행해요."},
+    {"idx": "STEP 03", "title": "실전 면접 진행", "desc": f"자기소개로 긴장을 풀고, 답변에 따라 꼬리질문까지 이어지는 대화를 최대 {_INTERVIEW_LIMIT_MIN}분간 진행해요."},
     {"idx": "STEP 04", "title": "리포트 확인", "desc": "결과 리포트와 이력서 최적화 제안을 받고, 마이페이지에서 점수 추이를 관리해요."},
 ]
 steps_html = "".join(
@@ -505,7 +457,7 @@ FAQS = [
     ("어떤 파일 형식을 지원하나요?", "이력서·채용공고 모두 PDF, DOCX, HWPX 파일을 지원해요. 구버전 HWP는 PDF로 저장한 뒤 업로드해주세요."),
     ("웹캠 없이도 이용할 수 있나요?", "네, 웹캠 없이 텍스트·음성 답변만으로도 면접을 진행할 수 있어요. 답변 내용과 논리성 분석은 동일하게 제공돼요."),
     ("면접 영상이 점수에 반영되나요?", "아니요, 영상은 시선 처리·발화 속도 등 참고용 피드백에만 쓰이고 점수에는 반영되지 않아요."),
-    ("면접 시간은 얼마나 걸리나요?", "최대 30분입니다. 시간이 다 되면 진행 중인 답변까지만 마무리하고 자동으로 종료됩니다."),
+    ("면접 시간은 얼마나 걸리나요?", f"최대 {_INTERVIEW_LIMIT_MIN}분입니다. 시간이 다 되면 진행 중인 답변까지만 마무리하고 자동으로 종료됩니다."),
 ]
 faq_html = "".join(
     f'<details class="ld-faq-item"><summary>{q}<span class="ld-faq-mark">+</span></summary><p>{a}</p></details>'
@@ -558,7 +510,7 @@ components.html(
         var win = window.parent;
         var doc = win.document;
 
-        // ── 리빌(reveal) + 스태거 + 스토리 패널 ──────────────────────────
+        // ── 리빌(reveal) + 스태거 ────────────────────────────────────────
         function check() {
             var vh = win.innerHeight || doc.documentElement.clientHeight;
 
@@ -568,32 +520,6 @@ components.html(
                     if (rect.top < vh * 0.92) el.classList.add('is-visible');
                 });
 
-            var panel = doc.querySelector('.ld-thread-panel:not(.is-visible)');
-            if (panel) {
-                var r = panel.getBoundingClientRect();
-                if (r.top < vh * 0.85) {
-                    panel.classList.add('is-visible');
-                    win.setTimeout(function () { runCountUps(panel); }, 1550);
-                }
-            }
-        }
-
-        // ── 점수 카운트업 ────────────────────────────────────────────────
-        function runCountUps(scope) {
-            (scope || doc).querySelectorAll('.ld-count-num:not([data-done])').forEach(function (el) {
-                el.setAttribute('data-done', '1');
-                var target = parseInt(el.getAttribute('data-target'), 10) || 0;
-                var start = null;
-                var dur = 900;
-                function step(ts) {
-                    if (!start) start = ts;
-                    var p = Math.min(1, (ts - start) / dur);
-                    var eased = 1 - Math.pow(1 - p, 3);
-                    el.textContent = Math.round(eased * target);
-                    if (p < 1) win.requestAnimationFrame(step);
-                }
-                win.requestAnimationFrame(step);
-            });
         }
 
         // ── 스크롤 진행 바 ───────────────────────────────────────────────
@@ -698,6 +624,27 @@ components.html(
                 animateSelect(opt);
             };
             doc.body.addEventListener('click', win.__ldHeroClickHandler);
+
+            if (!win.__ldPersonaObs) {
+                win.__ldPersonaObs = new win.MutationObserver(function () {
+                    var pk = doc.getElementById('ld-picker');
+                    if (!pk) return;
+                    var per = pk.getAttribute('data-persona');
+                    if (!per || per === win.__ldPickerPersona) return;
+                    win.__ldPickerPersona = per;
+                    win.__ldHeroTypingToken = (win.__ldHeroTypingToken || 0) + 1;   // 진행 중인 타이핑 중단
+                    var os = pk.querySelectorAll('.ld-opt');
+                    os.forEach(function (o, i) { o.classList.toggle('active', i === 0); });
+                    var aE = doc.getElementById('ld-pb-a'), fE = doc.getElementById('ld-pb-fu');
+                    if (os[0] && aE && fE) {
+                        aE.textContent = os[0].getAttribute('data-a'); aE.style.opacity = 1;
+                        fE.textContent = os[0].getAttribute('data-fu');
+                    }
+                });
+                win.__ldPersonaObs.observe(doc.body, { subtree: true, childList: true, characterData: true,
+                                                       attributes: true, attributeFilter: ['data-persona'] });
+            }
+            if (!win.__ldPickerPersona) win.__ldPickerPersona = picker.getAttribute('data-persona');
 
             syncInstant(picker.querySelector('.ld-opt.active') || opts[0]);
 
