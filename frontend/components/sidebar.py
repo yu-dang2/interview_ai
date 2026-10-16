@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from utils.paths import resource
+from utils.brand import logo_img
 
 NAV_ITEMS = [
     ("면접 시작",     "/%EB%A9%B4%EC%A0%91_%ED%99%98%EA%B2%BD%EC%84%A4%EC%A0%95"),
@@ -10,14 +11,7 @@ NAV_ITEMS = [
     ("마이페이지",    "/%EB%A7%88%EC%9D%B4%ED%8E%98%EC%9D%B4%EC%A7%80"),
 ]
 
-LOGOUT_ICON = (
-    '<svg width="16" height="16" viewBox="0 0 17 17" fill="none">'
-    '<path d="M7 1.5L2 1.5L2 15.5L7 15.5" stroke="#dc2626" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '<path d="M6 8.5L15 8.5M11 5L15 8.5L11 12" stroke="#dc2626" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '</svg>'
-)
+LOGOUT_ICON = '<i class="ph-bold ph-sign-out" style="font-size:14px;color:#dc2626;"></i>'
 
 _SIDEBAR_CSS = """<style>
 [data-testid="stSidebar"],
@@ -77,18 +71,8 @@ def render_sidebar(active: str):
             '</a>'
         )
 
-    ACCOUNT_ICON = (
-        '<svg width="16" height="16" viewBox="0 0 20 20" fill="none">'
-        '<circle cx="10" cy="6.5" r="3.2" stroke="#374151" stroke-width="1.6"/>'
-        '<path d="M3.5 16.5c1.4-3 4-4.5 6.5-4.5s5.1 1.5 6.5 4.5" stroke="#374151" '
-        'stroke-width="1.6" stroke-linecap="round"/>'
-        '</svg>'
-    )
-    CHEVRON_ICON = (
-        '<svg width="12" height="12" viewBox="0 0 12 12" fill="none">'
-        '<path d="M3 4.5L6 7.5L9 4.5" stroke="#6b7280" stroke-width="1.5" '
-        'stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    )
+    ACCOUNT_ICON = '<i class="ph-bold ph-user" style="font-size:14px;color:#374151;"></i>'
+    CHEVRON_ICON = '<i class="ph-bold ph-caret-down" style="font-size:11px;color:#6b7280;"></i>'
     mypage_url = dict(NAV_ITEMS)["마이페이지"]
     logout_html = (
         '<details class="intro-account-menu" style="position:relative;flex-shrink:0;">'
@@ -152,8 +136,8 @@ def render_sidebar(active: str):
         'background:white;border-bottom:1px solid var(--border);'
         'display:flex;align-items:center;padding:0 24px;gap:20px;'
         'z-index:500;box-sizing:border-box;">'
-        '<a href="/" target="_self" style="font-size:21px;font-weight:800;color:var(--blue);'
-        'letter-spacing:-0.3px;text-decoration:none;flex-shrink:0;">intro</a>'
+        '<a href="/" target="_self" aria-label="intro 홈" style="text-decoration:none;flex-shrink:0;'
+        'display:flex;align-items:center;">' + logo_img(25) + '</a>'
         f'<nav style="display:flex;align-items:center;gap:4px;overflow-x:auto;flex:1;min-width:0;">{nav_html}</nav>'
         + logout_html +
         '</div>'
