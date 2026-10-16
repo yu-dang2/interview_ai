@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+from utils.brand import FAVICON, logo_img
 from utils.paths import resource
 from utils.state import init_session, set as state_set
 from utils.ui import show_error
@@ -7,6 +8,7 @@ from utils import api
 
 st.set_page_config(
     page_title="로그인 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -101,11 +103,9 @@ html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 
 
 # ── 왼쪽 패널 ───────────────────────────────────────
-CHECK = """<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-  <circle cx="11" cy="11" r="11" fill="rgba(255,255,255,0.2)"/>
-  <path d="M7 11l2.8 2.8 5.2-5.2" stroke="white" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round"/>
-</svg>"""
+CHECK = """<div style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+  <i class="ph-bold ph-check" style="font-size:13px;color:white;"></i>
+</div>"""
 
 st.markdown(f"""
 <div style="
@@ -116,15 +116,8 @@ st.markdown(f"""
     padding:60px; box-sizing:border-box;
     display:flex; flex-direction:column; justify-content:space-between;
 ">
-  <div style="position:absolute;border-radius:50%;
-              width:400px;height:400px;left:-80px;top:100px;
-              background:rgba(255,255,255,0.08);pointer-events:none;"></div>
-  <div style="position:absolute;border-radius:50%;
-              width:300px;height:300px;left:200px;top:500px;
-              background:rgba(255,255,255,0.06);pointer-events:none;"></div>
-
-  <a href="/" target="_self" style="position:relative;z-index:1;font-size:22px;font-weight:700;
-            color:white;text-decoration:none;">intro</a>
+  <a href="/" target="_self" aria-label="intro 홈" style="position:relative;z-index:1;display:inline-block;
+            text-decoration:none;">{logo_img(30, white=True)}</a>
 
   <div style="position:relative;z-index:1;">
     <div style="font-size:clamp(24px, 2.6vw, 34px);font-weight:800;color:white;
