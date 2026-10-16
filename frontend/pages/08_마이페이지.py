@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
 from utils.state import init_session, mark_session_expired, render_session_expired_banner
@@ -16,6 +17,7 @@ except ImportError:
 
 st.set_page_config(
     page_title="마이페이지 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -79,10 +81,9 @@ for _i, _r in enumerate(_resumes_data[:5]):
 
 def score_color(s) -> str:
     if s is None: return "#9ca3af"
-    if s >= 80: return "#16a34a"
-    if s >= 75: return "#3b6def"
-    if s >= 65: return "#d97706"
-    return "#dc2626"
+    if s >= 80: return "#16a34a"   # 우수 — 초록
+    if s >= 65: return "#d97706"   # 보통 — 주황
+    return "#cf5e96"               # 개선 필요 — 로즈 핑크 (주황과 색상 거리 확보)
 
 
 def _link_pill(path: str, label: str, session_id: str) -> str:
@@ -142,41 +143,15 @@ st.markdown(
 
 
 # ── 통계 카드 4개 ─────────────────────────────────────────────────────────
-_ICON_GROUP = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#3b6def" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '<circle cx="9" cy="7" r="4" stroke="#3b6def" stroke-width="1.8"/>'
-    '<path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"'
-    ' stroke="#3b6def" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_MIC = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<rect x="9" y="2" width="6" height="11" rx="3" stroke="#16a34a" stroke-width="1.8"/>'
-    '<path d="M5 10a7 7 0 0 0 14 0" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="12" y1="17" x2="12" y2="21" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="9" y1="21" x2="15" y2="21" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_ORDER = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"'
-    ' stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '<polyline points="14 2 14 8 20 8" stroke="#7c3aed" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '<line x1="8" y1="13" x2="16" y2="13" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="8" y1="17" x2="13" y2="17" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_LINEUP = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"'
-    ' stroke="#d97706" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '<polyline points="17 6 23 6 23 12"'
-    ' stroke="#d97706" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '</svg>'
-)
+_ICON_GROUP = '<i class="ph-bold ph-users-three" style="font-size:14px;"></i>'
+_ICON_MIC = '<i class="ph-bold ph-microphone" style="font-size:14px;"></i>'
+_ICON_ORDER = '<i class="ph-bold ph-file-text" style="font-size:14px;"></i>'
+_ICON_LINEUP = '<i class="ph-bold ph-trend-up" style="font-size:14px;"></i>'
+
+_ICON_GROUP_LG = '<i class="ph-bold ph-users-three" style="font-size:34px;"></i>'
+_ICON_MIC_LG = '<i class="ph-bold ph-microphone" style="font-size:34px;"></i>'
+_ICON_ORDER_LG = '<i class="ph-bold ph-file-text" style="font-size:34px;"></i>'
+_ICON_LINEUP_LG = '<i class="ph-bold ph-trend-up" style="font-size:34px;"></i>'
 
 _now = datetime.now(timezone.utc)
 _recent_scored = [
@@ -192,27 +167,34 @@ else:
 _avg_iv = _summary.get("average_interview_score")
 _latest_resume = _summary.get("latest_resume_score")
 
+_NEUTRAL = "#6b7280"
+_delta_color = (
+    "#16a34a" if _delta_str.startswith("+")
+    else "#dc2626" if (_delta_str.startswith("-") and _delta_str != "-")
+    else _NEUTRAL
+)
+
 STAT_CARDS = [
-    {"v": f"{_summary.get('total_interviews', 0)}회", "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
-    {"v": f"{_avg_iv}점" if _avg_iv is not None else "-", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
-    {"v": f"{_latest_resume}점" if _latest_resume is not None else "-", "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
-    {"v": _delta_str,  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
+    {"v": f"{_summary.get('total_interviews', 0)}회", "lbl": "총 면접 횟수",       "color": _NEUTRAL, "icon": _ICON_GROUP, "icon_lg": _ICON_GROUP_LG},
+    {"v": f"{_avg_iv}점" if _avg_iv is not None else "-", "lbl": "평균 면접 점수",     "color": score_color(_avg_iv), "icon": _ICON_MIC, "icon_lg": _ICON_MIC_LG},
+    {"v": f"{_latest_resume}점" if _latest_resume is not None else "-", "lbl": "현재 이력서 점수",   "color": score_color(_latest_resume), "icon": _ICON_ORDER, "icon_lg": _ICON_ORDER_LG},
+    {"v": _delta_str,  "lbl": "최근 30일 점수 향상", "color": _delta_color, "icon": _ICON_LINEUP, "icon_lg": _ICON_LINEUP_LG},
 ]
 
 stat_html = '<div style="display:flex;gap:17px;padding-bottom:32px;">'
 for s in STAT_CARDS:
     stat_html += (
-        f'<div style="flex:1;background:white;border:1px solid #e5e7eb;border-radius:8px;'
-        f'height:90px;padding:16px 19px 14px;display:flex;flex-direction:column;'
-        f'justify-content:space-between;box-sizing:border-box;">'
-        f'<div style="display:flex;align-items:center;gap:10px;">'
-        f'<div style="width:36px;height:36px;border-radius:8px;background:{s["bg"]};'
-        f'flex-shrink:0;display:flex;align-items:center;justify-content:center;">{s["icon"]}</div>'
-        f'<p style="margin:0;font-size:22px;font-weight:700;color:{s["color"]};'
-        f'font-family:Pretendard,-apple-system,sans-serif;line-height:1;white-space:nowrap;">{s["v"]}</p>'
+        f'<div style="flex:1;position:relative;overflow:hidden;background:white;border:1px solid #e5e7eb;'
+        f'border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:11px;box-sizing:border-box;">'
+        f'<div style="position:absolute;right:14px;top:14px;color:{s["color"]};opacity:0.22;'
+        f'line-height:1;pointer-events:none;">{s["icon_lg"]}</div>'
+        f'<div style="display:flex;align-items:center;gap:7px;color:{s["color"]};opacity:0.85;position:relative;">'
+        f'{s["icon"]}'
+        f'<span style="font-size:11.5px;font-weight:600;color:#6b7280;'
+        f'font-family:Pretendard,-apple-system,sans-serif;">{s["lbl"]}</span>'
         f'</div>'
-        f'<p style="margin:0;font-size:11px;color:#6b7280;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{s["lbl"]}</p>'
+        f'<p style="margin:0;font-size:25px;font-weight:700;color:{s["color"]};position:relative;'
+        f'font-family:Pretendard,-apple-system,sans-serif;line-height:1;white-space:nowrap;">{s["v"]}</p>'
         f'</div>'
     )
 stat_html += '</div>'
@@ -457,6 +439,7 @@ elif _mypage_tab == "history":
     rows_html = ""
     for i, h in enumerate(HISTORY):
         row_bg = "#f9fafb" if i % 2 == 0 else "white"
+        resume_c = score_color(h["resume"])
         iv_c   = score_color(h["iv"])
         tot_c  = score_color(h["total"])
         resume_txt = h["resume"] if h["resume"] is not None else "-"
@@ -470,7 +453,7 @@ elif _mypage_tab == "history":
             f'font-family:Pretendard,-apple-system,sans-serif;">{h["date"]}</span>'
             f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
             f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
-            f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
+            f'<span style="font-size:11px;font-weight:700;color:{resume_c};text-align:center;'
             f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
             f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
             f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
@@ -615,7 +598,7 @@ components.html(f"""
         }} else {{
             var ph = doc.createElement('div');
             ph.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:#9ca3af;gap:12px;';
-            ph.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:14px;">저장된 영상이 없습니다</span>';
+            ph.innerHTML = '<i class="ph-bold ph-video-camera-slash" style="font-size:40px;color:#e5e7eb;"></i><span style="font-size:14px;">저장된 영상이 없습니다</span>';
             box.appendChild(ph);
         }}
 

@@ -1,12 +1,14 @@
 import streamlit as st
+from utils.brand import FAVICON
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error, show_error_once
+from utils.ui import show_error_once
 from utils import api
 
 st.set_page_config(
     page_title="피드백 보고서 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -132,17 +134,20 @@ cards_html = ""
 for i, qa in enumerate(current_qa):
     q_num = page_idx * ITEMS_PER_PAGE + i + 1
     score = qa["score"]
-    if score >= 70:
-        badge_bg, badge_color = "#def7de", "#2ea647"
+    if score >= 80:
+        badge_color = "#16a34a"
+    elif score >= 65:
+        badge_color = "#d97706"
     else:
-        badge_bg, badge_color = "#ffedde", "#eb8c14"
+        badge_color = "#cf5e96"
 
     cards_html += (
         '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px;">'
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:15px 19px 13px;">'
         f'<div style="font-size:14px;font-weight:600;color:#111827;flex:1;margin-right:12px;line-height:1.5;">Q{q_num}. {qa["q"]}</div>'
-        f'<div style="background:{badge_bg};border-radius:13px;height:26px;min-width:56px;padding:0 10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-        f'<span style="font-size:12px;font-weight:500;color:{badge_color};">{score}점</span>'
+        f'<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;height:26px;">'
+        f'<span style="width:6px;height:6px;border-radius:50%;background:{badge_color};"></span>'
+        f'<span style="font-size:13px;font-weight:700;color:{badge_color};">{score}점</span>'
         '</div>'
         '</div>'
         '<div style="height:1px;background:#e5e7eb;margin:0 19px;"></div>'

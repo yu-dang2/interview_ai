@@ -1,9 +1,11 @@
 import streamlit as st
+from utils.brand import FAVICON
 from components.sidebar import render_sidebar
 from utils.state import init_session
 
 st.set_page_config(
     page_title="웹캠 허용 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -118,24 +120,20 @@ with card_col:
             st.markdown(
                 '<div class="wc-card wc-card-highlight">'
                 '<div style="display:flex;justify-content:center;margin-bottom:14px;">'
-                '<svg width="52" height="52" viewBox="0 0 88 88" fill="none">'
-                '<circle cx="44" cy="44" r="44" fill="#eef3ff"/>'
-                '<rect x="23" y="30" width="42" height="30" rx="5" fill="#3b6def"/>'
-                '<rect x="38" y="23" width="12" height="9" rx="3" fill="#3b6def"/>'
-                '<circle cx="44" cy="45" r="8" fill="white"/>'
-                '<circle cx="44" cy="45" r="4" fill="#3b6def"/>'
-                '</svg></div>'
+                '<div style="width:64px;height:64px;border-radius:50%;background:#eef3ff;display:flex;align-items:center;justify-content:center;">'
+                '<i class="ph-fill ph-video-camera" style="font-size:28px;color:#3b6def;"></i>'
+                '</div></div>'
                 '<p style="text-align:center;font-size:16px;font-weight:700;color:#111827;margin:0 0 4px;">웹캠 켜고 진행</p>'
                 '<p style="text-align:center;font-size:12px;color:#3b6def;font-weight:600;margin:0 0 16px;">AI 분석 항목 추가 · 추천</p>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
                 '<div style="width:6px;height:6px;border-radius:50%;background:#3b6def;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#2563eb;">시선 처리 점수화</span></div>'
+                '<span style="font-size:12px;font-weight:500;color:#3b6def;">시선 처리 점수화</span></div>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
-                '<div style="width:6px;height:6px;border-radius:50%;background:#f59e0b;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#2563eb;">발화 속도 분석</span></div>'
+                '<div style="width:6px;height:6px;border-radius:50%;background:#3b6def;margin-right:9px;flex-shrink:0;"></div>'
+                '<span style="font-size:12px;font-weight:500;color:#3b6def;">발화 속도 분석</span></div>'
                 '<div style="height:34px;background:white;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:18px;">'
-                '<div style="width:6px;height:6px;border-radius:50%;background:#ef4444;margin-right:9px;flex-shrink:0;"></div>'
-                '<span style="font-size:12px;font-weight:500;color:#2563eb;">영상 녹화 및 저장 허용</span></div>'
+                '<div style="width:6px;height:6px;border-radius:50%;background:#3b6def;margin-right:9px;flex-shrink:0;"></div>'
+                '<span style="font-size:12px;font-weight:500;color:#3b6def;">영상 녹화 및 저장 허용</span></div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -147,13 +145,9 @@ with card_col:
             st.markdown(
                 '<div class="wc-card">'
                 '<div style="display:flex;justify-content:center;margin-bottom:14px;">'
-                '<svg width="52" height="52" viewBox="0 0 88 88" fill="none">'
-                '<circle cx="44" cy="44" r="44" fill="#f8fafc"/>'
-                '<rect x="23" y="30" width="42" height="30" rx="5" fill="#9ca3af"/>'
-                '<rect x="38" y="23" width="12" height="9" rx="3" fill="#9ca3af"/>'
-                '<circle cx="44" cy="45" r="8" fill="white"/>'
-                '<line x1="20" y1="20" x2="68" y2="68" stroke="#9ca3af" stroke-width="4"/>'
-                '</svg></div>'
+                '<div style="width:64px;height:64px;border-radius:50%;background:#f8fafc;display:flex;align-items:center;justify-content:center;">'
+                '<i class="ph-fill ph-video-camera-slash" style="font-size:28px;color:#9ca3af;"></i>'
+                '</div></div>'
                 '<p style="text-align:center;font-size:16px;font-weight:700;color:#111827;margin:0 0 4px;">웹캠 없이 진행</p>'
                 '<p style="text-align:center;font-size:12px;color:#6b7280;font-weight:600;margin:0 0 16px;">음성·텍스트 답변만으로 평가</p>'
                 '<div style="height:34px;background:#f9fafb;border-radius:8px;display:flex;align-items:center;padding:0 12px;margin-bottom:8px;">'
