@@ -1,5 +1,7 @@
+import html as htmlmod
 import requests
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
@@ -8,6 +10,7 @@ from utils import api
 
 st.set_page_config(
     page_title="문서 업로드 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -72,14 +75,10 @@ st.markdown("""
     display: flex;
     align-items: center;
     gap: 6px;
-    background: #ecfdf3;
-    border: 1px solid #86e0ab;
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-top: 8px;
+    margin-top: 22px !important;
     font-size: 13px;
     font-weight: 600;
-    color: #087443;
+    color: #16a34a;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -141,7 +140,7 @@ def read_file_text(uploaded_file) -> str:
                 reader = PyPDF2.PdfReader(uploaded_file)
                 return "\n".join(p.extract_text() or "" for p in reader.pages)
             except ImportError:
-                return f"[PDF 파싱 불가 — pdfplumber 또는 PyPDF2 설치 필요]\n파일명: {uploaded_file.name}"
+                return f"[PDF 파싱 불가. pdfplumber 또는 PyPDF2 설치 필요]\n파일명: {uploaded_file.name}"
     if name.endswith(".docx"):
         try:
             import docx
@@ -149,7 +148,7 @@ def read_file_text(uploaded_file) -> str:
             doc = docx.Document(BytesIO(uploaded_file.read()))
             return "\n".join(p.text for p in doc.paragraphs)
         except ImportError:
-            return f"[DOCX 파싱 불가 — python-docx 설치 필요]\n파일명: {uploaded_file.name}"
+            return f"[DOCX 파싱 불가. python-docx 설치 필요]\n파일명: {uploaded_file.name}"
     if name.endswith(".hwpx"):
         try:
             import zipfile
@@ -183,39 +182,77 @@ def _upload_error_message(e: Exception) -> str:
     return f"업로드 중 알 수 없는 오류가 발생했습니다: {e}"
 
 
+def _reset_interview_for_new_documents():
+    """서류를 바꾸면 그 서류로 새 면접을 해야 하므로, 진행 중이던 면접 세션을 비운다."""
+    if get("session_id"):
+        st.session_state["_session_id_clear_pending"] = True
+    state_set("session_id", None)
+    state_set("first_question", None)
+    state_set("interview_done", False)
+    st.session_state.pop("iv_messages", None)
+
+
+def _handle_document(kind: str, uploaded_file, upload_fn):
+    id_key, name_key, sig_key = f"{kind}_id", f"{kind}_file_name", f"_{kind}_file_sig"
+    if uploaded_file:
+        sig = (uploaded_file.name, uploaded_file.size)
+        if get(id_key) and st.session_state.get(sig_key) == sig:
+            pass  
+        else:
+            state_set(f"{kind}_text", read_file_text(uploaded_file))
+            try:
+                new_id = upload_fn(uploaded_file.getvalue(), uploaded_file.name)
+            except api.SessionExpiredError:
+                mark_session_expired()
+                return
+            except Exception as e:
+                state_set(id_key, 0)
+                st.session_state.pop(sig_key, None)
+                state_set(name_key, "")
+                show_error(_upload_error_message(e))
+                return
+            if get(id_key) and get(id_key) != new_id:
+                _reset_interview_for_new_documents()
+            state_set(id_key, new_id)
+            state_set(name_key, uploaded_file.name)
+            st.session_state[sig_key] = sig
+    if get(id_key) and get(name_key):
+        st.markdown(
+            f'<div class="upload-done"><i class="ph-bold ph-check-circle"></i> {htmlmod.escape(get(name_key))} 업로드 완료</div>',
+            unsafe_allow_html=True,
+        )
+        if not uploaded_file:
+            st.markdown(
+                '<p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">다른 파일로 바꾸려면 위에 새로 올려 주세요</p>',
+                unsafe_allow_html=True,
+            )
+
+
 with up1:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">직무 기술서 (JD)</p>',
                 unsafe_allow_html=True)
     jd_file = st.file_uploader("jd", type=["pdf","docx","hwpx"], key="jd_upload",
                                 help="PDF, DOCX, HWPX 지원 (최대 20MB)")
-    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
-    if jd_file:
-        state_set("jd_text", read_file_text(jd_file))
-        try:
-            state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
-            st.markdown(f'<div class="upload-done">✅ {jd_file.name} 업로드 완료</div>', unsafe_allow_html=True)
-        except api.SessionExpiredError:
-            mark_session_expired()
-        except Exception as e:
-            state_set("jd_id", 0)
-            show_error(_upload_error_message(e))
+    st.markdown(
+        '<p style="font-size:12px;color:#9ca3af;margin:6px 0 0;display:flex;align-items:center;gap:5px;">'
+        '<i class="ph-bold ph-lightbulb" style="flex-shrink:0;"></i>'
+        '한글 파일은 HWPX만 지원돼요. 구버전 HWP는 PDF로 저장한 후 업로드해주세요</p>',
+        unsafe_allow_html=True,
+    )
+    _handle_document("jd", jd_file, api.upload_jd)
 
 with up2:
     st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">이력서</p>',
                 unsafe_allow_html=True)
     resume_file = st.file_uploader("resume", type=["pdf","docx","hwpx"], key="resume_upload",
                                     help="PDF, DOCX, HWPX 파일 지원 (최대 20MB)")
-    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
-    if resume_file:
-        state_set("resume_text", read_file_text(resume_file))
-        try:
-            state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
-            st.markdown(f'<div class="upload-done">✅ {resume_file.name} 업로드 완료</div>', unsafe_allow_html=True)
-        except api.SessionExpiredError:
-            mark_session_expired()
-        except Exception as e:
-            state_set("resume_id", 0)
-            show_error(_upload_error_message(e))
+    st.markdown(
+        '<p style="font-size:12px;color:#9ca3af;margin:6px 0 0;display:flex;align-items:center;gap:5px;">'
+        '<i class="ph-bold ph-lightbulb" style="flex-shrink:0;"></i>'
+        '한글 파일은 HWPX만 지원돼요. 구버전 HWP는 PDF로 저장한 후 업로드해주세요</p>',
+        unsafe_allow_html=True,
+    )
+    _handle_document("resume", resume_file, api.upload_resume)
 
 components.html("""
 <script>

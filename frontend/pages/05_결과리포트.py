@@ -1,12 +1,22 @@
+import math
+import os
+import re
 import time
 import requests
 import streamlit as st
+from utils.brand import FAVICON
 from utils.paths import resource
 from datetime import datetime
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error, show_error_once
+from utils.ui import show_error_once
 from utils import api
+
+try:
+    _VIDEO_RESULT_WAIT_SEC = min(600, max(10, int(os.getenv("VIDEO_RESULT_WAIT_SEC", "120"))))
+except ValueError:
+    _VIDEO_RESULT_WAIT_SEC = 120
+_VIDEO_RESULT_WAIT_TRIES = _VIDEO_RESULT_WAIT_SEC // 3
 
 try:
     import plotly.graph_objects as go
@@ -16,6 +26,7 @@ except ImportError:
 
 st.set_page_config(
     page_title="결과 리포트 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -150,6 +161,7 @@ st.markdown("""<style>
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 12px !important;
+    margin-top: 28px !important;
 }
 </style>""", unsafe_allow_html=True)
 
@@ -163,24 +175,60 @@ st.markdown(
 )
 
 # ── 점수 카드 (단일 카드 3분할) ──────────────────────────────────────────
-def _score_section(color, pill_bg, pill_border, label, icon, sublabel, score, fill_pct, badge, sub):
+def _grade_color(score: int) -> str:
+    if score >= 80: return '#16a34a'   # 우수 — 초록
+    if score >= 65: return '#d97706'   # 보통 — 주황
+    return '#cf5e96'                   # 개선 필요 — 로즈 핑크 (주황과 색상 거리 확보)
+
+def _tint_for(color: str) -> str:
+    return {'#16a34a': '#f0fdf4', '#d97706': '#fffbeb', '#cf5e96': '#fdf3f8'}.get(color, '#f8fafc')
+
+def _ring_svg(color, score, size=78, stroke=7):
+    r = (size - stroke) / 2
+    c = size / 2
+    circ = 2 * math.pi * r
+    pct = max(0, min(100, score))
+    fill = circ * pct / 100
     return (
-        f'<div style="flex:1;padding:14px 20px 14px;display:flex;flex-direction:column;justify-content:space-between;">'
-        f'<div style="background:{pill_bg};border:1px solid {pill_border};border-radius:10px;height:20px;display:flex;align-items:center;justify-content:center;">'
-        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};">{label}</span>'
-        f'</div>'
-        f'<div style="display:flex;align-items:center;justify-content:space-between;">'
-        f'<div style="display:flex;align-items:center;gap:6px;">{icon}<span data-score-label style="font-size:11px;color:#6b7280;">{sublabel}</span></div>'
-        f'<span data-score-label style="font-size:26px;font-weight:700;color:{color};line-height:1;">{score}점</span>'
-        f'</div>'
-        f'<div style="background:#e5e7eb;height:6px;border-radius:3px;">'
-        f'<div style="background:{color};height:6px;border-radius:3px;width:{fill_pct}%;"></div>'
-        f'</div>'
+        f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" style="flex-shrink:0;">'
+        f'<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="#eef0f3" stroke-width="{stroke}"/>'
+        f'<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="{color}" stroke-width="{stroke}" '
+        f'stroke-dasharray="{fill:.2f} {circ - fill:.2f}" stroke-linecap="round" '
+        f'transform="rotate(-90 {c} {c})"/>'
+        f'<text x="{c}" y="{c - 1}" text-anchor="middle" font-size="19" font-weight="700" '
+        f'fill="#111827" font-family="inherit">{score}</text>'
+        f'<text x="{c}" y="{c + 14}" text-anchor="middle" font-size="9.5" font-weight="600" '
+        f'fill="#9ca3af" font-family="inherit">점</text>'
+        f'</svg>'
+    )
+
+def _recolor_icon(icon: str, color: str) -> str:
+    return re.sub(r'#[0-9A-Fa-f]{6}', color, icon)
+
+def _score_section(score, label, icon, sublabel, badge, sub, emphasize=False):
+    color = _grade_color(score)
+    icon = _recolor_icon(icon, color)
+    tint_bg = _tint_for(color)
+    card_bg = tint_bg if emphasize else 'transparent'
+    return (
+        f'<div style="flex:1;padding:18px 22px;display:flex;flex-direction:column;'
+        f'justify-content:space-between;gap:10px;background:{card_bg};">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'
         f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<div style="background:{pill_bg};border:1px solid {color};border-radius:9px;padding:0 8px;height:18px;display:flex;align-items:center;">'
-        f'<span data-score-label style="font-size:9px;font-weight:700;color:{color};line-height:1;position:relative;top:0.5px;">{badge}</span>'
+        f'<span style="width:6px;height:6px;border-radius:50%;background:{color};flex-shrink:0;"></span>'
+        f'<span data-score-label style="font-size:10px;font-weight:700;color:{color};letter-spacing:.04em;text-transform:uppercase;">{label}</span>'
         f'</div>'
-        f'<span data-score-label style="font-size:10px;color:#6b7280;">{sub}</span>'
+        f'<span style="width:17px;height:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0.7;">{icon}</span>'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:14px;">'
+        f'<div data-score-label style="font-size:12px;color:#6b7280;white-space:nowrap;flex-shrink:0;">{sublabel}</div>'
+        f'<div style="flex:1;border-bottom:1px dashed #d1d5db;height:0;margin-top:-1px;"></div>'
+        + _ring_svg(color, score) +
+        f'</div>'
+        f'<div data-score-label style="font-size:11.5px;color:#6b7280;display:flex;align-items:center;gap:6px;'
+        f'padding-top:12px;border-top:1px solid {"rgba(255,255,255,0.6)" if emphasize else "#f3f4f6"};">'
+        f'<span style="font-weight:700;color:{color};">{badge}</span>'
+        f'<span style="color:#d1d5db;">·</span>{sub}'
         f'</div>'
         f'</div>'
     )
@@ -194,15 +242,15 @@ def _grade_badge(score: int) -> str:
 
 st.markdown(
     '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
-    '<div style="display:flex;min-height:148px;">'
-    + _score_section('#d97706','#fffbeb','#d97706','1차 서류 전형',icon_resume,'이력서 분석',
-                      resume_score_val, resume_score_val, _grade_badge(resume_score_val), '이력서 분석 결과')
+    '<div style="display:flex;min-height:166px;">'
+    + _score_section(resume_score_val, '1차 서류 전형', icon_resume, '이력서 분석',
+                      _grade_badge(resume_score_val), '이력서 분석 결과')
     + _div
-    + _score_section('#3b6def','#eef3ff','#3b6def','2차 면접 전형',icon_mic,'AI 면접 코칭',
-                      interview_score_val, interview_score_val, _grade_badge(interview_score_val), '면접 답변 분석 결과')
+    + _score_section(interview_score_val, '2차 면접 전형', icon_mic, 'AI 면접 코칭',
+                      _grade_badge(interview_score_val), '면접 답변 분석 결과')
     + _div
-    + _score_section('#16a34a','#f0fdf4','#16a34a','최종 종합 평가',icon_trophy,'합산 결과',
-                      total_score_val, total_score_val, grade_val, '이력서·면접 종합 점수')
+    + _score_section(total_score_val, '최종 종합 평가', icon_trophy, '합산 결과',
+                      grade_val, '이력서·면접 종합 점수', emphasize=True)
     + '</div></div><div style="height:32px"></div>',
     unsafe_allow_html=True
 )
@@ -277,7 +325,7 @@ with tab_detail:
         s = min(max(score, 0), 100)
         a = min(max(avg, 0), 100)
         comp_rows += (
-            '<div style="position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid #3b6def;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
+            '<div style="position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;min-height:65px;display:flex;align-items:center;margin-bottom:7px;">'
             '<div style="width:140px;padding:0 0 0 12px;flex-shrink:0;">'
             f'<div data-comp-label style="font-size:13px;font-weight:600;color:#111827;margin-bottom:3px;">{label}</div>'
             f'<span data-comp-score style="font-size:12px;font-weight:600;color:#3b6def;">{score}점</span>'
@@ -299,7 +347,7 @@ with tab_detail:
         '<div style="height:32px"></div>'
         '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:19px 23px 12px;">'
         '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px;">면접 역량 평가</div>'
-        '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;">AI 면접관이 분석한 5가지 역량 — 점수 및 개선 코멘트</div>'
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb;">AI 면접관이 분석한 5가지 역량 · 점수 및 개선 코멘트</div>'
         + comp_rows
         + '</div><div style="height:32px"></div>',
         unsafe_allow_html=True
@@ -308,6 +356,7 @@ with tab_detail:
 with tab_video:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     # ── AI 영상 분석 코멘트 (영상이 있는 세션만) ─────────────────────────────
+    _video_rendered = False
     if session_id:
         try:
             video_metrics = api.get_video_metrics(session_id)
@@ -317,14 +366,50 @@ with tab_video:
         except requests.exceptions.HTTPError as e:
             video_metrics = None
             if e.response is not None and e.response.status_code == 404:
-                pass 
+                if st.session_state.get("_video_upload_pending_sid") == session_id:
+                    video_metrics = {"status": "uploading"}
             else:
                 st.warning("영상 분석 결과를 불러오지 못했습니다.")
         except Exception:
             video_metrics = None
             st.warning("영상 분석 결과를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.")
 
-        if video_metrics and video_metrics.get("status") == "analyzing":
+        if video_metrics and video_metrics.get("status") != "uploading":
+            if st.session_state.get("_video_upload_pending_sid") == session_id:
+                st.session_state.pop("_video_upload_pending_sid", None)
+
+        if video_metrics and video_metrics.get("status") == "uploading":
+            _upload_wait_key = f"_video_upload_waits_{session_id}"
+            _upload_waits = st.session_state.get(_upload_wait_key, 0)
+            if _upload_waits < _VIDEO_RESULT_WAIT_TRIES:  
+                st.session_state[_upload_wait_key] = _upload_waits + 1
+                _video_rendered = True
+                st.markdown(
+                    '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
+                    'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
+                    '<p style="font-size:15px;font-weight:600;color:#111827;margin:0 0 10px;">영상을 저장하고 있습니다...</p>'
+                    '<p style="font-size:13px;color:#6b7280;line-height:20px;margin:0;">'
+                    '면접 영상을 서버에 올리는 중이에요.<br>'
+                    '저장이 끝나면 영상 분석이 자동으로 시작됩니다.'
+                    '</p>'
+                    '</div><div style="height:32px"></div>',
+                    unsafe_allow_html=True
+                )
+                time.sleep(3.0)
+                st.rerun()
+            else:
+                st.session_state.pop("_video_upload_pending_sid", None)
+                _video_rendered = True
+                st.markdown(
+                    '<div style="background:#eef3ff;border:1px solid #c7d7fb;border-radius:8px;'
+                    'padding:10px 14px;font-size:13px;color:#1e40af;">'
+                    '영상 저장이 아직 끝나지 않았어요. 잠시 후 새로고침해 주세요.'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+        elif video_metrics and video_metrics.get("status") == "analyzing":
+            _video_rendered = True
             st.markdown(
                 '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
                 'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 23px;min-height:152px;box-sizing:border-box;">'
@@ -348,6 +433,7 @@ with tab_video:
                 time.sleep(3.0)
                 st.rerun()
 
+            _video_rendered = True
             _video_error_msg = (video_metrics or {}).get("error") or "일시적인 문제로 영상 분석을 완료하지 못했습니다."
             st.markdown(
                 '<div style="background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);'
@@ -381,6 +467,7 @@ with tab_video:
                     '</div>'
                 )
             if webcam_rows:
+                _video_rendered = True
                 st.markdown(
                     '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
                     '<div style="padding:16px 19px 0;">'
@@ -391,8 +478,14 @@ with tab_video:
                     unsafe_allow_html=True
                 )
 
-    if not session_id:
-        st.info("영상 분석 결과가 없습니다.")
+    if not _video_rendered:
+        st.markdown(
+            '<div style="background:#eef3ff;border:1px solid #c7d7fb;border-radius:8px;'
+            'padding:10px 14px;font-size:13px;color:#1e40af;">'
+            '영상 분석 결과가 없습니다.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 # ── 하단 버튼 ─────────────────────────────────────────────────────────────
 with st.container(key="bottom_actions"):

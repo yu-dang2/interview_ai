@@ -1,11 +1,13 @@
 import streamlit as st
+from utils.brand import FAVICON
 from components.sidebar import render_sidebar
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner, ensure_latest_session_id
-from utils.ui import show_error, show_error_once
+from utils.ui import show_error_once
 from utils import api
 
 st.set_page_config(
     page_title="이력서 최적화 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -92,24 +94,24 @@ elif not SUGGESTIONS:
     st.info("이 면접에서는 아직 생성된 최적화 제안이 없습니다.")
 else:
     # ── 키워드 ────────────────────────────────────────────────────────────
-    def _kw_tags(keywords, bg, color):
+    def _kw_tags(keywords, color):
         return "".join(
-            f'<span style="background:{bg};color:{color};border-radius:14px;'
-            f'padding:6px 12px;font-size:12px;font-weight:500;white-space:nowrap;">{kw}</span>'
+            f'<span style="background:white;color:{color};border:1px solid {color};border-radius:14px;'
+            f'padding:5px 11px;font-size:12px;font-weight:500;white-space:nowrap;">{kw}</span>'
             for kw in keywords
         )
 
     kw_html = (
         '<div style="padding-bottom:20px;">'
         '<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:12px;">보유 키워드</div>'
-        f'<div style="display:flex;flex-wrap:wrap;gap:10px;">{_kw_tags(MATCHED_KEYWORDS, "#eef3ff", "#3b6def")}</div>'
+        f'<div style="display:flex;flex-wrap:wrap;gap:10px;">{_kw_tags(MATCHED_KEYWORDS, "#3b6def")}</div>'
         '</div>'
     )
     if MISSING_KEYWORDS:
         kw_html += (
             '<div style="padding-bottom:24px;">'
             '<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:12px;">추가 추천 키워드</div>'
-            f'<div style="display:flex;flex-wrap:wrap;gap:10px;">{_kw_tags(MISSING_KEYWORDS, "#fff3e0", "#d97706")}</div>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:10px;">{_kw_tags(MISSING_KEYWORDS, "#d97706")}</div>'
             '</div>'
         )
     kw_html += '<div style="font-size:14px;font-weight:600;color:#111827;padding-bottom:24px;">항목별 최적화 제안</div>'
@@ -127,20 +129,25 @@ else:
             st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
 
         reason_html = (
-            f'<p style="font-size:12px;color:#6b7280;margin:8px 0 0;">💡 {reason}</p>'
+            f'<p style="font-size:12px;color:#6b7280;margin:8px 0 0;display:flex;align-items:center;gap:5px;">'
+            f'<i class="ph-bold ph-lightbulb" style="flex-shrink:0;"></i>{reason}</p>'
             if reason else ""
         )
         st.markdown(
             f'<div style="font-size:12px;font-weight:600;color:#3b6def;margin-bottom:10px;">{section}</div>'
             '<div style="display:flex;align-items:stretch;gap:16px;">'
-            f'<div style="flex:1 1 0;min-width:0;background:#fcf7f7;border:1px solid #e5e7eb;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
-            '<span style="background:#ffe0e0;color:#bf2626;font-size:11px;font-weight:500;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:10px;">기존</span>'
-            f'<p style="font-size:13px;color:#593333;line-height:1.6;margin:0;">{original}</p>'
+            f'<div style="flex:1 1 0;min-width:0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
+            '<span style="width:6px;height:6px;border-radius:50%;background:#dc2626;flex-shrink:0;"></span>'
+            '<span style="font-size:11px;font-weight:700;color:#dc2626;letter-spacing:.02em;">기존</span></div>'
+            f'<p style="font-size:13px;color:#374151;line-height:1.6;margin:0;">{original}</p>'
             '</div>'
-            '<span style="font-size:20px;font-weight:700;color:#3b6def;flex-shrink:0;align-self:center;">→</span>'
-            f'<div style="flex:1 1 0;min-width:0;background:#f2fcf5;border:1px solid #e5e7eb;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
-            '<span style="background:#eef3ff;color:#3b6def;font-size:11px;font-weight:500;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:10px;">개선 제안</span>'
-            f'<p style="font-size:13px;color:#2563eb;line-height:19px;margin:0;">{improved}</p>'
+            '<span style="font-size:20px;font-weight:700;color:#9ca3af;flex-shrink:0;align-self:center;">→</span>'
+            f'<div style="flex:1 1 0;min-width:0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:11px;min-height:120px;box-sizing:border-box;">'
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
+            '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;flex-shrink:0;"></span>'
+            '<span style="font-size:11px;font-weight:700;color:#16a34a;letter-spacing:.02em;">개선 제안</span></div>'
+            f'<p style="font-size:13px;color:#111827;line-height:19px;margin:0;">{improved}</p>'
             f'{reason_html}'
             '</div>'
             '</div>',

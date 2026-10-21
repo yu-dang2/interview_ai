@@ -1,11 +1,13 @@
 import time
 import threading
 import streamlit as st
+from utils.brand import FAVICON
 from utils.state import init_session, get, set as state_set, mark_session_expired
 from utils import api
 
 st.set_page_config(
     page_title="결과 분석 중 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -49,7 +51,7 @@ def _loading_html(stage_idx: int) -> str:
             dot = (
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
                 'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;'
-                'font-size:9px;flex-shrink:0;">✓</span>'
+                'font-size:9px;flex-shrink:0;"><i class="ph-bold ph-check" style="font-size:9px;"></i></span>'
             )
             text_style = "color:#9ca3af;"
         elif i == stage_idx:

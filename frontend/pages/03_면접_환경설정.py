@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
@@ -8,6 +9,7 @@ from utils.ui import show_error
 
 st.set_page_config(
     page_title="면접 환경설정 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )

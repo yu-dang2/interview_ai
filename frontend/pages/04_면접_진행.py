@@ -1,4 +1,5 @@
 import math
+import os
 import time
 import base64
 import json
@@ -6,6 +7,7 @@ import threading
 import html as htmlmod
 import requests
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 from utils.paths import resource
 from components.sidebar import render_sidebar
@@ -15,6 +17,7 @@ from utils import api
 
 st.set_page_config(
     page_title="면접 진행 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -38,6 +41,10 @@ _nav_ready = st.text_input(
 )
 if _nav_ready and _nav_ready.startswith("go:"):
     st.session_state.webcam_on = _nav_ready.split(":", 1)[1] == "1"
+    # 영상 업로드는 브라우저에서 백그라운드로 계속되므로, 결과 리포트가 이 세션의 영상을
+    # 아직 못 찾으면(404) "없음" 대신 "저장 중"으로 기다리게 표시해 둔다.
+    if st.session_state.webcam_on:
+        st.session_state["_video_upload_pending_sid"] = get("session_id")
     st.session_state["_iv_nav_ready_consumed"] = True
     st.switch_page("pages/045_결과로딩.py")
 
@@ -74,7 +81,7 @@ if "iv_messages" not in st.session_state:
                 if i < stage_idx:
                     dot = ('<span style="display:inline-flex;align-items:center;justify-content:center;'
                            'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;'
-                           'font-size:9px;flex-shrink:0;">✓</span>')
+                           'font-size:9px;flex-shrink:0;"><i class="ph-bold ph-check" style="font-size:9px;"></i></span>')
                     text_style = "color:#9ca3af;"
                 elif i == stage_idx:
                     dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
@@ -175,6 +182,7 @@ if "iv_messages" not in st.session_state:
         {"role": "ai", "tag": None, "text": first_q or "안녕하세요, 면접을 시작하겠습니다."},
     ]
     st.session_state["realtime_is_rapport"] = True
+    st.session_state.iv_start = time.time()
 
 _ai_indices  = [i for i, m in enumerate(st.session_state.iv_messages) if m["role"] == "ai"]
 _last_ai_idx = _ai_indices[-1] if _ai_indices else None
@@ -206,6 +214,73 @@ try:
 except Exception:
     _avatar_src = ""
 
+# ── 질문 음성 (Google Cloud TTS, Chirp 3 HD) ─────────────────────────────
+# 이 파이썬 코드는 브라우저가 아니라 web 컨테이너에서 돌기 때문에, 여기서 Google을 부르면
+# API 키가 브라우저에 노출되지 않는다 (백엔드 /voice/speak 불필요). 받은 mp3(base64)를
+# 아래 components.html에 data URL로 실어 보내고, 브라우저는 그걸 재생만 한다.
+# 키가 없거나 호출이 실패하면 None → 화면은 기존 브라우저 음성(speechSynthesis)으로 읽는다.
+_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
+_TTS_API_KEY = os.getenv("GOOGLE_TTS_API_KEY", "").strip()
+_TTS_VOICES = {
+    "기술 리드":   os.getenv("GOOGLE_TTS_VOICE_TECH", "ko-KR-Chirp3-HD-Iapetus"),
+    "인사 담당자": os.getenv("GOOGLE_TTS_VOICE_HR", "ko-KR-Chirp3-HD-Vindemiatrix"),
+    "임원 면접관": os.getenv("GOOGLE_TTS_VOICE_EXEC", "ko-KR-Chirp3-HD-Algieba"),
+}
+
+
+def _env_number(name, default, cast, lo, hi):
+    try:
+        return min(hi, max(lo, cast(os.getenv(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+_VIDEO_UPLOAD_WAIT_SEC = _env_number("VIDEO_UPLOAD_WAIT_SEC", 20, int, 5, 300)
+
+_INTERVIEW_LIMIT_MIN = _env_number("INTERVIEW_TIME_LIMIT_MIN", 30, int, 1, 180)
+_INTERVIEW_LIMIT_SEC = _INTERVIEW_LIMIT_MIN * 60
+
+_TTS_SPEAKING_RATE = _env_number("GOOGLE_TTS_SPEAKING_RATE", 1.0, float, 0.25, 4.0)
+_TTS_MAX_CHARS = _env_number("TTS_MAX_CHARS", 600, int, 1, 5000)
+
+
+def _tts_text(text):
+    return (text or "").replace("\n", " ").strip()
+
+
+def _question_audio_b64(persona, text):
+    text = _tts_text(text)
+    if not _TTS_API_KEY or not text or len(text) > _TTS_MAX_CHARS:
+        return None
+    cache = st.session_state.setdefault("_iv_tts_cache", {})
+    cache_key = (persona, text)
+    if cache_key in cache:
+        return cache[cache_key]
+    audio_b64 = None
+    try:
+        res = requests.post(
+            _TTS_URL,
+            headers={"X-Goog-Api-Key": _TTS_API_KEY},
+            json={
+                "input": {"text": text},
+                "voice": {
+                    "languageCode": "ko-KR",
+                    "name": _TTS_VOICES.get(persona, _TTS_VOICES["기술 리드"]),
+                },
+                "audioConfig": {"audioEncoding": "MP3", "speakingRate": _TTS_SPEAKING_RATE},
+            },
+            timeout=10,
+        )
+        res.raise_for_status()
+        audio_b64 = res.json().get("audioContent") or None
+    except Exception as e:  
+        print(f"[TTS] Google 음성 생성 실패 → 브라우저 음성으로 대체: {type(e).__name__}: {e}")
+    cache[cache_key] = audio_b64
+    return audio_b64
+
+
+_last_ai_audio_b64 = _question_audio_b64(_persona, _last_ai_text) if _last_ai_text else None
+_last_ai_audio_src = f"data:audio/mpeg;base64,{_last_ai_audio_b64}" if _last_ai_audio_b64 else None
+
 st.markdown(
     "<style>.intro-account-menu { display:none !important; }</style>",
     unsafe_allow_html=True,
@@ -217,7 +292,7 @@ right_px   = FEEDBACK_W
 
 # ── 타이머 초기값 ────────────────────────────
 elapsed   = int(time.time() - st.session_state.iv_start)
-remaining = max(0, 30 * 60 - elapsed)
+remaining = max(0, _INTERVIEW_LIMIT_SEC - elapsed)
 timer_str = f"{remaining // 60:02d}:{remaining % 60:02d}"
 
 # ── 실시간 피드백 데이터 ───────────────────────────────────────────────────
@@ -261,6 +336,31 @@ else:
         f'</svg>'
     )
 
+_SKEL_LABELS = ["논리성", "커뮤니케이션", "전문 지식", "태도", "문제 해결력"]
+
+def _skeleton_scores(note: str, animated: bool) -> str:
+    bar_cls = "iv-skel-bar" + (" iv-skel-anim" if animated else "")
+    rows = ""
+    for label in _SKEL_LABELS:
+        rows += (
+            f'<div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">{label}</div>'
+            f'<div style="border-radius:3px;height:5px;margin-bottom:14px;overflow:hidden;">'
+            f'<div class="{bar_cls}" style="height:5px;border-radius:3px;"></div></div>'
+        )
+    rows += f'<div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:2px;">{note}</div>'
+    return rows
+
+def _skeleton_feedback(note: str, animated: bool) -> str:
+    bar_cls = "iv-skel-bar" + (" iv-skel-anim" if animated else "")
+    rows = ""
+    for h in (36, 36):
+        rows += (
+            f'<div style="border-radius:8px;height:{h}px;margin-bottom:6px;overflow:hidden;">'
+            f'<div class="{bar_cls}" style="height:{h}px;border-radius:8px;"></div></div>'
+        )
+    rows += f'<div style="font-size:12px;color:#9ca3af;text-align:center;padding:8px 0 0;">{note}</div>'
+    return rows
+
 if SCORES:
     scores_html = ""
     for label, score in SCORES:
@@ -269,20 +369,16 @@ if SCORES:
             f'color:#111827;margin-bottom:4px;">'
             f'<span>{label}</span>'
             f'<span style="font-weight:600;color:#3b6def;">{score}</span></div>'
-            f'<div style="background:#f8fafc;border-radius:3px;height:5px;margin-bottom:14px;">'
-            f'<div style="width:{score}%;background:#3b6def;height:5px;border-radius:3px;"></div></div>'
+            f'<div style="height:5px;border-radius:3px;margin-bottom:14px;">'
+            f'<div style="width:{score}%;min-width:{"3px" if score else "0"};'
+            f'background:#3b6def;height:5px;border-radius:3px;"></div></div>'
         )
+elif _rt_pending:
+    scores_html = _skeleton_scores("분석 중입니다...", animated=True)
 elif _rt_is_rapport:
-    scores_html = (
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
-        '자기소개 답변은 점수에 반영되지 않아요</div>'
-    )
+    scores_html = _skeleton_scores("자기소개 답변은 점수에 반영되지 않아요", animated=False)
 else:
-    scores_html = (
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
-        + ("분석 중입니다..." if _rt_pending else "첫 답변을 제출하면 표시됩니다")
-        + '</div>'
-    )
+    scores_html = _skeleton_scores("첫 답변을 제출하면 표시돼요", animated=False)
 
 if _rt_feedback:
     feedback_html = ""
@@ -290,27 +386,18 @@ if _rt_feedback:
         is_positive = item.get("type") == "positive"
         bg    = "#f9fafb" if is_positive else "#fffbeb"
         color = "#374151" if is_positive else "#92400e"
-        icon  = "✓" if is_positive else "💡"
+        icon = '<i class="ph-bold ph-check-circle"></i>' if is_positive else '<i class="ph-bold ph-lightbulb"></i>'
         feedback_html += (
             f'<div style="background:{bg};border-radius:8px;padding:10px 12px;'
-            f'margin-bottom:6px;font-size:12px;color:{color};">'
+            f'margin-bottom:6px;font-size:12px;color:{color};display:flex;align-items:center;gap:6px;">'
             f'{icon} {item.get("text", "")}</div>'
         )
 elif _rt_pending:
-    feedback_html = (
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
-        '분석 중입니다...</div>'
-    )
+    feedback_html = _skeleton_feedback("분석 중입니다...", animated=True)
 elif _rt_is_rapport:
-    feedback_html = (
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
-        '다음 답변부터 채점이 시작돼요</div>'
-    )
+    feedback_html = _skeleton_feedback("다음 답변부터 채점이 시작돼요", animated=False)
 else:
-    feedback_html = (
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:12px 0;">'
-        '첫 답변을 제출하면 표시됩니다</div>'
-    )
+    feedback_html = _skeleton_feedback("첫 답변을 제출하면 표시돼요", animated=False)
 
 # ── CSS ──────────────────────────────────────────────────────────────────
 st.markdown(f"""<style>
@@ -369,6 +456,17 @@ st.markdown(f"""<style>
 .iv-playback-replay {{
     font-size:12px; color:#9ca3af; text-decoration:underline; cursor:pointer;
 }}
+
+.iv-skel-bar {{ background:#eef0f3; }}
+.iv-skel-anim {{
+    background:linear-gradient(90deg,#eef0f3 25%,#f8fafc 37%,#eef0f3 63%);
+    background-size:400px 100%;
+    animation:iv-skel-shimmer 1.6s ease-in-out infinite;
+}}
+@keyframes iv-skel-shimmer {{
+    0%   {{ background-position:-120px 0; }}
+    100% {{ background-position:120px 0; }}
+}}
 </style>""", unsafe_allow_html=True)
 
 # ── 헤더 우측 ─────────────────────────────────
@@ -393,9 +491,7 @@ st.markdown(
     f'</div></div>'
     f'<div style="display:flex;align-items:center;gap:6px;background:#fff5f5;'
     f'border-radius:8px;height:34px;padding:0 14px;">'
-    f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626"'
-    f' stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/>'
-    f'<polyline points="12 6 12 12 16 14"/></svg>'
+    f'<i class="ph-bold ph-clock" style="font-size:14px;color:#dc2626;"></i>'
     f'<span id="iv-timer" style="font-size:13px;font-weight:700;color:#dc2626;">{timer_str}</span>'
     f'</div>'
     f'<div id="end-interview" data-pending="{str(_rt_pending).lower()}" '
@@ -424,27 +520,23 @@ webcam_html = (
     f'<div id="webcam-preview-divider" style="height:1px;background:#e5e7eb;margin-bottom:16px;{_webcam_display}"></div>'
 )
 
-if _rt_is_rapport:
-    _panel_body = (
-        '<div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">실시간 피드백</div>'
-        '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">자기소개 답변은 채점하지 않아요</div>'
-        '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:40px 0;">'
-        '다음 답변부터 점수와 피드백이 표시돼요</div>'
-    )
-else:
-    _panel_body = (
-        '<div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">실시간 피드백</div>'
-        '<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">AI가 분석 중입니다</div>'
-        '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
-        + donut_svg
-        + '<div style="font-size:12px;font-weight:500;color:#111827;margin-top:4px;">현재 점수</div>'
-        '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">※ 영상은 점수에 반영되지 않습니다</div>'
-        '</div>'
-        '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
-        + scores_html
-        + '<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:10px;">AI 실시간 피드백</div>'
-        + feedback_html
-    )
+_panel_subtitle = (
+    "자기소개 답변은 채점하지 않아요" if (_rt_is_rapport and not _rt_pending)
+    else "AI가 분석 중입니다"
+)
+_panel_body = (
+    '<div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">실시간 피드백</div>'
+    f'<div style="font-size:12px;color:#6b7280;margin-bottom:16px;">{_panel_subtitle}</div>'
+    '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:8px;">'
+    + donut_svg
+    + '<div style="font-size:12px;font-weight:500;color:#111827;margin-top:4px;">현재 점수</div>'
+    '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">※ 영상은 점수에 반영되지 않습니다</div>'
+    '</div>'
+    '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:12px;">세부 평가 항목</div>'
+    + scores_html
+    + '<div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:10px;">AI 실시간 피드백</div>'
+    + feedback_html
+)
 
 st.markdown(
     '<div style="position:fixed;top:60px;right:0;width:288px;'
@@ -567,7 +659,7 @@ body{{
   var _awaitingAnswer = {str(bool(st.session_state.iv_messages and st.session_state.iv_messages[-1]["role"] == "ai")).lower()};
   var _timeupNoteShown = false;
   function _tick() {{
-    var rem = Math.max(0, 30*60 - Math.floor(Date.now()/1000 - _startSec));
+    var rem = Math.max(0, {_INTERVIEW_LIMIT_SEC} - Math.floor(Date.now()/1000 - _startSec));
     var el  = window.parent.document.getElementById('iv-timer');
     if (el) el.textContent =
       String(Math.floor(rem/60)).padStart(2,'0') + ':' +
@@ -690,6 +782,7 @@ body{{
   sbtn.addEventListener('click', send);
 
   // ── 카메라 토글 ──────
+  var _camGen = (window.parent.__ivCamGen = (window.parent.__ivCamGen || 0) + 1);
   var webcamOn = {str(webcam_on).lower()};
   var CAM_OUTLINE =
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" ' +
@@ -702,7 +795,24 @@ body{{
     '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="white"/>' +
     '<circle cx="12" cy="13" r="4" fill="#3b6def"/>' +
     '</svg>';
+
+  (function syncCamToActualStream() {{
+    var vr = window.parent.__ivVideoRec;
+    if (vr && vr.stream) {{
+      webcamOn = true;
+      cbtn.innerHTML = CAM_FILLED;
+      cbtn.style.background  = '#3b6def';
+      cbtn.style.borderColor = '#3b6def';
+      var pv0 = doc.getElementById('webcam-preview-block');
+      var pd0 = doc.getElementById('webcam-preview-divider');
+      if (pv0) pv0.style.display = '';
+      if (pd0) pd0.style.display = '';
+      startVideoRecording();
+    }}
+  }})();
+
   cbtn.addEventListener('click', function() {{
+    if (window.parent.__ivCamGen !== _camGen) return;  // 낡은 iframe에서 온 클릭은 무시
     webcamOn = !webcamOn;
     cbtn.innerHTML = webcamOn ? CAM_FILLED : CAM_OUTLINE;
     cbtn.style.background  = webcamOn ? '#3b6def' : '#f8fafc';
@@ -896,14 +1006,103 @@ body{{
     return picked || voices[0];
   }}
 
+  // ── 질문 음성: 서버(Google TTS)가 만든 mp3 우선, 없으면 브라우저 음성 ─────
+  (function initTtsPlayer() {{
+    var pWin = window.parent;
+    if (pWin.__ivTtsInit) return;
+    pWin.__ivTtsInit = true;
+    var _s = pWin.document.createElement('script');
+    _s.textContent = [
+      'window.__ivTtsClips = window.__ivTtsClips || {{}};',
+      'window.__ivTtsAudio = null;',
+      'window.__ivTtsRow = function(msgIdx) {{',
+      '  var rows = document.querySelectorAll(".iv-playback-row");',
+      '  for (var i = 0; i < rows.length; i++) {{',
+      '    if (rows[i].getAttribute("data-msg-idx") === String(msgIdx)) return rows[i];',
+      '  }}',
+      '  return null;',
+      '}};',
+      'window.__ivTtsStop = function() {{',
+      '  var a = window.__ivTtsAudio;',
+      '  window.__ivTtsAudio = null;',
+      '  if (a) {{ a.onplay = a.onended = a.onerror = null; try {{ a.pause(); }} catch (e) {{}} }}',
+      '  if (window.speechSynthesis) window.speechSynthesis.cancel();',
+      '  document.querySelectorAll(".iv-playback-row.playing").forEach(function(r) {{ r.classList.remove("playing"); }});',
+      '}};',
+      'window.__ivTtsPlay = function(key, msgIdx, onFail) {{',
+      '  var src = window.__ivTtsClips[key];',
+      '  if (!src) return false;',
+      '  var row = window.__ivTtsRow(msgIdx);',
+      '  var a = new Audio(src);',
+      '  window.__ivTtsAudio = a;',
+      '  function fail(err) {{',
+      '    if (window.__ivTtsAudio !== a) return;',
+      '    window.__ivTtsAudio = null;',
+      '    if (row) row.classList.remove("playing");',
+      '    console.warn("[음성] mp3 재생 실패 → 브라우저 음성으로 대체:", err);',
+      '    if (onFail) onFail();',
+      '  }}',
+      '  a.onplay = function() {{ if (row) row.classList.add("playing"); }};',
+      '  a.onended = function() {{ if (row) row.classList.remove("playing"); if (window.__ivTtsAudio === a) window.__ivTtsAudio = null; }};',
+      '  a.onerror = function() {{ fail(a.error); }};',
+      '  var p = a.play();',
+      '  if (p && p.catch) p.catch(fail);',
+      '  return true;',
+      '}};'
+    ].join('\\n');
+    pWin.document.head.appendChild(_s);
+  }})();
+
+  var _ttsPersona = {json.dumps(_persona)};
+  function ttsKey(text) {{
+    return _ttsPersona + '|' + String(text || '').replace(/\\n/g, ' ').trim();
+  }}
+  var _lastAiAudioSrc = {json.dumps(_last_ai_audio_src)};
+  if (_lastAiAudioSrc && window.parent.__ivTtsClips) {{
+    window.parent.__ivTtsClips[ttsKey({json.dumps(_last_ai_text)})] = _lastAiAudioSrc;
+  }}
+
+  function stopAllSpeech() {{
+    var pWin = window.parent;
+    if (pWin.__ivTtsStop) {{ pWin.__ivTtsStop(); return; }}
+    if (pWin.speechSynthesis) pWin.speechSynthesis.cancel();
+    pWin.document.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
+      r.classList.remove('playing');
+    }});
+  }}
+
+  // 자동 읽기와 "다시 듣기"가 모두 이 함수를 부른다 (호출 방식은 그대로).
   function speakText(text, msgIdx) {{
+    stopAllSpeech();
+    var pWin = window.parent;
+    var usedMp3 = pWin.__ivTtsPlay && pWin.__ivTtsPlay(ttsKey(text), msgIdx, function() {{
+      speakWithBrowserVoice(text, msgIdx);
+    }});
+    if (!usedMp3) speakWithBrowserVoice(text, msgIdx);
+  }}
+
+  function speakWithBrowserVoice(text, msgIdx) {{
     var pWin = window.parent;
     if (!pWin.speechSynthesis) return;
     pWin.speechSynthesis.cancel();
-    doc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
-      r.classList.remove('playing');
-    }});
-    var row = doc.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
+    if (!(pWin.speechSynthesis.getVoices() || []).length) {{
+      var started = false;
+      var go = function() {{
+        if (started) return;
+        started = true;
+        pWin.speechSynthesis.removeEventListener('voiceschanged', go);
+        speakWithBrowserVoiceNow(text, msgIdx);
+      }};
+      pWin.speechSynthesis.addEventListener('voiceschanged', go);
+      setTimeout(go, 1000);
+      return;
+    }}
+    speakWithBrowserVoiceNow(text, msgIdx);
+  }}
+
+  function speakWithBrowserVoiceNow(text, msgIdx) {{
+    var pWin = window.parent;
+    var row = pWin.document.querySelector('.iv-playback-row[data-msg-idx="' + msgIdx + '"]');
     var u = new (pWin.SpeechSynthesisUtterance)(text);
     u.lang = 'ko-KR';
     var voice = pickKoreanVoice(pWin);
@@ -970,10 +1169,7 @@ body{{
         b.style.display = on ? '' : 'none';
       }});
       if (!on) {{
-        window.parent.speechSynthesis.cancel();
-        pdoc.querySelectorAll('.iv-playback-row.playing').forEach(function(r) {{
-          r.classList.remove('playing');
-        }});
+        stopAllSpeech();
       }}
     }};
   }}
@@ -999,6 +1195,9 @@ body{{
   // ── 면접 종료 ─────────────────────────
 
   function showLoadingAndEnd(timeUpNote) {{
+    // 시간이 이미 끝난 채로 화면이 열리면 아래쪽 'var doc' 할당보다 먼저 _tick에서 불린다
+    var doc = window.parent.document;
+    stopAllSpeech();
     if (timeUpNote && !doc.getElementById('_iv_ov') && !doc.getElementById('_iv_timeup_modal')) {{
       var modal = doc.createElement('div');
       modal.id = '_iv_timeup_modal';
@@ -1009,7 +1208,7 @@ body{{
         'box-shadow:0 4px 24px rgba(0,0,0,0.12);text-align:center;max-width:420px;width:90%;">' +
         '<div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;">면접이 종료되었습니다</div>' +
         '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:28px;">' +
-        '30분 제한 시간이 지나 면접이 자동으로 종료되었습니다.<br>' +
+        '{_INTERVIEW_LIMIT_MIN}분 제한 시간이 지나 면접이 자동으로 종료되었습니다.<br>' +
         '방금 작성하신 답변까지는 정상적으로 제출됐어요.</div>' +
         '<button id="_iv_timeup_ok" style="background:#3b6def;color:white;border:none;' +
         'border-radius:10px;padding:12px 32px;font-size:14px;font-weight:600;cursor:pointer;">확인</button>' +
@@ -1072,6 +1271,17 @@ body{{
         'width:14px;height:14px;border-radius:50%;background:' + (failed ? '#dc2626' : '#3b6def') + ';color:white;' +
         'font-size:9px;flex-shrink:0;">' + (failed ? '✕' : '✓') + '</span>' + label;
     }}
+    // 실패가 아니라 "아직 진행 중"인 상태 — 회색 점 + 안내 문구 (빨간 ✕를 쓰지 않음)
+    function markPending(rowId, label) {{
+      var row = doc.getElementById(rowId);
+      if (!row) return;
+      row.style.color = '#6b7280';
+      row.style.fontWeight = '400';
+      row.innerHTML =
+        '<span style="display:inline-flex;align-items:center;justify-content:center;' +
+        'width:14px;height:14px;border-radius:50%;background:#9ca3af;color:white;' +
+        'font-size:9px;flex-shrink:0;">…</span>' + label;
+    }}
     function markActive(rowId, label) {{
       var row = doc.getElementById(rowId);
       if (!row) return;
@@ -1123,7 +1333,7 @@ body{{
     var _videoTimedOut = false;
     var videoDone = hasVideoStream ? new Promise(function(res) {{
       stopAndUploadVideo(function(success) {{
-        if (_videoTimedOut) {{ res(); return; }}  // 이미 시간 초과로 라벨을 정한 뒤라 덮어쓰지 않는다
+        if (_videoTimedOut) {{ res(); return; }}  
         videoResolved = true;
         markDone('_iv_ov_row_video', success ? '영상 저장 완료' : '영상 저장 실패', !success);
         updateHeading();
@@ -1132,14 +1342,14 @@ body{{
     }}) : Promise.resolve();
     var videoTimeout = hasVideoStream ? new Promise(function(res) {{
       setTimeout(function() {{
-        if (videoResolved) {{ res(); return; }}  // 그새 videoDone이 먼저 끝났으면 그대로 둔다
-        console.warn('[영상] 업로드 대기 시간 초과(20초) — 결과 화면으로 진행합니다.');
+        if (videoResolved) {{ res(); return; }}  
+        console.warn('[영상] 업로드가 {_VIDEO_UPLOAD_WAIT_SEC}초 안에 끝나지 않음 — 저장은 백그라운드에서 계속되고, 결과 화면으로 먼저 진행합니다.');
         _videoTimedOut = true;
         videoResolved = true;
-        markDone('_iv_ov_row_video', '영상 저장 시간 초과', true);
+        markPending('_iv_ov_row_video', '영상은 백그라운드에서 계속 저장돼요');
         updateHeading();
         res();
-      }}, 20000);
+      }}, {_VIDEO_UPLOAD_WAIT_SEC * 1000});
     }}) : Promise.resolve();
     var endDone = fetch('{api.PUBLIC_BASE_URL}/interview/sessions/' + _videoSessionId + '/end', {{
       method: 'POST',
@@ -1215,7 +1425,7 @@ body{{
     hintRow.textContent = '녹음 중... 다시 누르면 텍스트로 변환됩니다';
     hintRow.style.display = 'block';
     noteRow.style.display = 'block';
-    speechRateRow.style.display = 'none';  // 새로 녹음을 시작하면 이전 답변의 발화 속도 표시는 지운다
+    speechRateRow.style.display = 'none';  
     recomputeBarHeight();
   }}
 
@@ -1361,13 +1571,19 @@ for i, msg in enumerate(st.session_state.iv_messages):
 
 # ── 채팅 입력 ─────────────────────────────────────────────────────────────
 
+_SELF_INTRO_MIN_CHARS = 10
+_answered_count = sum(1 for m in st.session_state.iv_messages if m["role"] == "user")
+
 if prompt := st.chat_input("답변을 입력하세요..."):
-    st.session_state.iv_messages.append({"role": "user", "tag": None, "text": prompt})
-    st.session_state["_pending_answer"] = {
-        "prompt": prompt,
-        "input_type": st.session_state.get("input_type_hidden", "text"),
-    }
-    st.rerun()
+    if _answered_count == 0 and len("".join(prompt.split())) < _SELF_INTRO_MIN_CHARS:
+        show_error("답변이 너무 짧습니다. 조금 더 자세히 답변해 주세요.")
+    else:
+        st.session_state.iv_messages.append({"role": "user", "tag": None, "text": prompt})
+        st.session_state["_pending_answer"] = {
+            "prompt": prompt,
+            "input_type": st.session_state.get("input_type_hidden", "text"),
+        }
+        st.rerun()
 
 _pending = st.session_state.get("_pending_answer")
 if _pending:
@@ -1386,7 +1602,7 @@ if _pending:
             st.session_state["realtime_score"] = resp.get("realtime_score")
             st.session_state["realtime_feedback"] = resp.get("realtime_feedback")
             st.session_state["realtime_is_rapport"] = bool(resp.get("is_rapport"))
-            _iv_time_up = (time.time() - st.session_state.iv_start) >= 30 * 60
+            _iv_time_up = (time.time() - st.session_state.iv_start) >= _INTERVIEW_LIMIT_SEC
             if resp.get("question_type") == "end" or _iv_time_up:
                 try:
                     api.end_session(session_id)
