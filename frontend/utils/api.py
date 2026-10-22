@@ -183,7 +183,9 @@ def get_result(session_id: str, access_token: str | None = None) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/result",
         headers=_headers(access_token),
-        timeout=90,
+        # 면접 종료가 비동기(202)로 바뀌면서 /result 가 리포트 완성까지 서버에서 최대 150초 기다린다.
+        # 리포트 생성 실측 62~245초(중앙값 126초)라 그보다 넉넉하게 둔다.
+        timeout=180,
     )
     _check(res)
     return res.json()

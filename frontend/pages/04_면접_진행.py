@@ -11,6 +11,7 @@ from utils.brand import FAVICON
 import streamlit.components.v1 as components
 from utils.paths import resource
 from components.sidebar import render_sidebar
+from components.loading_card import LOADING_CSS, LOADING_CSS_TEXT, loading_html
 from utils.state import init_session, get, set as state_set, mark_session_expired, render_session_expired_banner
 from utils.ui import show_error
 from utils import api
@@ -62,50 +63,17 @@ if "iv_messages" not in st.session_state:
         [data-testid="stMainBlockContainer"] { padding: 0 !important; }
         [data-testid="stVerticalBlock"]    { gap: 0 !important; }
         header, footer, [data-testid="stSidebar"] { display: none !important; }
-        @keyframes iv_spin { to { transform: rotate(360deg); } }
-        .iv-prep-spinner {
-          width: 52px; height: 52px;
-          border: 4px solid #e5e7eb;
-          border-top-color: #3b6def;
-          border-radius: 50%;
-          animation: iv_spin 0.9s linear infinite;
-          margin: 0 auto 28px;
-        }
         </style>""", unsafe_allow_html=True)
+        st.markdown(LOADING_CSS, unsafe_allow_html=True)
         _IV_STAGE_KEYS   = ["parsing", "matching", "generating"]
         _IV_PREP_STAGES  = ["이력서·채용공고 읽는 중...", "직무 적합도 분석 중...", "맞춤 질문 만드는 중..."]
 
         def _iv_prep_html(stage_idx: int) -> str:
-            rows = ""
-            for i, label in enumerate(_IV_PREP_STAGES):
-                if i < stage_idx:
-                    dot = ('<span style="display:inline-flex;align-items:center;justify-content:center;'
-                           'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;'
-                           'font-size:9px;flex-shrink:0;"><i class="ph-bold ph-check" style="font-size:9px;"></i></span>')
-                    text_style = "color:#9ca3af;"
-                elif i == stage_idx:
-                    dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                           'background:#3b6def;flex-shrink:0;"></span>')
-                    text_style = "color:#3b6def;font-weight:700;"
-                else:
-                    dot = ('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                           'background:#e5e7eb;flex-shrink:0;"></span>')
-                    text_style = "color:#9ca3af;"
-                rows += (
-                    f'<div style="font-size:13px;margin-bottom:10px;display:flex;align-items:center;'
-                    f'gap:10px;{text_style}">{dot}{label}</div>'
-                )
-            heading = _IV_PREP_STAGES[stage_idx]
-            return (
-                '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;">'
-                '<div style="background:white;border-radius:20px;padding:52px 56px;'
-                'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">'
-                '<div class="iv-prep-spinner"></div>'
-                f'<div style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">{heading}</div>'
-                '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">'
-                '이력서와 채용공고를 분석해 맞춤 질문을 만들고 있어요.<br>잠시만 기다려 주세요.</div>'
-                f'<div style="text-align:left;display:inline-block;">{rows}</div>'
-                '</div></div>'
+            return loading_html(
+                "INTERVIEW READY",
+                "이력서와 채용공고를 분석해 맞춤 질문을 만들고 있어요.<br>잠시만 기다려 주세요.",
+                _IV_PREP_STAGES, stage_idx, show_progress=True,
+                done_labels=["이력서·채용공고 읽기", "직무 적합도 분석", "맞춤 질문 만들기"],
             )
 
         if "_iv_result" not in st.session_state:
@@ -347,7 +315,8 @@ def _skeleton_scores(note: str, animated: bool) -> str:
             f'<div style="border-radius:3px;height:5px;margin-bottom:14px;overflow:hidden;">'
             f'<div class="{bar_cls}" style="height:5px;border-radius:3px;"></div></div>'
         )
-    rows += f'<div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:2px;">{note}</div>'
+    if note:
+        rows += f'<div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:2px;">{note}</div>'
     return rows
 
 def _skeleton_feedback(note: str, animated: bool) -> str:
@@ -376,7 +345,8 @@ if SCORES:
 elif _rt_pending:
     scores_html = _skeleton_scores("분석 중입니다...", animated=True)
 elif _rt_is_rapport:
-    scores_html = _skeleton_scores("자기소개 답변은 점수에 반영되지 않아요", animated=False)
+    # 패널 제목 아래에 이미 "자기소개 답변은 채점하지 않아요"가 있어 여기서는 다시 쓰지 않는다.
+    scores_html = _skeleton_scores("", animated=False)
 else:
     scores_html = _skeleton_scores("첫 답변을 제출하면 표시돼요", animated=False)
 
@@ -1227,86 +1197,78 @@ body{{
     var vr = window.parent.__ivVideoRec;
     var hasVideoStream = !!(vr && vr.stream);
 
+    // 화면 모양은 면접 준비 · 결과 분석 로딩과 같은 카드(components/loading_card.py)를 쓴다.
+    // /end 는 백엔드 버전에 따라 리포트 생성까지 기다리기도(동기), 바로 202 로 끝나기도(비동기) 한다.
+    // 어느 쪽이든 맞도록 '면접 종료 처리'로 보여 주고, 리포트 대기는 다음 화면(결과 분석 로딩)에서 안내한다.
+    var _ldCheck = '<svg width="12" height="12" viewBox="0 0 256 256" aria-hidden="true">' +
+      '<path d="M40 144l56 56L216 80" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var _ldCross = '<svg width="11" height="11" viewBox="0 0 256 256" aria-hidden="true">' +
+      '<path d="M64 64l128 128M192 64L64 192" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round"/></svg>';
+
     if (!doc.getElementById('_iv_ov')) {{
       var sty = doc.createElement('style');
       sty.id = '_iv_sty';
-      sty.textContent = '@keyframes _ivspin {{ to {{ transform: rotate(360deg); }} }}' +
-        '#_iv_sp {{ animation: _ivspin 0.9s linear infinite; }}';
+      sty.textContent = {json.dumps(LOADING_CSS_TEXT)};
       doc.head.appendChild(sty);
 
       var ov = doc.createElement('div');
       ov.id = '_iv_ov';
       ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
         'background:#f8fafc;z-index:9999999;display:flex;align-items:center;justify-content:center;';
+      // 영상 업로드는 종료 요청과 동시에 시작되므로 처음부터 '진행 중'으로 보여 준다.
       var _videoRowHtml = hasVideoStream ?
-        '<div id="_iv_ov_row_video" style="font-size:13px;color:#9ca3af;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e5e7eb;flex-shrink:0;"></span>' +
-        '영상 저장 중...</div>' : '';
+        '<div id="_iv_ov_row_video" class="ld-li now"><span class="k"></span>영상 저장 중...</div>' : '';
       ov.innerHTML =
-        '<div style="background:white;border-radius:20px;padding:52px 56px;' +
-        'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">' +
-        '<div id="_iv_sp" style="width:52px;height:52px;border:4px solid #e5e7eb;' +
-        'border-top-color:#3b6def;border-radius:50%;margin:0 auto 28px;"></div>' +
-        '<div id="_iv_ov_heading" style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">' +
-        '면접을 마무리하고 있습니다</div>' +
-        '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">' +
-        '결과 리포트로 이동할 준비를 하고 있어요.<br>잠시만 기다려 주세요.</div>' +
-        '<div style="text-align:left;display:inline-block;">' +
-        '<div id="_iv_ov_row_end" style="font-size:13px;color:#3b6def;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:10px;">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b6def;flex-shrink:0;"></span>' +
-        '면접 종료 처리 중...</div>' +
+        '<div class="ld-wrap" style="width:100%;"><div class="ld-card">' +
+        '<div class="ld-cap">WRAPPING UP</div><div class="ld-spin"></div>' +
+        '<div id="_iv_ov_heading" class="ld-title">면접을 마무리하고 있어요</div>' +
+        '<div id="_iv_ov_desc" class="ld-desc">답변을 정리하고 결과 분석을 준비하고 있어요.<br>잠시만 기다려 주세요.</div>' +
+        '<div class="ld-list">' +
+        '<div id="_iv_ov_row_end" class="ld-li now"><span class="k"></span>면접 종료 처리 중...</div>' +
         _videoRowHtml +
-        '</div>' +
-        '</div>';
+        '</div></div></div>';
       doc.body.appendChild(ov);
     }}
 
     function markDone(rowId, label, failed) {{
       var row = doc.getElementById(rowId);
       if (!row) return;
-      row.style.color = failed ? '#dc2626' : '#9ca3af';
-      row.style.fontWeight = '400';
-      row.innerHTML =
-        '<span style="display:inline-flex;align-items:center;justify-content:center;' +
-        'width:14px;height:14px;border-radius:50%;background:' + (failed ? '#dc2626' : '#3b6def') + ';color:white;' +
-        'font-size:9px;flex-shrink:0;">' + (failed ? '✕' : '✓') + '</span>' + label;
+      row.className = 'ld-li ' + (failed ? 'fail' : 'done');
+      row.innerHTML = '<span class="k">' + (failed ? _ldCross : _ldCheck) + '</span>' + label +
+        (failed ? '' : '<span class="r">완료</span>');
     }}
-    // 실패가 아니라 "아직 진행 중"인 상태 — 회색 점 + 안내 문구 (빨간 ✕를 쓰지 않음)
+    // 실패가 아니라 "아직 진행 중"인 상태 — 회색 … + 안내 문구 (빨간 ✕를 쓰지 않음)
     function markPending(rowId, label) {{
       var row = doc.getElementById(rowId);
       if (!row) return;
-      row.style.color = '#6b7280';
-      row.style.fontWeight = '400';
-      row.innerHTML =
-        '<span style="display:inline-flex;align-items:center;justify-content:center;' +
-        'width:14px;height:14px;border-radius:50%;background:#9ca3af;color:white;' +
-        'font-size:9px;flex-shrink:0;">…</span>' + label;
+      row.className = 'ld-li wait';
+      row.innerHTML = '<span class="k">…</span>' + label;
     }}
     function markActive(rowId, label) {{
       var row = doc.getElementById(rowId);
-      if (!row) return;
-      row.style.color = '#3b6def';
-      row.style.fontWeight = '700';
-      row.innerHTML =
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;' +
-        'background:#3b6def;flex-shrink:0;"></span>' + label;
+      if (!row || row.className.indexOf('done') !== -1 || row.className.indexOf('fail') !== -1) return;
+      row.className = 'ld-li now';
+      row.innerHTML = '<span class="k"></span>' + label;
     }}
 
     var endResolved = false, videoResolved = !hasVideoStream;
     function updateHeading() {{
       var h = doc.getElementById('_iv_ov_heading');
+      var d = doc.getElementById('_iv_ov_desc');
       if (!h) return;
       if (endResolved && videoResolved) {{
-        h.textContent = '결과 화면으로 이동합니다';
+        h.textContent = '결과 분석으로 넘어가요';
+        if (d) d.innerHTML = '면접이 종료됐어요.<br>곧 결과 분석 화면으로 이동해요.';
       }} else if (endResolved) {{
-        h.textContent = '영상을 저장하고 있습니다';
+        h.textContent = '영상을 저장하고 있어요';
+        if (d) d.innerHTML = '면접이 종료됐어요.<br>영상 저장이 끝나면 바로 이동해요.';
       }} else {{
-        h.textContent = '면접을 마무리하고 있습니다';
+        h.textContent = '면접을 마무리하고 있어요';
       }}
     }}
 
     function navigate() {{
-      markDone('_iv_ov_row_end', '면접 종료 처리 완료');
+      markDone('_iv_ov_row_end', '면접 종료 처리');
       updateHeading();
 
       var wc = hasVideoStream ? '1' : '0';
@@ -1335,7 +1297,7 @@ body{{
       stopAndUploadVideo(function(success) {{
         if (_videoTimedOut) {{ res(); return; }}  
         videoResolved = true;
-        markDone('_iv_ov_row_video', success ? '영상 저장 완료' : '영상 저장 실패', !success);
+        markDone('_iv_ov_row_video', success ? '영상 저장' : '영상 저장 실패', !success);
         updateHeading();
         res();
       }});
@@ -1358,7 +1320,7 @@ body{{
       console.warn('[면접 종료] 서버에 종료 알림 실패:', err);
     }}).then(function(v) {{
       endResolved = true;
-      markDone('_iv_ov_row_end', '면접 종료 처리 완료');
+      markDone('_iv_ov_row_end', '면접 종료 처리');
       if (hasVideoStream) markActive('_iv_ov_row_video', '영상 저장 중...');
       updateHeading();
       return v;
