@@ -41,7 +41,11 @@ from backend.schemas.interview import (
 )
 from backend.schemas.video import VideoMetricsResponse, VideoUploadResponse
 from backend.services import video_service
-from backend.services.interview_service import InterviewService, stream_session
+from backend.services.interview_service import (
+    InterviewService,
+    generate_report,
+    stream_session,
+)
 from backend.services.video_service import VideoService
 
 router = APIRouter(prefix="/interview", tags=["Interview"])
@@ -122,20 +126,25 @@ async def chat(
     return await service.process_answer(session_id, req.answer, req.input_type)
 
 
-@router.post("/sessions/{session_id}/end")
+@router.post("/sessions/{session_id}/end", status_code=202)
 async def end_session(
     session_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
     """
-    면접 종료.
+    면접 종료 접수. 중도 종료여도 리포트를 생성한다.
 
-    중도 종료여도 리포트를 생성한다. 그래프에 종료 신호를 넣어 report_generator 를
-    태우므로 LLM 호출이 발생하고 수십 초가 걸릴 수 있다.
+    리포트 생성은 LLM 호출이 이어져 수십 초 걸리므로 여기서 기다리지 않는다.
+    접수만 하고 202 로 답한 뒤, 결과는 GET /result 가 생성 완료를 기다려 내려준다.
+    (영상 업로드와 같은 방식이다)
     """
     service = InterviewService(db, user)
-    await service.end_session(session_id)
+    # add_task 를 commit 이후에 걸어야 백그라운드 쪽에서 상태를 못 읽는 일이 없다.
+    # accept_end 가 commit 까지 끝내고 돌아온다.
+    if service.accept_end(session_id):
+        background_tasks.add_task(generate_report, session_id)
     return {"message": "면접이 종료되었습니다."}
 
 

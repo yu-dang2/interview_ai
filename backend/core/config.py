@@ -123,6 +123,22 @@ INTERVIEW_STALE_AFTER_MIN = int(
     os.getenv("INTERVIEW_STALE_AFTER_MIN", str(INTERVIEW_TIME_LIMIT_MIN * 2))
 )
 
+# ── 리포트 생성 (백그라운드) ────────────────────────────
+# 면접 종료는 접수만 하고 리포트 생성은 백그라운드로 돈다. (영상 분석과 같은 방식)
+# GET /result 가 생성이 끝날 때까지 이만큼 기다린다.
+#결과 로딩 화면이 그동안 스피너를 돌리므로 사용자에게는 기존과 같아 보인다.
+#
+# 프론트의 get_result 타임아웃(180초)보다 짧아야 한다.
+# 길게 잡으면 프론트가 먼저 끊어 503 안내조차 받지 못한다.
+#
+# 150초는 실측 7회(74~245초, 중앙값 149초)를 기준으로 잡은 타협값이다.
+# 최대값까지 덮으려면 300초가 필요한데, 그러면 생성이 실패했을 때
+# 사용자가 5분을 기다리게 된다.
+REPORT_WAIT_TIMEOUT_SEC = int(os.getenv("REPORT_WAIT_TIMEOUT_SEC", "150"))
+
+# 위 대기 중 결과 행을 다시 확인하는 간격.
+REPORT_POLL_INTERVAL_SEC = float(os.getenv("REPORT_POLL_INTERVAL_SEC", "1.5"))
+
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
 # report_generator가 마지막 AIMessage로 리포트 JSON 전체를 넣기 때문에,
