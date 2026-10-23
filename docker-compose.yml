@@ -112,6 +112,17 @@ services:
       GOOGLE_TTS_VOICE_EXEC: ${GOOGLE_TTS_VOICE_EXEC:-ko-KR-Chirp3-HD-Algieba}
       GOOGLE_TTS_SPEAKING_RATE: ${GOOGLE_TTS_SPEAKING_RATE:-1.0}
       TTS_MAX_CHARS: ${TTS_MAX_CHARS:-600}
+
+      # 화면이 직접 읽는 시간 값. api 쪽에도 같은 이름이 있는데 양쪽에 다 줘야 한다.
+      # 한쪽만 바꾸면 서버는 20분으로 끊는데 화면은 30분을 세는 식으로 어긋난다.
+      INTERVIEW_TIME_LIMIT_MIN: ${INTERVIEW_TIME_LIMIT_MIN:-30}
+
+      # 영상 업로드를 기다리는 시간. 넘겨도 실패로 표시하지 않고 백그라운드로 계속 올라간다.
+      # 배포 서버는 시드니 리전이라 30분 면접(100MB 안팎)이면 기본 20초로는 모자라다.
+      VIDEO_UPLOAD_WAIT_SEC: ${VIDEO_UPLOAD_WAIT_SEC:-20}
+
+      # 결과 화면에서 업로드 중인 영상을 "저장 중"으로 기다리는 시간.
+      VIDEO_RESULT_WAIT_SEC: ${VIDEO_RESULT_WAIT_SEC:-120}
     ports:
       - "8501:8501"
     command:
