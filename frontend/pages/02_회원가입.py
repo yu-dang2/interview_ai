@@ -127,7 +127,7 @@ st.markdown(f"""
         {CHECK}<span style="font-size:14px;color:white;">이력서 AI 분석 &amp; 최적화</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
-        {CHECK}<span style="font-size:14px;color:white;">LangGraph 꼬리질문 면접</span>
+        {CHECK}<span style="font-size:14px;color:white;">답변에 따라 이어지는 꼬리질문 면접</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
         {CHECK}<span style="font-size:14px;color:white;">웹캠 시선 처리 분석</span>
