@@ -426,6 +426,9 @@ st.markdown(f"""<style>
 .iv-playback-replay {{
     font-size:12px; color:#9ca3af; text-decoration:underline; cursor:pointer;
 }}
+/* 음성 안내 켜짐/꺼짐은 브라우저에 있으므로 body 클래스로 정한다 (새 질문이 늦게 그려져도 적용) */
+body.iv-vg-on .iv-playback-block {{ display:block !important; }}
+body.iv-vg-off .iv-playback-block {{ display:none !important; }}
 
 .iv-skel-bar {{ background:#eef0f3; }}
 .iv-skel-anim {{
@@ -1116,8 +1119,14 @@ body{{
   }}
   var vgTrack = doc.getElementById('vg-track');
   var vgKnob  = doc.getElementById('vg-knob');
+  function applyVgClass(on) {{
+    var body = window.parent.document.body;
+    body.classList.toggle('iv-vg-on', !!on);
+    body.classList.toggle('iv-vg-off', !on);
+  }}
   (function() {{
     var on = window.parent.__ivVoiceGuideOn;
+    applyVgClass(on);
     if (vgTrack) vgTrack.style.background = on ? '#3b6def' : '#e5e7eb';
     if (vgKnob)  vgKnob.style.left        = on ? '18px' : '2px';
     doc.querySelectorAll('.iv-playback-block').forEach(function(b) {{
@@ -1130,6 +1139,7 @@ body{{
     vgToggleEl.onclick = function() {{
       var on = !window.parent.__ivVoiceGuideOn;
       window.parent.__ivVoiceGuideOn = on;
+      applyVgClass(on);
       var pdoc = window.parent.document;
       var t = pdoc.getElementById('vg-track');
       var k = pdoc.getElementById('vg-knob');
@@ -1148,8 +1158,11 @@ body{{
   var _lastAiText = {json.dumps(_last_ai_text)};
 
   var _spokenKey = {json.dumps(str(get("session_id")))} + ':' + _lastAiIdx;
-  if (window.parent.__ivVoiceGuideOn && window.parent.__ivLastSpoken !== _spokenKey) {{
-    window.parent.__ivLastSpoken = _spokenKey;
+  // 음성이 꺼져 있을 때 온 질문도 '이미 본 질문'으로 기록한다.
+  // 기록하지 않으면, 나중에 음성을 다시 켜고 답변을 보낼 때 화면이 다시 그려지면서 이전 질문을 읽어 버린다.
+  var _isNewQuestion = window.parent.__ivLastSpoken !== _spokenKey;
+  if (_isNewQuestion) window.parent.__ivLastSpoken = _spokenKey;
+  if (window.parent.__ivVoiceGuideOn && _isNewQuestion) {{
     if (_lastAiText) {{
       var _autoSpoken = false;
       var _attemptAutoSpeak = function() {{
