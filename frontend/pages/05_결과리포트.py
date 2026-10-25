@@ -203,29 +203,31 @@ def _radar_svg(scores) -> str:
 def _trend_svg(points) -> str:
     """points: [(라벨, 점수, 이번 면접인지)] — 오래된 순"""
     W, H, L, Rr, top, bottom = 680, 200, 40, 660, 30, 150
-    lo, hi = 50, 100
+    # 아래 끝을 점수에 맞춰 내린다 (50 고정이면 50 미만 점수가 전부 같은 높이로 눌려 보인다)
+    lo = max(0, min(50, (min(p[1] for p in points) - 5) // 10 * 10)) if points else 50
+    hi = 100
     def y(v): return bottom - (max(lo, min(hi, v)) - lo) / (hi - lo) * (bottom - top)
     n = len(points)
     xs = [L + 40 + (Rr - L - 80) * (i / (n - 1) if n > 1 else 0.5) for i in range(n)]
+    ticks = (90, 75, 60) if lo >= 50 else tuple(t for t in (80, 60, 40, 20) if t > lo)
     grid = "".join(
         f'<line x1="{L}" y1="{y(v):.1f}" x2="{Rr}" y2="{y(v):.1f}" stroke="#eef0f4"/>'
         f'<text x="0" y="{y(v) + 4:.1f}" font-size="11" fill="#9ca3af" font-family="inherit">{v}</text>'
-        for v in (90, 75, 60)
+        for v in ticks
     )
-    guide = (f'<line x1="{L}" y1="{y(65):.1f}" x2="{Rr}" y2="{y(65):.1f}" stroke="#d97706" stroke-dasharray="4 4"/>'
-             f'<text x="{Rr}" y="{y(65) - 6:.1f}" text-anchor="end" font-size="11" font-weight="700" fill="#d97706" '
-             f'font-family="inherit">보통 65 이상</text>')
+    # '보통 65 이상' 글자는 제목 옆 범례로 옮겼다 (그래프 안에 두면 이번 점수 라벨과 겹친다)
+    guide = f'<line x1="{L}" y1="{y(65):.1f}" x2="{Rr}" y2="{y(65):.1f}" stroke="#d97706" stroke-dasharray="4 4"/>'
     path = " ".join(f'{"M" if i == 0 else "L"} {xs[i]:.1f} {y(p[1]):.1f}' for i, p in enumerate(points))
     dots = ""
     for i, (label, v, is_cur) in enumerate(points):
         if is_cur:
             dots += (f'<circle cx="{xs[i]:.1f}" cy="{y(v):.1f}" r="7" fill="#3b6def"/>'
                      f'<text x="{xs[i]:.1f}" y="{y(v) - 16:.1f}" text-anchor="middle" font-size="13" font-weight="800" '
-                     f'fill="#2f5bd8" font-family="inherit">{label} {v}</text>')
+                     f'fill="#2f5bd8" font-family="inherit" stroke="#fff" stroke-width="4" paint-order="stroke">{label} {v}</text>')
         else:
             dots += (f'<circle cx="{xs[i]:.1f}" cy="{y(v):.1f}" r="5" fill="#fff" stroke="#3b6def" stroke-width="3"/>'
                      f'<text x="{xs[i]:.1f}" y="{y(v) + 25:.1f}" text-anchor="middle" font-size="12" fill="#4b5563" '
-                     f'font-family="inherit">{label} · {v}</text>')
+                     f'font-family="inherit" stroke="#fff" stroke-width="4" paint-order="stroke">{label} · {v}</text>')
     return (f'<svg width="100%" viewBox="0 0 {W} {H}" style="display:block;height:auto;min-height:150px">{grid}{guide}'
             f'<path d="{path}" fill="none" stroke="#3b6def" stroke-width="3"/>{dots}</svg>')
 
@@ -303,6 +305,7 @@ st.markdown("""<style>
 
 .rr-kpi .kt, .rr-trend .tt, .rr-sb .h, .rr-vm .h, .rr-toc .th { font-weight: 700; }
 .rr-trend .tt span { font-weight: 500; }
+.rr-trend .tt span .rr-legend { display: inline-block; width: 16px; margin: 0 6px 3px 12px; border-top: 2px dashed #d97706; vertical-align: middle; }
 
 /* 마크다운 블록끼리는 margin이 적용되지 않아, 블록을 감싼 요소에 간격을 준다 */
 [data-testid="stElementContainer"]:has(.rr-hero) { margin-bottom: 22px !important; }
@@ -338,7 +341,8 @@ if len(history) >= 2:
     _trend_msg = ("이번이 가장 높은 종합 점수예요." if (history[-1]["total"] or 0) >= _best
                   else "지난 면접들과 비교해 보세요.")
     trend_html = (
-        f'<div class="rr-card rr-trend"><div class="tt">내 면접 점수 변화 <span>최근 {len(history)}회 · 종합 점수</span></div>'
+        f'<div class="rr-card rr-trend"><div class="tt">내 면접 점수 변화 <span>최근 {len(history)}회 · 종합 점수'
+        '<i class="rr-legend"></i>보통 65 이상</span></div>'
         f'<p>{_trend_msg}</p>{_trend_svg(_pts)}</div>'
     )
 else:
