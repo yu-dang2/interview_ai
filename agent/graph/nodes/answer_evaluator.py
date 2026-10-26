@@ -75,7 +75,6 @@ async def answer_evaluator(state: InterviewState):
 
     eval_result = await call_llm(system_prompt, user_content, stage="answer_evaluator")
 
-    # follow_up_count 가 0 이 아니면 방금 답한 것이 꼬리질문이다.
     entry = to_score_entry(
         eval_result,
         order=len(state.get("eval_results", [])) + 1,
