@@ -39,15 +39,19 @@ if _login_code:
             pass
         st.switch_page("pages/03_면접_환경설정.py")
     except Exception:
-        st.error("로그인 정보가 만료되었습니다. 다시 시도해주세요.")
+        # 이 화면에서 st.error 로 띄우면 아래 토큰 복원이 곧바로 다시 실행하면서
+        # 문구가 지워진다. 안내는 로그인 화면으로 넘겨서 거기서 띄운다.
+        st.session_state["_login_notice"] = "로그인 정보가 만료되었습니다. 다시 시도해주세요."
+        st.switch_page("pages/01_로그인.py")
 
 elif _login_error:
     st.query_params.clear()
-    st.error({
+    st.session_state["_login_notice"] = {
         "cancelled": "구글 로그인을 취소하셨습니다.",
         "email_unverified": "구글 계정의 이메일이 확인되지 않았습니다. 이메일로 로그인해주세요.",
         "not_configured": "구글 로그인은 준비 중입니다. 이메일로 로그인해주세요.",
-    }.get(_login_error, "구글 로그인에 실패했습니다. 이메일로 로그인해주세요."))
+    }.get(_login_error, "구글 로그인에 실패했습니다. 이메일로 로그인해주세요.")
+    st.switch_page("pages/01_로그인.py")
 
 logged_in = bool(restore_access_token_nonblocking())
 
