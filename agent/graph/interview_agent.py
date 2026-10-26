@@ -20,10 +20,6 @@ from agent.graph.edges.question_router import question_router
 
 
 def build_graph(checkpointer=None, interrupt_before=None):
-    """
-    interrupt_before: ["answer_evaluator"]를 주면 답변 평가 직전마다 멈추는 순환 그래프가 된다.
-        None이면 첫 질문 생성 후 종료한다.
-    """
     builder = StateGraph(
         InterviewState,
         input=InterviewInput,
@@ -43,7 +39,6 @@ def build_graph(checkpointer=None, interrupt_before=None):
 
     builder.add_edge(START, "persona_selector")
 
-    # 두 파서는 병렬로 돌고 matcher 에서 합류한다. 두 노드가 같은 State 키에 쓰면 안 된다.
     builder.add_edge("persona_selector", "jd_parser")
     builder.add_edge("persona_selector", "resume_parser")
     builder.add_edge("jd_parser", "jd_resume_matcher")

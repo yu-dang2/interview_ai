@@ -31,17 +31,12 @@ STAGE_DEFAULTS = {
     "follow_up_generator": {"model": "gpt-4o-mini"},
 }
 
-# gpt-4o 계열은 reasoning_effort 를 거부한다.
 REASONING_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
 
 _effort_warned = set()
 
 
 def model_for(stage: str | None = None) -> str:
-    """이 호출에 쓸 모델.
-
-    우선순위: LLM_MODEL_<STAGE> > LLM_MODEL > STAGE_DEFAULTS > DEFAULT_MODEL.
-    """
     keys = [f"LLM_MODEL_{stage.upper()}"] if stage else []
     keys.append("LLM_MODEL")
     for key in keys:
@@ -56,10 +51,6 @@ def supports_reasoning(model: str) -> bool:
 
 
 def reasoning_effort(stage: str | None = None) -> str | None:
-    """이 호출에 쓸 reasoning 강도. None 이면 인자를 넘기지 않는다(API 기본값).
-
-    우선순위: REASONING_EFFORT_<STAGE> > REASONING_EFFORT > STAGE_DEFAULTS > None.
-    """
     keys = [f"REASONING_EFFORT_{stage.upper()}"] if stage else []
     keys.append("REASONING_EFFORT")
 
@@ -77,7 +68,6 @@ def reasoning_effort(stage: str | None = None) -> str | None:
 
 
 def _clean_json_text(text: str) -> str:
-    """LLM 응답에서 마크다운 코드펜스(```json ... ```)와 앞뒤 공백 제거"""
     text = (text or "").strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
@@ -92,13 +82,6 @@ async def call_llm(
     max_retries: int = 3,
     stage: str | None = None,
 ) -> dict:
-    """
-    LLM 호출 후 JSON 파싱하여 반환.
-
-    API 오류와 JSON 파싱 실패는 지수 백오프(1초 → 2초 → 4초)로 재시도하고,
-    max_retries회 모두 실패하면 RuntimeError를 발생시킨다.
-    stage 는 호출한 노드 이름으로, 노드별 모델·reasoning 강도를 고르는 데 쓴다.
-    """
     last_error = None
 
     model = model_for(stage)
