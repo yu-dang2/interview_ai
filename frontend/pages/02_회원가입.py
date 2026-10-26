@@ -5,6 +5,7 @@ from utils.paths import resource
 from utils.state import init_session, set as state_set
 from utils.ui import show_error
 from utils import api
+from components.google_button import google_login_button
 
 st.set_page_config(
     page_title="회원가입 | intro",
@@ -200,6 +201,9 @@ with form_col:
                 show_error("회원가입에 실패했습니다. 다시 시도해주세요.")
 
     st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+    # 구글로 처음 들어오면 백엔드가 계정을 새로 만든다. 그래서 가입 화면에서도 같은 버튼을 쓴다.
+    google_login_button("Google로 시작하기", radius=6)
 
     st.markdown("""
     <p style="text-align:center;font-size:13px;color:#9ca3af;margin:0;">
