@@ -1,11 +1,14 @@
 import time
 import threading
 import streamlit as st
+from utils.brand import FAVICON
 from utils.state import init_session, get, set as state_set, mark_session_expired
 from utils import api
+from components.loading_card import LOADING_CSS, loading_html
 
 st.set_page_config(
     page_title="결과 분석 중 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -19,66 +22,25 @@ st.markdown("""<style>
 [data-testid="stVerticalBlock"]    { gap: 0 !important; }
 header, footer, [data-testid="stSidebar"] { display: none !important; }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.loading-spinner {
-  width: 52px; height: 52px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #3b6def;
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-  margin: 0 auto 28px;
-}
 </style>""", unsafe_allow_html=True)
+st.markdown(LOADING_CSS, unsafe_allow_html=True)
 
 _webcam_on = bool(get("webcam_on"))
 
 _STAGES = ["답변 내용 분석 중...", "역량 점수 산출 중...", "개선 피드백 생성 중..."]
-_STAGE_AT = [0.0, 2.2, 4.4]
+_STAGE_AT = [0.0, 40.0, 80.0]
 
 if _webcam_on:
     _STAGES = _STAGES + ["시선·표정 분석 중..."]
-    _STAGE_AT = _STAGE_AT + [6.6]
+    _STAGE_AT = _STAGE_AT + [110.0]
 
 
 def _loading_html(stage_idx: int) -> str:
-    rows = ""
-    for i, label in enumerate(_STAGES):
-        if i < stage_idx:
-            dot = (
-                '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'width:14px;height:14px;border-radius:50%;background:#3b6def;color:white;'
-                'font-size:9px;flex-shrink:0;">✓</span>'
-            )
-            text_style = "color:#9ca3af;"
-        elif i == stage_idx:
-            dot = (
-                '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                'background:#3b6def;flex-shrink:0;"></span>'
-            )
-            text_style = "color:#374151;"
-        else:
-            dot = (
-                '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                'background:#e5e7eb;flex-shrink:0;"></span>'
-            )
-            text_style = "color:#9ca3af;"
-        rows += (
-            f'<div style="font-size:13px;margin-bottom:10px;display:flex;align-items:center;'
-            f'gap:10px;{text_style}">{dot}{label}</div>'
-        )
-    heading = _STAGES[stage_idx]
-    return (
-        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;">'
-        '<div style="background:white;border-radius:20px;padding:52px 56px;'
-        'box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:480px;width:90%;">'
-        '<div class="loading-spinner"></div>'
-        f'<div style="font-size:20px;font-weight:700;color:#111827;margin-bottom:12px;">{heading}</div>'
-        '<div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:32px;">'
-        '면접 답변을 AI가 종합 분석 중입니다.<br>잠시만 기다려 주세요.</div>'
-        f'<div style="text-align:left;display:inline-block;">{rows}</div>'
-        '</div></div>'
+    return loading_html(
+        "ANALYZING",
+        "면접 답변을 AI가 종합 분석 중입니다.<br>리포트가 완성되기까지 1~2분 정도 걸릴 수 있어요.",
+        _STAGES, stage_idx,
+        done_labels=["답변 내용 분석", "역량 점수 산출", "개선 피드백 생성", "시선·표정 분석"][:len(_STAGES)],
     )
 
 

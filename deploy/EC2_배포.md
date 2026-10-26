@@ -148,13 +148,61 @@ http://<공인IP>:8080
 
 ---
 
-## 알아둘 것
-
-### 웹캠·음성은 아직 안 된다
+## 9. HTTPS 적용
 
 브라우저는 카메라와 마이크를 HTTPS 에서만 허용한다(localhost 는 예외).
-`http://<공인IP>:8080` 으로는 텍스트 면접만 된다.
-HTTPS 를 붙인 뒤에 웹캠·음성이 동작한다.
+http 로 띄우면 텍스트 면접만 되고 음성 답변·웹캠 녹화가 동작하지 않는다.
+
+도메인은 sslip.io 를 쓴다. 한이음 계정으로는 Route 53 과 도메인 구입이 막혀 있다.
+sslip.io 는 `15-134-182-6.sslip.io` 처럼 IP 의 점을 하이픈으로 바꾼 이름을 그대로
+그 IP 로 해석해주므로 DNS 설정 없이 쓸 수 있다.
+
+벤더가 권하는 CloudFront 는 쓰지 않았다. 오리진 응답 상한이 60초인데
+리포트 생성이 실측 74~245초라 중도 종료가 끊긴다.
+
+### 인증서 발급
+
+80 포트가 비어 있어야 한다. 프록시가 8080 만 쓰는 상태에서 먼저 받는다.
+
+```bash
+sudo apt-get install -y certbot
+sudo certbot certonly --standalone -d <IP를 하이픈으로>.sslip.io \
+  --non-interactive --agree-tos --register-unsafely-without-email
+```
+
+### .env 수정
+
+```
+PUBLIC_API_BASE_URL=https://<IP를 하이픈으로>.sslip.io/api
+CORS_ORIGINS=https://<IP를 하이픈으로>.sslip.io
+```
+
+### 기동
+
+HTTPS 설정은 오버레이로 분리되어 있다. 로컬에는 인증서가 없어 기본 compose 에
+넣으면 프록시가 뜨지 않기 때문이다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+```
+
+`deploy/nginx.https.conf` 의 `ssl_certificate` 경로에 도메인이 박혀 있다.
+Elastic IP 가 바뀌면 그 두 줄과 위 `.env` 두 줄을 같이 고치고 인증서를 다시 받아야 한다.
+
+## 알아둘 것
+
+### 인증서 자동 갱신은 실패한다
+
+certbot 이 `standalone` 으로 발급했는데, 지금은 nginx 가 80 포트를 쓰고 있어
+갱신이 포트 충돌로 실패한다.
+
+```
+Could not bind TCP port 80 because it is already in use
+```
+
+만료는 발급일 기준 90일이고 갱신은 30일 전부터 시도하므로, 그 전에 서버를 내릴
+계획이면 그대로 둬도 된다. 계속 운영하려면 갱신 설정에 pre/post 훅을 넣어
+갱신 동안 프록시를 잠깐 멈추거나, `webroot` 방식으로 바꿔야 한다.
 
 ### 로그 보기
 
@@ -167,10 +215,20 @@ docker compose logs --tail 100 web
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 ```
 
 볼륨은 유지되므로 회원·면접 결과·영상·진행 중이던 면접이 남는다.
+
+설정 파일만 고쳤을 때는 `--force-recreate` 가 필요하다.
+`nginx.conf` 와 `nginx.https.conf` 는 파일 하나를 통째로 마운트하는데,
+`git pull` 이 파일을 교체하면 inode 가 바뀌어 컨테이너는 옛 파일을 계속 본다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --force-recreate proxy
+```
+
+`.env` 를 고쳤을 때도 같다. 해당 서비스를 다시 만들어야 환경변수가 반영된다.
 
 ### 인스턴스를 껐다 켜면 공인 IP 가 바뀐다
 

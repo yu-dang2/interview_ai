@@ -1,13 +1,16 @@
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
 from components.sidebar import render_sidebar
+from components.setup_steps import SETUP_CSS, steps_html
 from utils.state import init_session, get, set as state_set
 from utils.ui import show_error
 
 st.set_page_config(
     page_title="면접 환경설정 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -51,126 +54,83 @@ PERSONAS = [
 selected = get("interviewer_style") or "기술 리드"
 
 # ── CSS ─────────────────────────────────────────────────────────────────
+# 단계 표시·카드·번호 제목은 문서 업로드 화면과 같은 규칙을 쓴다. 제목은 h 태그 대신 div.
+st.markdown(SETUP_CSS, unsafe_allow_html=True)
 st.markdown("""
 <style>
-[data-testid="stMainBlockContainer"] { padding: 40px 48px 60px !important; }
-[data-testid="stVerticalBlock"] { gap: 0 !important; }
-[data-testid="stHorizontalBlock"] { gap: 0; }
+.st-key-setup_name_card [data-testid="stTextInput"] { max-width: 420px; }
+.st-key-setup_name_card [data-testid="stTextInput"] input { font-size: 15px !important; }
+.st-key-setup_name_card [data-baseweb="input"] { height: 48px !important; border-radius: 12px !important;
+    background: #fafbfd !important; border-color: #e5e7eb !important; }
 
-[data-testid="stMainBlockContainer"] {
-    word-break: keep-all !important;
-    overflow-wrap: break-word !important;
-}
-
-[data-testid="stTextInput"] label p {
-    font-size:14px !important; font-weight:600 !important; color:#111827 !important;
-}
-
-[data-testid="stBaseButton-primary"] {
-    font-size: 17px !important;
-    padding: 12px 50px !important;
-    white-space: nowrap !important;
-    width: auto !important;
-}
-.st-key-next_area {
-    display: grid !important;
-    grid-template-columns: max-content !important;
-    justify-content: center !important;
-    row-gap: 8px !important;
-}
-.st-key-next_area [data-testid="stAlert"] {
-    justify-self: stretch !important;
-    box-sizing: border-box !important;
-}
-
-[data-persona-card]:hover {
-    box-shadow: 0 4px 16px rgba(59,109,239,0.15) !important;
-    transform: translateY(-1px) !important;
-}
+.ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.ps-card { position: relative; border: 1px solid #e9ecf2; border-radius: 16px; padding: 22px 20px; background: #fff;
+    cursor: pointer; transition: transform .15s, box-shadow .15s; min-width: 0; }
+.ps-card:hover { box-shadow: 0 4px 16px rgba(59,109,239,.15); transform: translateY(-1px); }
+.ps-card.on { border: 1.5px solid #3b6def; background: #f5f8ff; }
+.ps-card .ck { position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; border-radius: 50%;
+    background: #3b6def; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.ps-card img { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; background: #eef3ff; display: block; }
+.ps-card .nm { margin-top: 14px; font-size: 17px; font-weight: 800; color: #111827; }
+.ps-card.on .nm { color: #2f5bd8; }
+.ps-card .ds { margin-top: 3px; font-size: 13px; color: #6b7280; }
+.ps-card .dt { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eef0f4; display: flex;
+    flex-direction: column; gap: 7px; }
+.ps-card .dt div { font-size: 12.5px; color: #4b5563; display: flex; gap: 7px; align-items: flex-start; }
+.ps-card .dt i { color: #3b6def; font-size: 13px; margin-top: 2px; }
 
 @media (max-width: 900px) {
-    [data-persona-card] {
-        flex-direction: column !important;
-        text-align: center !important;
-        padding: 20px !important;
-    }
+    .ps-grid { grid-template-columns: 1fr; }
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── 스텝 인디케이터 ────────────────────────────────────────────────────────
-st.markdown("""
-<div style="display:flex;align-items:center;justify-content:center;margin-bottom:32px;">
-  <div style="width:10px;height:10px;border-radius:50%;background:#3b6def;flex-shrink:0;"></div>
-  <span style="font-size:11px;font-weight:600;color:#3b6def;margin:0 6px 0 4px;">기본 정보</span>
-  <div style="width:52px;height:1px;background:#e5e7eb;"></div>
-  <div style="width:10px;height:10px;border-radius:50%;background:#e5e7eb;flex-shrink:0;margin-left:4px;"></div>
-  <span style="font-size:11px;color:#9ca3af;margin-left:4px;">문서 업로드</span>
-</div>
-""", unsafe_allow_html=True)
+# ── 단계 표시 · 타이틀 ────────────────────────────────────────────────────
+st.markdown(
+    steps_html(1)
+    + '<div class="su-head"><div class="t">면접 환경 설정</div>'
+    '<div class="sub">성함을 입력하고 함께할 면접관 스타일을 골라 주세요</div></div>',
+    unsafe_allow_html=True,
+)
 
-# ── 타이틀 ──────────────────────────────────────────────────────────────
-st.markdown("""
-<div style="margin-bottom:60px;">
-  <div style="font-size:24px;font-weight:700;color:#111827;margin:0 0 6px;">
-    면접 환경을 설정해주세요
-  </div>
-  <p style="font-size:14px;color:#9ca3af;margin:0;">
-    성함과 AI 면접관 스타일을 먼저 정해주세요. 다음 단계에서 문서를 업로드해요.
-  </p>
-</div>
-""", unsafe_allow_html=True)
-
-# ── 성함 ────────────────────────────────────────────────────────────────
-
+# ── 01 성함 ──────────────────────────────────────────────────────────────
 if st.session_state.get("setup_name"):
     state_set("user_name", st.session_state["setup_name"])
 
-name_col, _ = st.columns([1, 2])
-with name_col:
-    name = st.text_input("성함", placeholder="홍길동",
+with st.container(key="setup_name_card"):
+    st.markdown(
+        '<div class="su-sh"><span class="n">01</span>성함</div>'
+        '<div class="su-sd">면접을 시작하기 전에 성함을 입력해 주세요</div>',
+        unsafe_allow_html=True,
+    )
+    name = st.text_input("성함", placeholder="홍길동", label_visibility="collapsed",
                          value=get("user_name") or "", key="setup_name")
 if name:
     state_set("user_name", name)
 
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-
-# ── 면접관 스타일 ────────────────────────────────────────────────────────
-st.markdown('<p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 20px;">면접관 스타일 선택</p>',
-            unsafe_allow_html=True)
-
-# 페르소나 카드
-cards_html = '<div style="display:flex;gap:28px;">'
+# ── 02 면접관 스타일 ─────────────────────────────────────────────────────
+cards_html = '<div class="ps-grid">'
 for p in PERSONAS:
-    is_active  = selected == p["key"]
-    border     = "1.5px solid #3b6def" if is_active else "1px solid #e5e7eb"
-    bg         = "#eef3ff"             if is_active else "white"
-    name_color = "#3b6def"             if is_active else "#111827"
-    detail_html = "".join(
-        f'<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">'
-        f'<div style="width:4px;height:4px;border-radius:50%;background:#3b6def;flex-shrink:0;"></div>'
-        f'<span style="font-size:11px;color:#6b7280;word-break:keep-all;">{d}</span></div>'
-        for d in p["detail"]
+    is_active = selected == p["key"]
+    detail_html = "".join(f'<div><i class="ph-bold ph-check"></i><span>{d}</span></div>' for d in p["detail"])
+    check = '<span class="ck"><i class="ph-bold ph-check"></i></span>' if is_active else ""
+    cards_html += (
+        f'<div class="ps-card{" on" if is_active else ""}" data-persona-card="{p["key"]}">{check}'
+        f'<img src="data:image/png;base64,{p["img"]}" alt="">'
+        f'<div class="nm">{p["key"]}</div><div class="ds">{p["desc"]}</div>'
+        f'<div class="dt">{detail_html}</div></div>'
     )
-    cards_html += f"""
-    <div data-persona-card="{p['key']}"
-         style="flex:1;min-width:0;border:{border};background:{bg};border-radius:12px;
-                padding:20px;display:flex;align-items:flex-start;gap:20px;
-                cursor:pointer;box-sizing:border-box;
-                transition:transform 0.15s,box-shadow 0.15s;">
-      <img src="data:image/png;base64,{p['img']}"
-           style="width:64px;height:64px;border-radius:50%;
-                  object-fit:cover;flex-shrink:0;">
-      <div style="min-width:0;">
-        <div style="font-size:15px;font-weight:700;color:{name_color};
-                    margin-bottom:2px;word-break:keep-all;">{p['key']}</div>
-        <div style="font-size:12px;color:#9ca3af;word-break:keep-all;margin-bottom:8px;">{p['desc']}</div>
-        {detail_html}
-      </div>
-    </div>"""
 cards_html += '</div>'
-st.markdown(cards_html, unsafe_allow_html=True)
 
+with st.container(key="setup_persona_card"):
+    st.markdown(
+        '<div class="su-sh"><span class="n">02</span>면접관 스타일</div>'
+        '<div class="su-sd">스타일에 따라 질문 방향과 꼬리질문이 달라져요</div>'
+        + cards_html,
+        unsafe_allow_html=True,
+    )
+
+# 카드를 누르면 아래 숨긴 버튼을 대신 눌러 선택을 저장한다.
 st.markdown(
     "<style>.st-key-persona_hidden_row { display:none !important; }</style>",
     unsafe_allow_html=True,
@@ -215,12 +175,13 @@ components.html("""
 </script>
 """, height=0)
 
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-
 # ── 다음 단계 버튼 ──────────────────────────────────────────────────────
-_, center, _ = st.columns([4.3, 2, 4.3])
-with center:
-    with st.container(key="next_area"):
+with st.container(key="next_area"):
+    _hint_col, _btn_col = st.columns([3, 1], vertical_alignment="center")
+    with _hint_col:
+        st.markdown('<div class="su-foot-hint">다음 단계에서 이력서와 채용공고를 올려요</div>',
+                    unsafe_allow_html=True)
+    with _btn_col:
         if st.button("다음: 문서 업로드 →", type="primary", key="btn_next"):
             if not (get("user_name") or name):
                 show_error("성함을 입력해주세요.")

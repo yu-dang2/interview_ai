@@ -14,6 +14,9 @@ services:
       - "443:443"
     volumes:
       - ./deploy/nginx.https.conf:/etc/nginx/conf.d/default.conf:ro
+      # 탭 아이콘. 기본 파일에도 같은 줄이 있지만, 오버레이에서 volumes 를
+      # 다시 적을 때 빠지지 않도록 여기에도 둔다.
+      - ./frontend/assets/images/logo/favicon.png:/srv/brand/favicon.png:ro
       # live 아래 파일은 archive 를 가리키는 상대 심볼릭 링크다.
       # /etc/letsencrypt 를 통째로, 같은 경로에 마운트해야 링크가 풀린다.
       - /etc/letsencrypt:/etc/letsencrypt:ro

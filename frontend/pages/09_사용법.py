@@ -1,9 +1,11 @@
 import streamlit as st
+from utils.brand import FAVICON, logo_img
 from utils.paths import resource
 from utils.state import restore_access_token_nonblocking
 
 st.set_page_config(
     page_title="사용법 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -38,9 +40,7 @@ st.markdown("""
     padding: 120px 40px 56px;
     text-align: center;
 }
-/* font-size 에 !important — 이 클래스들이 전부 <p> 태그라, Streamlit이 markdown 안
-   <p>에 주입하는 자체 스타일(.st-emotion-cache-* p, 클래스+태그라 이 클래스 하나짜리
-   선택자보다 우선순위가 높음)에 밀려서 죄다 기본값 16px로 나오고 있었다. */
+
 .usage-hero-badge { font-size: 12px !important; font-weight: 700; letter-spacing: 2px; color: var(--blue); margin-bottom: 12px; }
 .usage-hero-title { font-size: 34px !important; font-weight: 800; color: var(--gray-900); margin: 0 0 12px; }
 .usage-hero-desc  { font-size: 15px !important; color: var(--gray-500); }
@@ -88,7 +88,7 @@ _auth_links = "" if logged_in else (
 )
 st.markdown(
     f'<nav class="navbar">'
-    f'<a class="navbar-brand" href="/" target="_self" style="text-decoration:none;">intro</a>'
+    f'<a class="navbar-brand" href="/" target="_self" aria-label="intro 홈">{logo_img(25)}</a>'
     f'<div class="navbar-right">{_auth_links}</div>'
     f'</nav>',
     unsafe_allow_html=True,
@@ -99,21 +99,21 @@ st.markdown("""
 <div class="usage-hero">
     <p class="usage-hero-badge">HOW TO USE</p>
     <p class="usage-hero-title">3단계면 준비 끝, 이렇게 시작하세요</p>
-    <p class="usage-hero-desc">이력서 업로드부터 결과 리포트 확인까지, intro 사용법을 한눈에 안내해드려요.</p>
+    <p class="usage-hero-desc">면접관 선택부터 결과 리포트 확인까지, intro 사용법을 한눈에 안내해드려요.</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ── 단계별 안내 ─────────────────────────────────────────────────────
 STEPS = [
     {
-        "num": "1", "title": "이력서 · 채용공고 업로드",
-        "desc": "PDF, DOCX, HWPX 형식의 이력서와 채용공고(JD)를 업로드하면 AI가 핵심 키워드와 요구 역량을 자동으로 분석해요.",
-        "tags": ["PDF / DOCX / HWPX", "최대 20MB"],
+        "num": "1", "title": "면접관 선택 · 이력서와 채용공고 업로드",
+        "desc": "기술 리드 · 인사 담당자 · 임원 면접관 중 원하는 스타일을 고르고, PDF, DOCX, HWPX 형식의 이력서와 채용공고(JD)를 업로드하면 AI가 핵심 키워드와 요구 역량을 자동으로 분석해요.",
+        "tags": ["페르소나 3종", "PDF / DOCX / HWPX"],
     },
     {
-        "num": "2", "title": "면접관 스타일 선택 후 모의 면접",
-        "desc": "기술 리드 · 인사 담당자 · 임원 면접관 중 원하는 스타일을 고르고, 실전처럼 꼬리질문이 이어지는 AI 면접을 진행해요. 웹캠 없이도 음성·텍스트로 진행할 수 있어요.",
-        "tags": ["페르소나 3종", "웹캠 선택 가능"],
+        "num": "2", "title": "실전 같은 AI 모의 면접",
+        "desc": "웹캠 사용 여부를 고른 뒤, 답변에 따라 꼬리질문이 이어지는 AI 면접을 진행해요. 웹캠 없이도 음성·텍스트로 진행할 수 있어요.",
+        "tags": ["꼬리질문", "웹캠 선택 가능"],
     },
     {
         "num": "3", "title": "결과 리포트로 복기하기",
@@ -121,13 +121,18 @@ STEPS = [
         "tags": ["역량 리포트", "이력서 최적화"],
     },
 ]
+# f-string {} 안에 백슬래시(\')를 쓰면 Python 3.11 이하에서 SyntaxError — 태그 HTML은 따로 만든다.
+def _tags_html(tags):
+    return "".join(f'<span class="usage-tag">{t}</span>' for t in tags)
+
+
 steps_html = "".join(
     f'<div class="usage-step">'
     f'  <div class="usage-step-num">{s["num"]}</div>'
     f'  <div>'
     f'    <p class="usage-step-title">{s["title"]}</p>'
     f'    <p class="usage-step-desc">{s["desc"]}</p>'
-    f'    <div class="usage-step-tags">{"".join(f"<span class=\'usage-tag\'>{t}</span>" for t in s["tags"])}</div>'
+    f'    <div class="usage-step-tags">{_tags_html(s["tags"])}</div>'
     f'  </div>'
     f'</div>'
     for s in STEPS

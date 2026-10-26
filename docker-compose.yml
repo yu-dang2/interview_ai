@@ -64,6 +64,19 @@ services:
       # 쓰지만, 이 이미지는 requirements.txt 로 protobuf 4.25 가 맞게 깔려 있어 자기
       # 파이썬으로 그대로 돌린다. (기본값이 윈도우 경로라 지정하지 않으면 분석이 실패한다)
       VIDEO_ANALYZER_PYTHON: ${VIDEO_ANALYZER_PYTHON:-python}
+
+      # 구글 로그인. 값이 없으면 /auth/google 이 501 을 돌려주고 이메일 로그인만 쓴다.
+      #
+      # GOOGLE_REDIRECT_URI 는 구글 콘솔에 등록한 주소와 글자 하나까지 같아야 한다.
+      # 배포에서는 프록시를 거치므로 /api 가 붙는다.
+      #   https://<주소>/api/auth/google/callback
+      #
+      # FRONTEND_BASE_URL 은 로그인을 마친 사용자를 돌려보낼 화면 주소다.
+      # 브라우저가 찾아가는 주소라 컨테이너 이름(web)을 쓰면 안 된다.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:8501}
     ports:
       - "8000:8000"
     volumes:
@@ -112,6 +125,17 @@ services:
       GOOGLE_TTS_VOICE_EXEC: ${GOOGLE_TTS_VOICE_EXEC:-ko-KR-Chirp3-HD-Algieba}
       GOOGLE_TTS_SPEAKING_RATE: ${GOOGLE_TTS_SPEAKING_RATE:-1.0}
       TTS_MAX_CHARS: ${TTS_MAX_CHARS:-600}
+
+      # 화면이 직접 읽는 시간 값. api 쪽에도 같은 이름이 있는데 양쪽에 다 줘야 한다.
+      # 한쪽만 바꾸면 서버는 20분으로 끊는데 화면은 30분을 세는 식으로 어긋난다.
+      INTERVIEW_TIME_LIMIT_MIN: ${INTERVIEW_TIME_LIMIT_MIN:-30}
+
+      # 영상 업로드를 기다리는 시간. 넘겨도 실패로 표시하지 않고 백그라운드로 계속 올라간다.
+      # 배포 서버는 시드니 리전이라 30분 면접(100MB 안팎)이면 기본 20초로는 모자라다.
+      VIDEO_UPLOAD_WAIT_SEC: ${VIDEO_UPLOAD_WAIT_SEC:-20}
+
+      # 결과 화면에서 업로드 중인 영상을 "저장 중"으로 기다리는 시간.
+      VIDEO_RESULT_WAIT_SEC: ${VIDEO_RESULT_WAIT_SEC:-120}
     ports:
       - "8501:8501"
     command:
@@ -152,6 +176,9 @@ services:
       - "${PROXY_PORT:-8080}:80"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # 탭 아이콘. 프록시가 /favicon.ico 등을 직접 응답하는 데 쓴다.
+      # (사유는 deploy/nginx.conf 의 favicon location 주석 참고)
+      - ./frontend/assets/images/logo/favicon.png:/srv/brand/favicon.png:ro
     healthcheck:
       # localhost 가 아니라 127.0.0.1 이어야 한다. nginx 의 listen 80 은 IPv4 만 듣는데
       # 컨테이너 안에서 localhost 는 ::1(IPv6)로 먼저 풀려 Connection refused 가 난다.
