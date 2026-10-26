@@ -1,8 +1,3 @@
-"""
-이력서 텍스트 → JSON 구조화.
-experience_years 는 모델 값 대신 experience[].period 로 다시 계산한다(agent/graph/experience.py).
-"""
-
 from agent.parsers.resume_parser_prompt import RESUME_PARSER_SYSTEM_PROMPT
 from agent.graph.state import InterviewState
 from agent.graph.utils import call_llm
