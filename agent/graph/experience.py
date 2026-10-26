@@ -5,14 +5,13 @@ _MONTHS_EN = {m: i for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
 _OPEN_END = re.compile(r"현재|재직|진행|present|now|current", re.I)
 _DATE_TOKEN = re.compile(
-    r"(?P<y4>(?:19|20)\d{2})\s*(?:[.\-/]\s*|년\s*)(?P<m4>\d{1,2})"       # 2020.07 / 2020-07 / 2020년 7월
-    r"|(?P<mon>[A-Za-z]{3})[a-z]*\.?\s+(?P<ye>(?:19|20)\d{2})"           # Jan 2019 / March 2014
-    r"|'?(?P<y2>\d{2})\s*[./]\s*(?P<m2>\d{1,2})(?!\d)"                   # 19/03 / '23.01
+    r"(?P<y4>(?:19|20)\d{2})\s*(?:[.\-/]\s*|년\s*)(?P<m4>\d{1,2})"
+    r"|(?P<mon>[A-Za-z]{3})[a-z]*\.?\s+(?P<ye>(?:19|20)\d{2})"
+    r"|'?(?P<y2>\d{2})\s*[./]\s*(?P<m2>\d{1,2})(?!\d)"
 )
 
 
 def parse_period(period: str, today: date):
-    """'2020.07 ~ 2022.03', 'Jan 2019 – Present', '2022년 7월 ~ 현재' → ((y, m), (y, m)). 못 읽으면 None."""
     if not period:
         return None
     points = []
@@ -45,9 +44,9 @@ def months_from_periods(periods: list, today: date):
     idx = sorted((a[0] * 12 + a[1] - 1, b[0] * 12 + b[1] - 1) for a, b in spans)
     merged = [list(idx[0])]
     for s, e in idx[1:]:
-        if s <= merged[-1][1] + 1:            # 겹치거나 바로 이어짐 → 합친다
+        if s <= merged[-1][1] + 1:
             merged[-1][1] = max(merged[-1][1], e)
-        else:                                 # 공백기 → 새 구간
+        else:
             merged.append([s, e])
     return sum(e - s for s, e in merged)
 
