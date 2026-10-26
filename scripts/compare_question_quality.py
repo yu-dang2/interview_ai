@@ -1,40 +1,4 @@
-"""
-직무 지식 카드 효과 측정 (A/B)
-
-카드를 새로 채우거나 고친 뒤, 그 카드가 질문 품질을 실제로 바꾸는지 확인하는 도구다.
-같은 JD·이력서로 question_generator 를 두 번 돌리되 참고자료 유무만 다르게 한다.
-
-    A) 참고자료 없음 — 카드 도입 전과 동일
-    B) 참고자료 있음 — 검색된 카드를 프롬프트에 주입
-
-파싱·매칭은 딱 한 번만 돌려 두 쪽에 같은 입력을 넣는다. 그래야 차이가 카드 때문인지
-LLM 의 실행 편차 때문인지 헷갈리지 않는다.
-
-실행:
-    # 1) 검색만 확인 (LLM 호출 없음, 빠르고 무료) — 카드 채운 직후 첫 확인용
-    .venv/Scripts/python.exe scripts/compare_question_quality.py --search-only
-
-    # 2) 질문 품질 A/B (LLM 호출 있음)
-    .venv/Scripts/python.exe scripts/compare_question_quality.py --scenario sales
-
-    # 3) 직접 만든 JD·이력서로
-    .venv/Scripts/python.exe scripts/compare_question_quality.py --jd my_jd.txt --resume my_resume.txt
-
-    # 4) 다른 인덱스로 (구/신 코퍼스 비교)
-    .venv/Scripts/python.exe scripts/compare_question_quality.py --scenario sales --index ./data/knowledge_index_v2
-
-무엇을 보아야 하나:
-    1. B 의 질문이 이력서의 구체적 경험을 여전히 언급하는가
-       → 카드를 그대로 질문화해 "캐싱 경험 있으신가요?" 같은 뻔한 질문으로 퇴행하면 실패다.
-    2. B 에만 있는 관점이 있는가
-       → A 와 주제가 똑같으면 그 카드는 LLM 이 이미 아는 내용만 담고 있다는 뜻이다.
-         추상적 역량 서술 대신 실제 기출 원문·꼬리질문 순서·감점 사유를 넣어야 한다.
-    3. 질문 개수가 크게 줄지 않았는가
-       → 참고자료가 길면 질문 수가 줄어드는 경향이 있다. 주제 커버리지 손실을 확인한다.
-
-주의: 개발 직무는 모델이 이미 잘 알아 카드 효과가 약하게 나온다. 카드의 문제가 아니라
-직무 특성이므로, 효과 확인은 비개발 직무로 하는 편이 판단하기 쉽다.
-"""
+"""직무 지식 카드 유무(A/B)로 question_generator 질문을 비교한다."""
 
 import argparse
 import asyncio
@@ -44,13 +8,11 @@ import sys
 
 from dotenv import load_dotenv
 
-# 프로젝트 루트에서 실행하지 않아도 agent 패키지를 찾을 수 있게 한다.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 load_dotenv()
 
 
-# 바로 돌려볼 수 있는 예시 시나리오. --jd/--resume 로 직접 넣어도 된다.
 SCENARIOS = {
     "backend": {
         "persona": "기술 리드",
@@ -135,8 +97,6 @@ def show(title, result):
 
 
 async def run(args):
-    # store 가 호출 시점에 환경변수를 읽으므로 import 전후 어디서 넣어도 되지만,
-    # 실수를 줄이려 노드 import 전에 설정한다.
     if args.index:
         os.environ["KNOWLEDGE_INDEX_PATH"] = args.index
 
@@ -157,20 +117,16 @@ async def run(args):
 
     scenario = read_scenario(args)
 
-    # ── 검색만 확인 (LLM 호출 없음) ──
     if args.search_only:
         print("\n[검색만 확인 — 질문 생성은 건너뜁니다]")
         for name, s in (SCENARIOS.items() if not (args.jd or args.resume)
                         else [(args.scenario or "custom", scenario)]):
-            # 검색 쿼리는 jd_parsed 가 필요하지만, 검색만 볼 때는 LLM 파싱 없이
-            # JD 첫 줄을 직무명으로 대충 넣어 감을 본다. 정확한 확인은 A/B 로 할 것.
             head = s["jd"].strip().splitlines()[0].replace("[채용]", "").strip()
             cards = await store.search([head])
             print(f"  {name:<10} '{head}'")
             print(f"    → {[(c['job_family'], round(c['_distance'], 3)) for c in cards] or '관련 카드 없음'}")
         return
 
-    # ── 파싱·매칭 1회 (A/B 공통 입력 고정) ──
     print("\n파싱·매칭 실행 중 (A/B 공통 입력을 고정하기 위해 한 번만)...")
     state = {"jd_raw": scenario["jd"], "resume_raw": scenario["resume"],
              "persona": scenario["persona"]}
