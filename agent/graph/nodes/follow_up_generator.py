@@ -37,7 +37,7 @@ async def follow_up_generator(state: InterviewState):
         "follow_up_focus": eval_result.get("follow_up_focus", "")
     }, ensure_ascii=False)
 
-    result = await call_llm(system_prompt, user_content)
+    result = await call_llm(system_prompt, user_content, stage="follow_up_generator")
     return {
         "messages": [AIMessage(content=result.get("follow_up_question", ""))],
         "follow_up_count": count + 1

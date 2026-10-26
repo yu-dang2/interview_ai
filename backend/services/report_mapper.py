@@ -316,7 +316,8 @@ def to_feedback(report: dict) -> FeedbackResponse:
         if isinstance(item, dict)
     ]
 
-    # turn_count 가 아니라 실제 피드백 개수. 꼬리질문이 붙으면 둘이 갈라진다.
+    # turn_count 가 아니라 실제 피드백 개수. 꼬리질문이 붙거나 자기소개 질문이
+    # 집계에서 빠지면 둘이 갈라진다. 여기 평균은 자기소개를 뺀 문항들의 평균이다.
     average = round(sum(item.score for item in items) / len(items)) if items else 0
 
     return FeedbackResponse(

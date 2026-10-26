@@ -47,6 +47,13 @@ VIDEO_MAX_UPLOAD_MB = int(os.getenv("VIDEO_MAX_UPLOAD_MB", "200"))
 # 분석 도중 서버가 죽으면 상태가 영구히 analyzing 으로 남아 프론트가 끝없이 폴링한다.
 VIDEO_ANALYZE_TIMEOUT_MIN = int(os.getenv("VIDEO_ANALYZE_TIMEOUT_MIN", "30"))
 
+# 영상 분석(mediapipe)은 protobuf 4.25 를 요구해, 백엔드 프로세스(protobuf 7·chromadb)와
+# 같은 파이썬에 함께 살 수 없다. 그래서 mediapipe 를 격리한 별도 venv 의 파이썬으로
+# video/analyze_runner.py 를 subprocess 실행하고 결과 JSON 만 받는다.
+# 경로에 한글이 있으면 mediapipe 의 .binarypb 로드가 실패하므로 ASCII 경로여야 한다.
+# 팀원마다 venv 위치가 다르면 VIDEO_ANALYZER_PYTHON 환경변수로 덮어쓴다.
+VIDEO_ANALYZER_PYTHON = os.getenv("VIDEO_ANALYZER_PYTHON", r"C:\mp_venv\Scripts\python.exe")
+
 # ── 인증 ───────────────────────────────────────────────
 # SECRET_KEY 를 .env 에 지정하지 않으면 기동할 때마다 새 키가 생성된다.
 # 개발 중에는 편하지만 서버를 재시작하면 발급해둔 토큰이 전부 무효가 되므로,
@@ -54,6 +61,24 @@ VIDEO_ANALYZE_TIMEOUT_MIN = int(os.getenv("VIDEO_ANALYZE_TIMEOUT_MIN", "30"))
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+
+# ── 구글 로그인 (OAuth 2.0) ────────────────────────────
+# 값이 없으면 /auth/google 이 501 을 돌려준다.
+# 이메일·비밀번호 로그인은 그대로 동작하므로, 설정하지 않아도 서비스는 돌아간다.
+#
+# GOOGLE_REDIRECT_URI 는 구글 콘솔의 "승인된 리디렉션 URI" 와 글자 하나까지 같아야 한다.
+# 구글은 와일드카드를 허용하지 않고 정확히 일치하는지만 본다.
+# 로컬과 배포 주소가 다르므로 콘솔에 둘 다 등록해두고 여기서 골라 쓴다.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv(
+    "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
+)
+
+# 로그인이 끝난 뒤 사용자를 돌려보낼 화면 주소.
+# 백엔드가 리디렉션을 걸어야 해서 프론트 주소를 알아야 한다.
+# (API_BASE_URL 과 달리 브라우저가 찾아가는 주소라 컨테이너 이름을 쓰면 안 된다)
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:8501")
 
 # ── 배포 ───────────────────────────────────────────────
 # 실행 환경. "production" 이면 디버그용 엔드포인트를 노출하지 않는다.
@@ -98,6 +123,22 @@ INTERVIEW_STALE_AFTER_MIN = int(
     os.getenv("INTERVIEW_STALE_AFTER_MIN", str(INTERVIEW_TIME_LIMIT_MIN * 2))
 )
 
+# ── 리포트 생성 (백그라운드) ────────────────────────────
+# 면접 종료는 접수만 하고 리포트 생성은 백그라운드로 돈다. (영상 분석과 같은 방식)
+# GET /result 가 생성이 끝날 때까지 이만큼 기다린다.
+#결과 로딩 화면이 그동안 스피너를 돌리므로 사용자에게는 기존과 같아 보인다.
+#
+# 프론트의 get_result 타임아웃(180초)보다 짧아야 한다.
+# 길게 잡으면 프론트가 먼저 끊어 503 안내조차 받지 못한다.
+#
+# 150초는 실측 7회(74~245초, 중앙값 149초)를 기준으로 잡은 타협값이다.
+# 최대값까지 덮으려면 300초가 필요한데, 그러면 생성이 실패했을 때
+# 사용자가 5분을 기다리게 된다.
+REPORT_WAIT_TIMEOUT_SEC = int(os.getenv("REPORT_WAIT_TIMEOUT_SEC", "150"))
+
+# 위 대기 중 결과 행을 다시 확인하는 간격.
+REPORT_POLL_INTERVAL_SEC = float(os.getenv("REPORT_POLL_INTERVAL_SEC", "1.5"))
+
 # ── 면접 진행 ──────────────────────────────────────────
 # 면접 종료 시 채팅창에 보여줄 마무리 문구.
 # report_generator가 마지막 AIMessage로 리포트 JSON 전체를 넣기 때문에,
@@ -110,9 +151,10 @@ CLOSING_MESSAGE = "면접이 종료되었습니다. 결과 리포트를 확인�
 RAPPORT_TRANSITION_MESSAGE = "답변 감사합니다. 이제 본격적으로 면접 질문을 시작하겠습니다."
 
 # 라포 형성 질문으로 볼 question_list 의 type 값.
-# 프롬프트는 지금 "자기소개"로 내보낸다. 지원 동기 질문도 같은 자리에 들어가서
-# "라포"로 바꿔달라고 요청해둔 상태다(8/20). 답을 받기 전에도 동작하도록 둘 다 받는다.
-# 값이 정해지면 쓰지 않는 쪽을 지운다.
+# 8/20 요청대로 프롬프트가 "라포"로 바뀌었고(d60536d), agent 쪽 판별값
+# (agent/graph/utils.py 의 RAPPORT_TYPE)도 "라포"로 맞춰졌다(3bcacbe).
+# "자기소개"는 그 사이 시작된 세션이 남아 있을 수 있어 남겨둔 것이라,
+# 진행 중이던 면접이 모두 끝나면 지운다.
 RAPPORT_QUESTION_TYPES = ("라포", "자기소개")
 
 # 면접 시작 진행 단계. 첫 질문까지 90~140초가 걸려서 화면이 멈춰 보이므로,
