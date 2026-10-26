@@ -94,6 +94,33 @@ def login(email: str, password: str) -> dict:
     return res.json()
 
 
+def exchange_login_code(code: str) -> dict:
+    """소셜 로그인 일회용 코드를 액세스 토큰으로 바꾼다.
+
+    백엔드가 토큰을 주소에 직접 싣지 않는 이유는, 24시간짜리 토큰이 브라우저 기록과
+    서버 접근 로그에 그대로 남기 때문이다. 주소에는 수명 60초짜리 일회용 코드만 오고
+    교환은 이 함수(화면 서버)가 한다.
+    """
+    res = requests.post(
+        f"{BASE_URL}/auth/exchange",
+        json={"code": code},
+        timeout=30,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+def me(access_token: str | None = None) -> dict:
+    """현재 로그인한 사용자. 소셜 로그인은 이메일을 모른 채 토큰만 받으므로 이걸로 채운다."""
+    res = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers=_headers(access_token),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
 def register(name: str, email: str, password: str) -> dict:
     res = requests.post(
         f"{BASE_URL}/auth/register",

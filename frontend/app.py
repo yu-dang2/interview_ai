@@ -4,7 +4,8 @@ import streamlit as st
 from utils.brand import FAVICON, logo_img
 import streamlit.components.v1 as components
 from utils.paths import resource
-from utils.state import restore_access_token_nonblocking
+from utils.state import restore_access_token_nonblocking, set as state_set
+import utils.api as api
 
 st.set_page_config(
     page_title="intro",
@@ -12,6 +13,41 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ── 소셜 로그인 복귀 처리 ────────────────────────────────────────────
+# 구글 로그인을 마치면 백엔드가 이 화면으로 돌려보내면서 일회용 코드를 붙인다.
+#   성공  /?login=<코드>          코드를 토큰으로 바꿔 기존 로그인과 똑같이 저장한다
+#   실패  /?login_error=<사유>    안내만 띄우고 이메일 로그인을 쓰게 한다
+#
+# 토큰을 세션에 넣은 뒤 아래 restore_access_token_nonblocking() 이 돌아야
+# sessionStorage 에도 저장되어 다른 화면에서 로그인 상태가 유지된다. 순서가 중요하다.
+_login_code = st.query_params.get("login")
+_login_error = st.query_params.get("login_error")
+
+if _login_code:
+    # 코드는 한 번 쓰면 사라진다. 교환하든 실패하든 주소에서 지워, 새로고침할 때
+    # 이미 쓴 코드로 다시 시도하지 않게 한다.
+    st.query_params.clear()
+    try:
+        _token = api.exchange_login_code(_login_code)["access_token"]
+        state_set("access_token", _token)
+        state_set("is_logged_in", True)
+        try:
+            state_set("user_email", api.me(_token).get("email", ""))
+        except Exception:
+            # 이메일은 표시용이라 못 받아도 로그인은 그대로 둔다.
+            pass
+        st.switch_page("pages/03_면접_환경설정.py")
+    except Exception:
+        st.error("로그인 정보가 만료되었습니다. 다시 시도해주세요.")
+
+elif _login_error:
+    st.query_params.clear()
+    st.error({
+        "cancelled": "구글 로그인을 취소하셨습니다.",
+        "email_unverified": "구글 계정의 이메일이 확인되지 않았습니다. 이메일로 로그인해주세요.",
+        "not_configured": "구글 로그인은 준비 중입니다. 이메일로 로그인해주세요.",
+    }.get(_login_error, "구글 로그인에 실패했습니다. 이메일로 로그인해주세요."))
 
 logged_in = bool(restore_access_token_nonblocking())
 

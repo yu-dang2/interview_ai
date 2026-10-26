@@ -64,6 +64,19 @@ services:
       # 쓰지만, 이 이미지는 requirements.txt 로 protobuf 4.25 가 맞게 깔려 있어 자기
       # 파이썬으로 그대로 돌린다. (기본값이 윈도우 경로라 지정하지 않으면 분석이 실패한다)
       VIDEO_ANALYZER_PYTHON: ${VIDEO_ANALYZER_PYTHON:-python}
+
+      # 구글 로그인. 값이 없으면 /auth/google 이 501 을 돌려주고 이메일 로그인만 쓴다.
+      #
+      # GOOGLE_REDIRECT_URI 는 구글 콘솔에 등록한 주소와 글자 하나까지 같아야 한다.
+      # 배포에서는 프록시를 거치므로 /api 가 붙는다.
+      #   https://<주소>/api/auth/google/callback
+      #
+      # FRONTEND_BASE_URL 은 로그인을 마친 사용자를 돌려보낼 화면 주소다.
+      # 브라우저가 찾아가는 주소라 컨테이너 이름(web)을 쓰면 안 된다.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:8501}
     ports:
       - "8000:8000"
     volumes:
