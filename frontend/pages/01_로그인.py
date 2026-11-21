@@ -1,16 +1,29 @@
 import requests
 import streamlit as st
+from utils.brand import FAVICON, logo_img
 from utils.paths import resource
 from utils.state import init_session, set as state_set
+from utils.ui import show_error, show_error_once
 from utils import api
+from components.google_button import google_login_button
 
 st.set_page_config(
     page_title="로그인 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 init_session()
+
+# 구글 로그인이 실패하거나 취소되면 app.py 가 사유를 담아 이 화면으로 보낸다.
+# 토큰 복원 때문에 화면이 한 번 더 다시 그려지므로, 바로 지우지 않고
+# 사용자가 "확인"을 누를 때까지 들고 있는다.
+if st.session_state.get("_login_notice"):
+    if st.session_state.pop("_notice_once_dismissed_login_notice", False):
+        st.session_state.pop("_login_notice", None)
+    else:
+        show_error_once(st.session_state["_login_notice"], "login_notice")
 
 css = resource("styles/global.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
@@ -25,16 +38,16 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 [data-testid="collapsedControl"],
 [data-testid="stExpandSidebarButton"] { display:none !important; }
 
-html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
+html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 [data-testid="stAppViewContainer"],
-[data-testid="stMain"] { height:100vh !important; overflow:hidden !important; }
+[data-testid="stMain"] { min-height:100vh !important; overflow-y:auto !important; overflow-x:hidden !important; }
 
 .main .block-container,
 [data-testid="stMainBlockContainer"] {
     margin-left: 43% !important;
     width: 57% !important;
     max-width: 57% !important;
-    height: 100vh !important;
+    min-height: 100vh !important;
     padding: 0 !important;
     background: white !important;
     box-sizing: border-box !important;
@@ -55,7 +68,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input {
     background: #f9fafb !important;
-    border: 1px solid #d1d5db !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 8px !important;
     height: 48px !important;
     font-size: 14px !important;
@@ -64,7 +77,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input:focus {
     border-color: #3b6def !important;
-    box-shadow: 0 0 0 3px rgba(59,109,239,0.15) !important;
+    box-shadow: 0 0 0 3px rgba(30,50,38,0.15) !important;
     outline: none !important;
 }
 [data-testid="stTextInput"] > div > div {
@@ -95,16 +108,16 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 [data-testid="stPageLink"] { display:flex !important; justify-content:center !important; margin:0 !important; padding:0 !important; }
 [data-testid="stPageLink"] a { font-size:13px !important; font-weight:600 !important; color:#3b6def !important; text-decoration:none !important; }
 [data-testid="stPageLink"] svg { display:none !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
 
+
 # ── 왼쪽 패널 ───────────────────────────────────────
-CHECK = """<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-  <circle cx="11" cy="11" r="11" fill="rgba(255,255,255,0.2)"/>
-  <path d="M7 11l2.8 2.8 5.2-5.2" stroke="white" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round"/>
-</svg>"""
+CHECK = """<div style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+  <i class="ph-bold ph-check" style="font-size:13px;color:white;"></i>
+</div>"""
 
 st.markdown(f"""
 <div style="
@@ -115,19 +128,12 @@ st.markdown(f"""
     padding:60px; box-sizing:border-box;
     display:flex; flex-direction:column; justify-content:space-between;
 ">
-  <div style="position:absolute;border-radius:50%;
-              width:400px;height:400px;left:-80px;top:100px;
-              background:rgba(255,255,255,0.08);pointer-events:none;"></div>
-  <div style="position:absolute;border-radius:50%;
-              width:300px;height:300px;left:200px;top:500px;
-              background:rgba(255,255,255,0.06);pointer-events:none;"></div>
-
-  <a href="/" target="_self" style="position:relative;z-index:1;font-size:22px;font-weight:700;
-            color:white;text-decoration:none;">intro</a>
+  <a href="/" target="_self" aria-label="intro 홈" style="position:relative;z-index:1;display:inline-block;
+            text-decoration:none;">{logo_img(30, white=True)}</a>
 
   <div style="position:relative;z-index:1;">
-    <div style="font-size:34px;font-weight:800;color:white;
-               line-height:1.4;margin:0 0 16px;">
+    <div style="font-size:clamp(24px, 2.6vw, 34px);font-weight:800;color:white;
+               line-height:1.4;margin:0 0 16px;word-break:keep-all;overflow-wrap:break-word;">
       AI와 함께하는<br>스마트한 취업 준비
     </div>
     <p style="font-size:16px;color:#dbeafe;line-height:1.75;margin:0 0 32px;">
@@ -138,7 +144,7 @@ st.markdown(f"""
         {CHECK}<span style="font-size:14px;color:white;">이력서 AI 분석 &amp; 최적화</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
-        {CHECK}<span style="font-size:14px;color:white;">LangGraph 꼬리질문 면접</span>
+        {CHECK}<span style="font-size:14px;color:white;">답변에 따라 이어지는 꼬리질문 면접</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
         {CHECK}<span style="font-size:14px;color:white;">웹캠 시선 처리 분석</span>
@@ -179,7 +185,7 @@ with form_col:
 
     if submitted:
         if not email or not password:
-            st.error("이메일과 비밀번호를 입력해주세요.")
+            show_error("이메일과 비밀번호를 입력해주세요.")
         else:
             try:
                 resp = api.login(email, password)
@@ -189,37 +195,19 @@ with form_col:
                 st.switch_page("pages/03_면접_환경설정.py")
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 401:
-                    st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
+                    show_error("이메일 또는 비밀번호가 올바르지 않습니다.")
                 else:
-                    status = e.response.status_code if e.response is not None else "?"
-                    st.error(f"로그인에 실패했습니다. (서버 오류: {status})")
+                    show_error(api.error_detail(e, "로그인에 실패했습니다."))
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-                st.error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
+                show_error("서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
             except Exception as e:
-                st.error(f"알 수 없는 오류가 발생했습니다: {e}")
+                show_error(f"알 수 없는 오류가 발생했습니다: {e}")
 
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
-      <div style="flex:1;height:1px;background:#e5e7eb;"></div>
-      <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">또는</span>
-      <div style="flex:1;height:1px;background:#e5e7eb;"></div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
-    st.markdown("""
-    <div style="display:flex;gap:16px;margin-bottom:24px;">
-      <button style="flex:1;height:48px;border-radius:8px;border:none;
-                     background:#fee500;color:#38210a;font-size:13px;
-                     font-weight:600;cursor:pointer;font-family:inherit;">
-        카카오로 로그인
-      </button>
-      <button style="flex:1;height:48px;border-radius:8px;
-                     border:1px solid #d1d5db;background:white;color:#374151;
-                     font-size:13px;cursor:pointer;font-family:inherit;">
-        Google로 로그인
-      </button>
-    </div>
-    """, unsafe_allow_html=True)
+    # 구글 로그인. 백엔드가 구글 화면으로 보냈다가 /?login=<코드> 로 돌려보내면
+    # app.py 가 코드를 토큰으로 바꿔 이메일 로그인과 똑같이 저장한다.
+    google_login_button("Google로 로그인", radius=8)
 
     # 회원가입 링크
     st.markdown("""

@@ -36,3 +36,13 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class ExchangeRequest(BaseModel):
+    """소셜 로그인 후 화면이 일회용 코드를 액세스 토큰으로 바꿀 때 쓴다.
+
+    토큰을 리디렉션 주소에 직접 실어 보내면 브라우저 기록·서버 접근 로그·리퍼러에
+    그대로 남는다. 수명이 짧은 일회용 코드만 주소에 싣고, 교환은 화면 서버가 한다.
+    """
+
+    code: str = Field(min_length=10, max_length=200)

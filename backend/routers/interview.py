@@ -6,6 +6,7 @@
 
 엔드포인트:
     POST /interview/sessions           - 면접 세션 생성 (면접 시작)
+    POST /interview/sessions/stream    - 면접 세션 생성 + 준비 진행 상황 스트리밍
     GET  /interview/sessions           - 내 면접 기록 목록 (마이페이지)
     POST /interview/sessions/{id}/chat - 텍스트 답변 전송
     POST /interview/sessions/{id}/end  - 면접 종료
@@ -20,7 +21,10 @@
     GET  /interview/{id}/video-metrics
 """
 
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from backend.core.deps import current_user
 from backend.database import get_db
@@ -37,7 +41,11 @@ from backend.schemas.interview import (
 )
 from backend.schemas.video import VideoMetricsResponse, VideoUploadResponse
 from backend.services import video_service
-from backend.services.interview_service import InterviewService
+from backend.services.interview_service import (
+    InterviewService,
+    generate_report,
+    stream_session,
+)
 from backend.services.video_service import VideoService
 
 router = APIRouter(prefix="/interview", tags=["Interview"])
@@ -52,6 +60,42 @@ async def create_session(
     """면접 세션 생성 및 첫 질문 반환"""
     service = InterviewService(db, user)
     return await service.create_session(req)
+
+
+@router.post("/sessions/stream")
+async def create_session_stream(
+    req: SessionCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """
+    면접 세션 생성 (진행 상황 스트리밍)
+
+    첫 질문까지 90~140초가 걸려 화면이 멈춰 보이는 문제 때문에 만들었다.
+    위 /sessions 와 결과는 같고, 준비 과정을 단계별로 흘려보내는 점만 다르다.
+
+    한 줄에 JSON 하나씩 내려간다.
+
+        {"type":"progress","stage":"parsing","label":"이력서·채용공고 읽는 중"}
+        {"type":"progress","stage":"matching","label":"직무 적합도 분석 중"}
+        {"type":"progress","stage":"generating","label":"맞춤 질문 만드는 중"}
+        {"type":"done","session_id":"...","first_question":"..."}
+
+    progress 는 "지금부터 이 단계" 라는 뜻이다. stage 는 고정값이고 label 은 참고용이라,
+    화면 문구를 바꾸려면 stage 로 매핑하면 된다.
+
+    거절해야 하는 요청(인증·사용량 초과·소유권)은 prepare_session 이 스트리밍 시작 전에
+    걸러내므로 지금처럼 상태 코드로 나간다. 본문이 나가기 시작한 뒤에 생긴 오류만
+    {"type":"error","detail":"..."} 로 내려간다.
+    """
+    service = InterviewService(db, user)
+    prepared = service.prepare_session(req)
+
+    async def lines():
+        async for event in stream_session(prepared):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @router.get("/sessions", response_model=SessionListResponse)
@@ -82,20 +126,25 @@ async def chat(
     return await service.process_answer(session_id, req.answer, req.input_type)
 
 
-@router.post("/sessions/{session_id}/end")
+@router.post("/sessions/{session_id}/end", status_code=202)
 async def end_session(
     session_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
     """
-    면접 종료.
+    면접 종료 접수. 중도 종료여도 리포트를 생성한다.
 
-    중도 종료여도 리포트를 생성한다. 그래프에 종료 신호를 넣어 report_generator 를
-    태우므로 LLM 호출이 발생하고 수십 초가 걸릴 수 있다.
+    리포트 생성은 LLM 호출이 이어져 수십 초 걸리므로 여기서 기다리지 않는다.
+    접수만 하고 202 로 답한 뒤, 결과는 GET /result 가 생성 완료를 기다려 내려준다.
+    (영상 업로드와 같은 방식이다)
     """
     service = InterviewService(db, user)
-    await service.end_session(session_id)
+    # add_task 를 commit 이후에 걸어야 백그라운드 쪽에서 상태를 못 읽는 일이 없다.
+    # accept_end 가 commit 까지 끝내고 돌아온다.
+    if service.accept_end(session_id):
+        background_tasks.add_task(generate_report, session_id)
     return {"message": "면접이 종료되었습니다."}
 
 
@@ -143,10 +192,12 @@ async def get_resume_optimization(
 # ── 영상 분석 ──────────────────────────────────────────
 # 시선 지표는 면접 점수(5개 역량)에 반영하지 않는 보조 코칭 값이라 결과 리포트와 분리돼 있다.
 #
-# 경로가 두 벌인 이유: video/README.md 와 예진님의 webcam_recorder.html 이
-# /interview/{id}/video 를 쓰기로 합의돼 있고(그 URL 이 코드에 하드코딩돼 있다),
+# 경로가 두 벌인 이유: video/README.md 가 /interview/{id}/video 로 합의돼 있고,
 # 이 라우터의 나머지 엔드포인트는 /interview/sessions/{id}/... 컨벤션을 쓴다.
-# 둘 다 받아서 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 서로 충돌하지 않는다.
+# 둘 다 받아 어느 쪽으로 붙여도 동작하게 한다. 세그먼트 수가 달라 충돌하지 않는다.
+#
+# 프론트는 업로드·조회 모두 짧은 쪽(/interview/{id}/video, /interview/{id}/video-metrics)을
+# 부른다. 긴 쪽은 지금 부르는 곳이 없으므로, 한쪽으로 모으려면 긴 쪽을 지우면 된다.
 
 @router.post("/{session_id}/video", response_model=VideoUploadResponse, status_code=202)
 @router.post("/sessions/{session_id}/video", response_model=VideoUploadResponse, status_code=202)

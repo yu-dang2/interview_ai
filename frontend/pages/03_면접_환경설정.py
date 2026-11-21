@@ -1,14 +1,16 @@
-import requests
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 import base64
 from utils.paths import resource
 from components.sidebar import render_sidebar
-from utils.state import init_session, get, set as state_set, mark_session_expired, is_session_expired, render_session_expired_inline
-from utils import api
+from components.setup_steps import SETUP_CSS, steps_html
+from utils.state import init_session, get, set as state_set
+from utils.ui import show_error
 
 st.set_page_config(
     page_title="면접 환경설정 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -32,138 +34,103 @@ def img_b64(path: str) -> str:
 
 
 PERSONAS = [
-    {"key": "기술 리드",   "desc": "날카롭고 집요한 기술 검증", "img": img_b64("assets/images/기술리드.png")},
-    {"key": "인사 담당자", "desc": "공감 중심 인성 면접",        "img": img_b64("assets/images/인사 담당자.png")},
-    {"key": "임원 면접관", "desc": "전략적 비즈니스 역량 검증",  "img": img_b64("assets/images/임원 면접관.png")},
+    {
+        "key": "기술 리드", "desc": "날카롭고 집요한 기술 검증",
+        "detail": ["기술 스택에 대한 심화 질문", "문제 해결 과정을 집중적으로 검증", "꼬리질문으로 논리 전개를 확인"],
+        "img": img_b64("assets/images/기술리드.png"),
+    },
+    {
+        "key": "인사 담당자", "desc": "공감 중심 인성 면접",
+        "detail": ["조직 적합성과 인성 중심 평가", "협업 경험과 태도를 질문", "편안한 분위기의 대화형 진행"],
+        "img": img_b64("assets/images/인사 담당자.png"),
+    },
+    {
+        "key": "임원 면접관", "desc": "전략적 비즈니스 역량 검증",
+        "detail": ["비즈니스 임팩트와 전략적 사고 검증", "의사결정 과정을 집중적으로 질문", "리더십과 책임감을 확인"],
+        "img": img_b64("assets/images/임원 면접관.png"),
+    },
 ]
 
 selected = get("interviewer_style") or "기술 리드"
 
 # ── CSS ─────────────────────────────────────────────────────────────────
+# 단계 표시·카드·번호 제목은 문서 업로드 화면과 같은 규칙을 쓴다. 제목은 h 태그 대신 div.
+st.markdown(SETUP_CSS, unsafe_allow_html=True)
 st.markdown("""
 <style>
-[data-testid="stMainBlockContainer"] { padding: 40px 48px 60px !important; }
-[data-testid="stVerticalBlock"] { gap: 0 !important; }
-[data-testid="stHorizontalBlock"] { gap: 0; }
+.st-key-setup_name_card [data-testid="stTextInput"] { max-width: 420px; }
+.st-key-setup_name_card [data-testid="stTextInput"] input { font-size: 15px !important; }
+.st-key-setup_name_card [data-baseweb="input"] { height: 48px !important; border-radius: 12px !important;
+    background: #fafbfd !important; border-color: #e5e7eb !important; }
 
-[data-testid="stMainBlockContainer"] {
-    word-break: keep-all !important;
-    overflow-wrap: break-word !important;
-}
-
-[data-testid="stTextInput"] label p {
-    font-size:14px !important; font-weight:600 !important; color:#1f1f1f !important;
-}
-
-[data-testid="stFileUploader"] label { display:none !important; }
-[data-testid="stFileUploaderDropzone"] {
-    background:#f7f8fc !important;
-    border:1.5px dashed #c7d2e8 !important;
-    border-radius:10px !important; min-height:140px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-    padding-top: 10px !important;
-    padding-bottom: 30px !important;
-}
-[data-testid="stFileUploaderDropzone"] > div {
-    align-items: center !important;
-    text-align: center !important;
-}
-
-[data-testid="stBaseButton-primary"] {
-    font-size: 17px !important;
-    padding: 12px 50px !important;
-    white-space: nowrap !important;
-    width: auto !important;
-}
-.st-key-start_area {
-    display: grid !important;
-    grid-template-columns: max-content !important;
-    justify-content: center !important;
-    row-gap: 8px !important;
-}
-.st-key-start_area [data-testid="stAlert"] {
-    justify-self: stretch !important;
-    box-sizing: border-box !important;
-}
-
-[data-testid="stFileUploaderDropzone"] button p {
-    white-space: nowrap !important;
-}
-
-[data-persona-card]:hover {
-    box-shadow: 0 4px 16px rgba(59,109,239,0.15) !important;
-    transform: translateY(-1px) !important;
-}
+.ps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.ps-card { position: relative; border: 1px solid #e9ecf2; border-radius: 16px; padding: 22px 20px; background: #fff;
+    cursor: pointer; transition: transform .15s, box-shadow .15s; min-width: 0; }
+.ps-card:hover { box-shadow: 0 4px 16px rgba(59,109,239,.15); transform: translateY(-1px); }
+.ps-card.on { border: 1.5px solid #3b6def; background: #f5f8ff; }
+.ps-card .ck { position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; border-radius: 50%;
+    background: #3b6def; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.ps-card img { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; background: #eef3ff; display: block; }
+.ps-card .nm { margin-top: 14px; font-size: 17px; font-weight: 800; color: #111827; }
+.ps-card.on .nm { color: #2f5bd8; }
+.ps-card .ds { margin-top: 3px; font-size: 13px; color: #6b7280; }
+.ps-card .dt { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eef0f4; display: flex;
+    flex-direction: column; gap: 7px; }
+.ps-card .dt div { font-size: 12.5px; color: #4b5563; display: flex; gap: 7px; align-items: flex-start; }
+.ps-card .dt i { color: #3b6def; font-size: 13px; margin-top: 2px; }
 
 @media (max-width: 900px) {
-    [data-persona-card] {
-        flex-direction: column !important;
-        text-align: center !important;
-        padding: 20px !important;
-    }
+    .ps-grid { grid-template-columns: 1fr; }
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── 타이틀 ──────────────────────────────────────────────────────────────
-st.markdown("""
-<div style="margin-bottom:60px;">
-  <div style="font-size:24px;font-weight:700;color:#1f1f1f;margin:0 0 6px;">
-    면접 환경을 설정해주세요
-  </div>
-  <p style="font-size:14px;color:#9ca3af;margin:0;">
-    이력서와 채용공고를 업로드하고 AI 면접관을 설정하세요.
-  </p>
-</div>
-""", unsafe_allow_html=True)
+# ── 단계 표시 · 타이틀 ────────────────────────────────────────────────────
+st.markdown(
+    steps_html(1)
+    + '<div class="su-head"><div class="t">면접 환경 설정</div>'
+    '<div class="sub">성함을 입력하고 함께할 면접관 스타일을 골라 주세요</div></div>',
+    unsafe_allow_html=True,
+)
 
-# ── 성함 ────────────────────────────────────────────────────────────────
-
+# ── 01 성함 ──────────────────────────────────────────────────────────────
 if st.session_state.get("setup_name"):
     state_set("user_name", st.session_state["setup_name"])
 
-name_col, _ = st.columns([1, 2])
-with name_col:
-    name = st.text_input("성함", placeholder="홍길동",
+with st.container(key="setup_name_card"):
+    st.markdown(
+        '<div class="su-sh"><span class="n">01</span>성함</div>'
+        '<div class="su-sd">면접을 시작하기 전에 성함을 입력해 주세요</div>',
+        unsafe_allow_html=True,
+    )
+    name = st.text_input("성함", placeholder="홍길동", label_visibility="collapsed",
                          value=get("user_name") or "", key="setup_name")
 if name:
     state_set("user_name", name)
 
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-
-# ── 면접관 스타일 ────────────────────────────────────────────────────────
-st.markdown('<p style="font-size:14px;font-weight:600;color:#1f1f1f;margin:0 0 20px;">면접관 스타일 선택</p>',
-            unsafe_allow_html=True)
-
-# 페르소나 카드 
-cards_html = '<div style="display:flex;gap:28px;">'
+# ── 02 면접관 스타일 ─────────────────────────────────────────────────────
+cards_html = '<div class="ps-grid">'
 for p in PERSONAS:
-    is_active  = selected == p["key"]
-    border     = "1.5px solid #3b6def" if is_active else "1px solid #e5e7eb"
-    bg         = "#eff6ff"             if is_active else "white"
-    name_color = "#3b6def"             if is_active else "#1f1f1f"
-    cards_html += f"""
-    <div data-persona-card="{p['key']}"
-         style="flex:1;min-width:0;border:{border};background:{bg};border-radius:12px;
-                padding:20px;display:flex;align-items:center;justify-content:center;gap:24px;
-                cursor:pointer;min-height:80px;box-sizing:content-box;
-                transition:transform 0.15s,box-shadow 0.15s;">
-      <img src="data:image/png;base64,{p['img']}"
-           style="width:72px;height:72px;border-radius:50%;
-                  object-fit:cover;flex-shrink:0;">
-      <div style="min-width:0;">
-        <div style="font-size:15px;font-weight:700;color:{name_color};
-                    margin-bottom:4px;word-break:keep-all;">{p['key']}</div>
-        <div style="font-size:12px;color:#9ca3af;word-break:keep-all;">{p['desc']}</div>
-      </div>
-    </div>"""
+    is_active = selected == p["key"]
+    detail_html = "".join(f'<div><i class="ph-bold ph-check"></i><span>{d}</span></div>' for d in p["detail"])
+    check = '<span class="ck"><i class="ph-bold ph-check"></i></span>' if is_active else ""
+    cards_html += (
+        f'<div class="ps-card{" on" if is_active else ""}" data-persona-card="{p["key"]}">{check}'
+        f'<img src="data:image/png;base64,{p["img"]}" alt="">'
+        f'<div class="nm">{p["key"]}</div><div class="ds">{p["desc"]}</div>'
+        f'<div class="dt">{detail_html}</div></div>'
+    )
 cards_html += '</div>'
-st.markdown(cards_html, unsafe_allow_html=True)
 
+with st.container(key="setup_persona_card"):
+    st.markdown(
+        '<div class="su-sh"><span class="n">02</span>면접관 스타일</div>'
+        '<div class="su-sd">스타일에 따라 질문 방향과 꼬리질문이 달라져요</div>'
+        + cards_html,
+        unsafe_allow_html=True,
+    )
+
+# 카드를 누르면 아래 숨긴 버튼을 대신 눌러 선택을 저장한다.
 st.markdown(
     "<style>.st-key-persona_hidden_row { display:none !important; }</style>",
     unsafe_allow_html=True,
@@ -208,179 +175,16 @@ components.html("""
 </script>
 """, height=0)
 
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-
-# ── 문서 업로드 ─────────────────────────────────────────────────────────
-st.markdown('<p style="font-size:14px;font-weight:600;color:#1f1f1f;margin:0 0 20px;">문서 업로드</p>',
-            unsafe_allow_html=True)
-
-up1, _gap, up2 = st.columns([15, 1, 15])
-
-def read_file_text(uploaded_file) -> str:
-    """업로드된 파일에서 텍스트 추출"""
-    name = uploaded_file.name.lower()
-    if name.endswith(".txt"):
-        return uploaded_file.read().decode("utf-8", errors="ignore")
-    if name.endswith(".pdf"):
-        try:
-            import pdfplumber
-            with pdfplumber.open(uploaded_file) as pdf:
-                return "\n".join(p.extract_text() or "" for p in pdf.pages)
-        except ImportError:
-            try:
-                import PyPDF2
-                reader = PyPDF2.PdfReader(uploaded_file)
-                return "\n".join(p.extract_text() or "" for p in reader.pages)
-            except ImportError:
-                return f"[PDF 파싱 불가 — pdfplumber 또는 PyPDF2 설치 필요]\n파일명: {uploaded_file.name}"
-    if name.endswith(".docx"):
-        try:
-            import docx
-            from io import BytesIO
-            doc = docx.Document(BytesIO(uploaded_file.read()))
-            return "\n".join(p.text for p in doc.paragraphs)
-        except ImportError:
-            return f"[DOCX 파싱 불가 — python-docx 설치 필요]\n파일명: {uploaded_file.name}"
-    if name.endswith(".hwpx"):
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            from io import BytesIO
-            texts = []
-            with zipfile.ZipFile(BytesIO(uploaded_file.read())) as z:
-                section_files = sorted(
-                    n for n in z.namelist()
-                    if n.startswith("Contents/section") and n.endswith(".xml")
-                )
-                for section in section_files:
-                    root = ET.fromstring(z.read(section))
-                    for el in root.iter():
-                        tag = el.tag.rsplit("}", 1)[-1]  # 네임스페이스 제거
-                        if tag == "t" and el.text:
-                            texts.append(el.text)
-            return "\n".join(texts)
-        except Exception:
-            return f"[HWPX 파싱 불가]\n파일명: {uploaded_file.name}"
-    return uploaded_file.read().decode("utf-8", errors="ignore")
-
-
-def _upload_error_message(e: Exception) -> str:
-    if isinstance(e, requests.exceptions.ConnectionError):
-        return "서버에 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요."
-    if isinstance(e, requests.exceptions.Timeout):
-        return "업로드 요청이 시간 초과되었습니다. 다시 시도해주세요."
-    if isinstance(e, requests.exceptions.HTTPError):
-        status = e.response.status_code if e.response is not None else "?"
-        return f"업로드에 실패했습니다. (서버 오류: {status})"
-    return f"업로드 중 알 수 없는 오류가 발생했습니다: {e}"
-
-
-with up1:
-    st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">직무 기술서 (JD)</p>',
-                unsafe_allow_html=True)
-    jd_file = st.file_uploader("jd", type=["pdf","docx","hwpx"], key="jd_upload",
-                                help="PDF, DOCX, HWPX 지원 (최대 20MB)")
-    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
-    if jd_file:
-        state_set("jd_text", read_file_text(jd_file))
-        try:
-            state_set("jd_id", api.upload_jd(jd_file.getvalue(), jd_file.name))
-            st.caption(f"✅ {jd_file.name} 업로드 완료")
-        except api.SessionExpiredError:
-            mark_session_expired()
-        except Exception as e:
-            state_set("jd_id", 0)
-            st.error(_upload_error_message(e))
-
-with up2:
-    st.markdown('<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 20px;">이력서</p>',
-                unsafe_allow_html=True)
-    resume_file = st.file_uploader("resume", type=["pdf","docx","hwpx"], key="resume_upload",
-                                    help="PDF, DOCX, HWPX 파일 지원 (최대 20MB)")
-    st.caption("💡 한글 파일은 HWPX만 지원돼요 — 구버전 HWP는 PDF로 저장한 후 업로드해주세요")
-    if resume_file:
-        state_set("resume_text", read_file_text(resume_file))
-        try:
-            state_set("resume_id", api.upload_resume(resume_file.getvalue(), resume_file.name))
-            st.caption(f"✅ {resume_file.name} 업로드 완료")
-        except api.SessionExpiredError:
-            mark_session_expired()
-        except Exception as e:
-            state_set("resume_id", 0)
-            st.error(_upload_error_message(e))
-
-components.html("""
-<script>
-(function () {
-    function findLimitEl(dz) {
-        var els = dz.querySelectorAll('*');
-        for (var i = 0; i < els.length; i++) {
-            var el = els[i];
-            if (el.textContent.indexOf('MB') !== -1 && el.children.length === 0)
-                return el;
-        }
-        return null;
-    }
-
-    function moveUploadBtns() {
-        var doc = window.parent.document;
-        var dropzones = doc.querySelectorAll('[data-testid="stFileUploaderDropzone"]');
-        if (!dropzones.length) { setTimeout(moveUploadBtns, 200); return; }
-        var pending = 0;
-        dropzones.forEach(function(dz) {
-            if (dz.dataset.btnMoved) return;
-            var btn      = dz.querySelector('button');
-            var limitEl  = findLimitEl(dz);
-            if (!btn || !limitEl) { pending++; return; }
-            var wrap = doc.createElement('div');
-            wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px;';
-            limitEl.parentNode.insertBefore(wrap, limitEl);
-            wrap.appendChild(limitEl);
-            wrap.appendChild(btn);
-            dz.dataset.btnMoved = '1';
-        });
-        if (pending) setTimeout(moveUploadBtns, 200);
-    }
-
-    moveUploadBtns();
-
-    new MutationObserver(function(mutations) {
-        var needsRun = false;
-        mutations.forEach(function(m) {
-            if (m.addedNodes.length) needsRun = true;
-        });
-        if (needsRun) moveUploadBtns();
-    }).observe(window.parent.document.body, { childList: true, subtree: true });
-}());
-</script>
-""", height=0)
-
-st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-
-# ── 음성 안내 기본값 ────────────────────────────────────────────────────
-voice_guide_default = st.checkbox(
-    "면접 중 음성 안내 기본으로 켜기",
-    value=get("voice_guide_default") if get("voice_guide_default") is not None else True,
-    key="voice_guide_default_checkbox",
-)
-state_set("voice_guide_default", voice_guide_default)
-
-st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
-
-# ── 시작 버튼 ────────────────────────────────────────────────────────────
-_, center, _ = st.columns([4.3, 2, 4.3])
-with center:
-    if is_session_expired():
-        render_session_expired_inline()
-    else:
-        with st.container(key="start_area"):
-            if st.button("면접 시작하기 →", type="primary", key="btn_start"):
-                if not (get("user_name") or name):
-                    st.error("성함을 입력해주세요.")
-                elif not get("jd_id"):
-                    st.error("직무 기술서(JD)를 업로드해주세요.")
-                elif not get("resume_id"):
-                    st.error("이력서를 업로드해주세요.")
-                else:
-                    state_set("interviewer_style", selected)
-                    st.switch_page("pages/035_웹캠_허용.py")
+# ── 다음 단계 버튼 ──────────────────────────────────────────────────────
+with st.container(key="next_area"):
+    _hint_col, _btn_col = st.columns([3, 1], vertical_alignment="center")
+    with _hint_col:
+        st.markdown('<div class="su-foot-hint">다음 단계에서 이력서와 채용공고를 올려요</div>',
+                    unsafe_allow_html=True)
+    with _btn_col:
+        if st.button("다음: 문서 업로드 →", type="primary", key="btn_next"):
+            if not (get("user_name") or name):
+                show_error("성함을 입력해주세요.")
+            else:
+                state_set("interviewer_style", selected)
+                st.switch_page("pages/031_문서업로드.py")

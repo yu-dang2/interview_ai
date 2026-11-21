@@ -1,11 +1,15 @@
 import requests
 import streamlit as st
+from utils.brand import FAVICON, logo_img
 from utils.paths import resource
 from utils.state import init_session, set as state_set
+from utils.ui import show_error
 from utils import api
+from components.google_button import google_login_button
 
 st.set_page_config(
     page_title="회원가입 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -24,16 +28,16 @@ header, [data-testid="stToolbar"] { visibility:hidden !important; height:0 !impo
 [data-testid="collapsedControl"],
 [data-testid="stExpandSidebarButton"] { display:none !important; }
 
-html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
+html, body { overflow-x:hidden; min-height:100vh; margin:0; padding:0; }
 [data-testid="stAppViewContainer"],
-[data-testid="stMain"] { height:100vh !important; overflow:hidden !important; }
+[data-testid="stMain"] { min-height:100vh !important; overflow-y:auto !important; overflow-x:hidden !important; }
 
 .main .block-container,
 [data-testid="stMainBlockContainer"] {
     margin-left: 43% !important;
     width: 57% !important;
     max-width: 57% !important;
-    height: 100vh !important;
+    min-height: 100vh !important;
     padding: 0 !important;
     background: white !important;
     box-sizing: border-box !important;
@@ -54,7 +58,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input {
     background: white !important;
-    border: 1px solid #e5e7ea !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 6px !important;
     height: 48px !important;
     font-size: 14px !important;
@@ -63,7 +67,7 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 }
 [data-testid="stTextInput"] input:focus {
     border-color: #3b6def !important;
-    box-shadow: 0 0 0 3px rgba(59,109,239,0.15) !important;
+    box-shadow: 0 0 0 3px rgba(30,50,38,0.15) !important;
     outline: none !important;
 }
 [data-testid="stTextInput"] > div > div {
@@ -95,11 +99,9 @@ html, body { overflow:hidden; height:100vh; margin:0; padding:0; }
 
 
 # ── 왼쪽 패널 ───────────────────────────────────────
-CHECK = """<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-  <circle cx="11" cy="11" r="11" fill="rgba(255,255,255,0.2)"/>
-  <path d="M7 11l2.8 2.8 5.2-5.2" stroke="white" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round"/>
-</svg>"""
+CHECK = """<div style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+  <i class="ph-bold ph-check" style="font-size:13px;color:white;"></i>
+</div>"""
 
 st.markdown(f"""
 <div style="
@@ -110,19 +112,12 @@ st.markdown(f"""
     padding:60px; box-sizing:border-box;
     display:flex; flex-direction:column; justify-content:space-between;
 ">
-  <div style="position:absolute;border-radius:50%;
-              width:400px;height:400px;left:-80px;top:100px;
-              background:rgba(255,255,255,0.08);pointer-events:none;"></div>
-  <div style="position:absolute;border-radius:50%;
-              width:300px;height:300px;left:200px;top:500px;
-              background:rgba(255,255,255,0.06);pointer-events:none;"></div>
-
-  <a href="/" target="_self" style="position:relative;z-index:1;font-size:22px;font-weight:700;
-            color:white;text-decoration:none;">intro</a>
+  <a href="/" target="_self" aria-label="intro 홈" style="position:relative;z-index:1;display:inline-block;
+            text-decoration:none;">{logo_img(30, white=True)}</a>
 
   <div style="position:relative;z-index:1;">
-    <div style="font-size:34px;font-weight:800;color:white;
-               line-height:1.4;margin:0 0 16px;">
+    <div style="font-size:clamp(24px, 2.6vw, 34px);font-weight:800;color:white;
+               line-height:1.4;margin:0 0 16px;word-break:keep-all;overflow-wrap:break-word;">
       지금 시작하면<br>합격이 가까워집니다
     </div>
     <p style="font-size:16px;color:#dbeafe;line-height:1.75;margin:0 0 32px;">
@@ -133,7 +128,7 @@ st.markdown(f"""
         {CHECK}<span style="font-size:14px;color:white;">이력서 AI 분석 &amp; 최적화</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
-        {CHECK}<span style="font-size:14px;color:white;">LangGraph 꼬리질문 면접</span>
+        {CHECK}<span style="font-size:14px;color:white;">답변에 따라 이어지는 꼬리질문 면접</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
         {CHECK}<span style="font-size:14px;color:white;">웹캠 시선 처리 분석</span>
@@ -181,9 +176,13 @@ with form_col:
 
     if submitted:
         if not name or not email or not password or not password_confirm:
-            st.error("모든 항목을 입력해주세요.")
+            show_error("모든 항목을 입력해주세요.")
+        elif len(password) < 8: 
+            show_error("비밀번호는 8자 이상이어야 합니다.")
+        elif len(password.encode("utf-8")) > 72: 
+            show_error(api.PASSWORD_TOO_LONG_MSG)
         elif password != password_confirm:
-            st.error("비밀번호가 일치하지 않습니다.")
+            show_error("비밀번호가 일치하지 않습니다.")
         else:
             try:
                 api.register(name, email, password)
@@ -195,38 +194,19 @@ with form_col:
                 st.switch_page("pages/03_면접_환경설정.py")
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 409:
-                    st.error("이미 가입된 이메일입니다.")
+                    show_error("이미 가입된 이메일입니다.")
                 else:
-                    status = e.response.status_code if e.response is not None else "?"
-                    st.error(f"회원가입에 실패했습니다. (서버 오류: {status})")
+                    show_error(api.error_detail(e, "회원가입에 실패했습니다."))
             except Exception:
-                st.error("회원가입에 실패했습니다. 다시 시도해주세요.")
+                show_error("회원가입에 실패했습니다. 다시 시도해주세요.")
+
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+    # 구글로 처음 들어오면 백엔드가 계정을 새로 만든다. 그래서 가입 화면에서도 같은 버튼을 쓴다.
+    google_login_button("Google로 시작하기", radius=6)
 
     st.markdown("""
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0 24px;">
-      <div style="flex:1;height:1px;background:#e5e7ea;"></div>
-      <span style="font-size:11px;color:#9ca3a8;white-space:nowrap;">또는</span>
-      <div style="flex:1;height:1px;background:#e5e7ea;"></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="display:flex;gap:16px;margin-bottom:24px;">
-      <button style="flex:1;height:48px;border-radius:8px;border:none;
-                     background:#fee500;color:#191919;font-size:13px;
-                     font-weight:600;cursor:pointer;font-family:inherit;">
-        카카오로 시작하기
-      </button>
-      <button style="flex:1;height:48px;border-radius:8px;
-                     border:1px solid #e5e7ea;background:white;color:#6b7280;
-                     font-size:13px;cursor:pointer;font-family:inherit;">
-        Google로 시작하기
-      </button>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <p style="text-align:center;font-size:13px;color:#9ca3a8;margin:0;">
+    <p style="text-align:center;font-size:13px;color:#9ca3af;margin:0;">
       이미 계정이 있으신가요?&nbsp;→&nbsp;
       <a href="/%EB%A1%9C%EA%B7%B8%EC%9D%B8"
          style="color:#3b6def;font-weight:600;text-decoration:none;">

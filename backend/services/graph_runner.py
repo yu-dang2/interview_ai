@@ -14,8 +14,10 @@ LangGraph 그래프 소유 모듈
 주의(async): agent 그래프의 노드/LLM 호출(call_llm)이 전부 async 이므로 여기서도
 ainvoke/aget_state/aupdate_state 를 쓴다. 동기 invoke 로는 구동되지 않는다.
 
-주의(output 스키마): build_graph 는 output=InterviewOutput(messages 만) 으로 컴파일된다.
-따라서 ainvoke 의 반환값에는 eval_score·eval_result·report_result·match_result 가 없다.
+주의(output 스키마): build_graph 는 output=InterviewOutput 으로 컴파일된다. InterviewOutput 은
+State 의 일부(messages·is_finished·report_result·match_score·resume_optimization)만 노출하므로,
+ainvoke 의 반환값에는 eval_score·eval_result·eval_keywords·weakness_areas·question_list·
+current_question_index·follow_up_count·match_result 가 없다.
 서비스가 그 값들을 읽어야 하므로, start/resume 은 ainvoke 반환값이 아니라
 항상 aget_state().values(온전한 State)를 반환한다.
 
@@ -92,6 +94,26 @@ async def start(session_id: str, init_state: dict) -> dict:
     await graph.ainvoke(init_state, config)
     # output 스키마로 필터링되지 않은 온전한 State 를 돌려준다.
     return (await graph.aget_state(config)).values
+
+
+async def start_stream(session_id: str, init_state: dict):
+    """
+    면접을 시작하면서 노드가 끝날 때마다 그 이름을 내보낸다. (화면 진행 표시용)
+
+    stream_mode="updates" 는 노드 하나가 끝날 때마다 {노드이름: 출력} 을 준다.
+    이름은 build_graph 가 add_node 로 등록한 값 그대로라 agent/ 를 고칠 필요가 없다.
+    interrupt_before 도 ainvoke 와 똑같이 걸린다(answer_evaluator 앞에서 멈추는 것 확인).
+
+    끝난 뒤의 State 는 여기서 돌려주지 않는다. 호출부가 snapshot() 으로 읽는다.
+    """
+    graph = _require_graph()
+    config = config_for(session_id)
+
+    async for chunk in graph.astream(init_state, config, stream_mode="updates"):
+        for node_name in chunk:
+            # __interrupt__ 처럼 밑줄로 시작하는 건 노드가 아니라 그래프가 내는 신호다.
+            if not node_name.startswith("__"):
+                yield node_name
 
 
 async def resume(session_id: str, answer: str, input_type: str = "text") -> dict:

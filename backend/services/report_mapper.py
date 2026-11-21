@@ -152,7 +152,15 @@ def resolve_resume_score(values: dict) -> int:
     return estimate_resume_score(values.get("match_result") or {})
 
 
-def to_result_columns(values: dict) -> dict:
+def average_score(scores: list) -> int | None:
+    """점수 목록의 평균. 목록이 비어 있으면 None."""
+    valid = [clamp(v) for v in scores if isinstance(v, (int, float))]
+    if not valid:
+        return None
+    return clamp(round(sum(valid) / len(valid)))
+
+
+def to_result_columns(values: dict, interview_score: int | None = None) -> dict:
     """
     그래프 State 를 interview_results 컬럼 값으로 편다.
 
@@ -165,7 +173,13 @@ def to_result_columns(values: dict) -> dict:
     summary = report.get("summary", {}) or {}
 
     resume_score = resolve_resume_score(values)
-    interview_score = clamp(report.get("total_score", 0))
+    # interview_score 를 넘겨받으면 그 값을 쓴다. 리포트가 낸 total_score 는 같은 응답 안의
+    # 질문별 점수와도 어긋나는 일이 잦아, 서비스에서 실시간 평가 점수로 계산해 넘긴다.
+    # (프롬프트도 "각 답변의 평가 결과를 종합·평균해 산출" 하도록 지시하고 있다)
+    if interview_score is None:
+        interview_score = clamp(report.get("total_score", 0))
+    else:
+        interview_score = clamp(interview_score)
 
     columns = {
         "resume_score": resume_score,
@@ -302,7 +316,8 @@ def to_feedback(report: dict) -> FeedbackResponse:
         if isinstance(item, dict)
     ]
 
-    # turn_count 가 아니라 실제 피드백 개수. 꼬리질문이 붙으면 둘이 갈라진다.
+    # turn_count 가 아니라 실제 피드백 개수. 꼬리질문이 붙거나 자기소개 질문이
+    # 집계에서 빠지면 둘이 갈라진다. 여기 평균은 자기소개를 뺀 문항들의 평균이다.
     average = round(sum(item.score for item in items) / len(items)) if items else 0
 
     return FeedbackResponse(

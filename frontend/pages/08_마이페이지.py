@@ -1,21 +1,17 @@
+import html
 import json
 from datetime import datetime, timezone
 
 import streamlit as st
+from utils.brand import FAVICON
 import streamlit.components.v1 as components
 from components.sidebar import render_sidebar
 from utils.state import init_session, mark_session_expired, render_session_expired_banner
 from utils import api
 
-try:
-    import plotly.graph_objects as go
-    import plotly.io as pio
-    HAS_PLOTLY = True
-except ImportError:
-    HAS_PLOTLY = False
-
 st.set_page_config(
     page_title="마이페이지 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -34,6 +30,14 @@ except Exception:
 _sessions = _sessions_data.get("sessions", []) if _sessions_data else []
 _summary  = _sessions_data.get("summary", {}) if _sessions_data else {}
 
+try:
+    _resumes_data = api.get_my_resumes()
+except api.SessionExpiredError:
+    _resumes_data = []
+    mark_session_expired()
+except Exception:
+    _resumes_data = []
+
 # ── 데이터 (실제 GET /interview/sessions) ──────────────────────────────────
 HISTORY = []
 for _s in _sessions:
@@ -46,6 +50,8 @@ for _s in _sessions:
     HISTORY.append({
         "dt":         _dt,
         "date":       _dt.strftime("%m.%d") if _dt else "-",
+        "date_full":  _dt.strftime("%Y.%m.%d") if _dt else "-",
+        "date_axis":  f"{_dt.month}/{_dt.day}" if _dt else "-",
         "style":      _s.get("persona") or "-",
         "resume":     _s.get("resume_score"),
         "iv":         _s.get("interview_score"),
@@ -55,93 +61,194 @@ for _s in _sessions:
         "session_id": _s.get("session_id") or "",
     })
 
-VERSIONS = [
-    {"v": "v3.0", "date": "2026.04.30", "score": 72, "active": True},
-    {"v": "v2.1", "date": "2026.04.18", "score": 68, "active": False},
-    {"v": "v2.0", "date": "2026.04.10", "score": 63, "active": False},
-    {"v": "v1.0", "date": "2026.03.28", "score": 55, "active": False},
-]
+_RESUME_TOTAL = len(_resumes_data)
+VERSIONS = []
+for _i, _r in enumerate(_resumes_data[:5]):
+    try:
+        _rdt = datetime.fromisoformat(_r["created_at"].replace("Z", "+00:00"))
+        _rdate = _rdt.strftime("%Y.%m.%d")
+    except (ValueError, KeyError, TypeError):
+        _rdate = "-"
+    VERSIONS.append({
+        "v": f"v{_RESUME_TOTAL - _i}",
+        "date": _rdate,
+        "active": _i == 0,
+    })
 
 def score_color(s) -> str:
     if s is None: return "#9ca3af"
-    if s >= 80: return "#16a34a"
-    if s >= 75: return "#3b6def"
-    if s >= 65: return "#d97706"
-    return "#dc2626"
+    if s >= 80: return "#16a34a"   # 우수 — 초록
+    if s >= 65: return "#d97706"   # 보통 — 주황
+    return "#cf5e96"               # 개선 필요 — 로즈 핑크 (주황과 색상 거리 확보)
+
+
+def _esc(v) -> str:
+    return html.escape(str(v))
+
+
+def _report_links(session_id: str, items) -> str:
+    out = ""
+    for path, label, icon in items:
+        ic = f'<i class="ph-bold {icon}"></i>' if icon else ""
+        out += f'<a class="mp-lk" href="/{path}?sid={_esc(session_id)}" target="_self">{ic}{label}</a>'
+    return out
+
+
+def _play_btn(video_url: str, meta: str = "", label: str = "영상", primary: bool = False) -> str:
+    """누르면 아래 영상 창 스크립트가 data-video-url 을 읽어 영상을 연다."""
+    full_url = f"{api.PUBLIC_BASE_URL}{video_url}" if video_url else ""
+    cls = "mp-play primary" if primary else "mp-play"
+    return (
+        f'<span class="{cls}" data-video-url="{_esc(full_url)}" data-video-meta="{_esc(meta)}">'
+        f'<i class="ph-fill ph-play"></i>{label}</span>'
+    )
+
+
+_PERSONA_DOT = {"기술": "#3b6def", "인사": "#8fa6f5", "임원": "#1f3a8a"}
+
+
+def _persona_html(name: str) -> str:
+    dot = next((c for k, c in _PERSONA_DOT.items() if str(name).startswith(k)), "#9ca3af")
+    return f'<span class="mp-persona"><i style="background:{dot}"></i>{_esc(name)}</span>'
+
+
+def _trend_svg(points) -> str:
+    """points: [(x축 라벨, 점수)] — 오래된 순. 결과 리포트와 같은 보통 65 · 우수 80 기준선."""
+    W, H, L, R, top, bottom = 700, 250, 40, 690, 30, 215
+    lo = 40 if min(v for _, v in points) >= 40 else 0
+    def y(v): return bottom - (max(lo, min(100, v)) - lo) / (100 - lo) * (bottom - top)
+    n = len(points)
+    xs = [L + 70 + (R - L - 110) * (i / (n - 1) if n > 1 else 0.5) for i in range(n)]
+    grid = "".join(
+        f'<line x1="{L}" y1="{y(v):.1f}" x2="{R}" y2="{y(v):.1f}" stroke="#eef0f4"/>'
+        f'<text x="{4 if v == 100 else 10}" y="{y(v) + 4:.1f}" font-size="11" fill="#9ca3af">{v}</text>'
+        for v in range(lo, 101, 20)
+    )
+    guides = (
+        f'<line x1="{L}" y1="{y(80):.1f}" x2="{R}" y2="{y(80):.1f}" stroke="#16a34a" stroke-dasharray="4 4" opacity=".6"/>'
+        f'<line x1="{L}" y1="{y(65):.1f}" x2="{R}" y2="{y(65):.1f}" stroke="#d97706" stroke-dasharray="4 4" opacity=".7"/>'
+    )
+    path = " ".join(f'{"M" if i == 0 else "L"} {xs[i]:.1f} {y(v):.1f}' for i, (_, v) in enumerate(points))
+    dots = labels = axis = ""
+    for i, (lab, v) in enumerate(points):
+        c = score_color(v)
+        last = i == n - 1
+        dots += (f'<circle cx="{xs[i]:.1f}" cy="{y(v):.1f}" r="8" fill="{c}"/>' if last else
+                 f'<circle cx="{xs[i]:.1f}" cy="{y(v):.1f}" r="6" fill="#fff" stroke="{c}" stroke-width="3"/>')
+        labels += (f'<text x="{xs[i]:.1f}" y="{y(v) - (17 if last else 14):.1f}" text-anchor="middle" '
+                   f'font-size="13" font-weight="800" fill="{c}">{v}</text>')
+        weight = ' font-weight="700"' if last else ""
+        axis += (f'<text x="{xs[i]:.1f}" y="240" text-anchor="middle" font-size="12" '
+                 f'fill="{"#111827" if last else "#6b7280"}"{weight}>{_esc(lab)}</text>')
+    return (f'<svg width="100%" viewBox="0 0 {W} {H}" style="display:block;height:auto;font-family:inherit">'
+            f'{grid}{guides}<path d="{path}" fill="none" stroke="#3b6def" stroke-width="3"/>{dots}{labels}{axis}</svg>')
 
 
 # ── CSS ──────────────────────────────────────────────────────────────────
+# 카드·번호 제목·점수 색은 결과 리포트 3종과 같은 규칙을 쓴다. 제목은 h 태그 대신 div.
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] { padding: 32px 40px 80px 40px !important; }
+[data-testid="stMainBlockContainer"] { padding: 36px 40px 80px 40px !important; max-width: 1240px !important;
+    word-break: keep-all !important; overflow-wrap: break-word !important; }
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stHorizontalBlock"] { gap: 0 !important; }
 [data-testid="stColumn"] { padding: 0 !important; }
-/* st.container 없이 첫 번째 column 자체를 차트 카드로 스타일링.
-   .st-key-chart_ver_row로 범위를 좁혀야 한다 — 안 그러면 이 페이지의 다른
-   st.columns(세션 만료 배너의 st.columns([1,2,1])까지 포함)의 첫 번째 칸에도
-   흰 카드 테두리가 씌워져서 레이아웃이 깨진다. */
-.st-key-chart_ver_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
-    background: white !important;
-    border: 1px solid #e5e7eb !important;
-    border-radius: 8px !important;
-    padding: 15px 19px 10px !important;
-    box-sizing: border-box !important;
+
+.mp-head { margin-bottom: 22px; }
+.mp-head .t { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: #111827; margin: 0 0 6px; }
+.mp-head .sub { font-size: 14px; color: #6b7280; }
+
+.mp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 38px; }
+.mp-stat { background: #fff; border: 1px solid #e9ecf2; border-radius: 18px; padding: 20px 22px;
+    display: flex; gap: 14px; align-items: center; min-width: 0; }
+.mp-stat .ic { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center;
+    justify-content: center; font-size: 21px; flex-shrink: 0; }
+.mp-stat small { display: block; font-size: 12.5px; color: #6b7280; font-weight: 600; }
+.mp-stat b { display: block; font-size: 26px; font-weight: 800; margin-top: 2px; letter-spacing: -.02em; white-space: nowrap; }
+
+.mp-card { background: #fff; border: 1px solid #e9ecf2; border-radius: 18px; padding: 26px 28px; }
+.mp-sh { display: flex; gap: 10px; align-items: center; font-size: 19px; font-weight: 700; color: #111827; margin: 0 0 4px; }
+.mp-sh .n { font-size: 12px; color: #3b6def; background: #eef3ff; border-radius: 7px; padding: 3px 8px; font-weight: 800; }
+.mp-sd { margin: 0 0 18px; color: #6b7280; font-size: 13.5px; }
+.mp-empty { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 140px;
+    font-size: 13.5px; color: #9ca3af; line-height: 1.7; background: #fafbfd; border-radius: 12px; }
+
+.mp-row { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.mp-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #6b7280; margin: -6px 0 6px; }
+.mp-legend span { display: flex; gap: 6px; align-items: center; }
+.mp-ver { display: flex; flex-direction: column; gap: 8px; }
+.mp-vr { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-radius: 12px;
+    border: 1px solid #eef0f4; background: #fafbfd; }
+.mp-vr b { font-size: 14px; width: 34px; color: #111827; }
+.mp-vr span { font-size: 13px; color: #6b7280; flex: 1; }
+.mp-vr .tag { flex: none; font-style: normal; font-size: 11px; font-weight: 800; color: #3b6def; background: #eef3ff;
+    border-radius: 999px; padding: 3px 9px; }
+.mp-vr.on { border: 1.5px solid #3b6def; background: #f5f8ff; }
+.mp-vr.on b { color: #2f5bd8; }
+
+.mp-tbl-wrap { overflow-x: auto; }
+.mp-tbl { min-width: 760px; }
+.mp-tr { display: grid; grid-template-columns: 80px minmax(110px, 1.2fr) 70px 70px 70px 84px minmax(220px, 1.6fr);
+    align-items: center; padding: 14px 10px; border-bottom: 1px solid #f1f3f7; font-size: 14px; color: #111827; }
+.mp-tr:last-child { border-bottom: 0; }
+.mp-tr.h { font-size: 12px; color: #6b7280; font-weight: 700; background: #f7f8fb; border-radius: 10px;
+    border-bottom: 0; padding: 10px; }
+.mp-tr .c { text-align: center; }
+.mp-tr .sc { font-weight: 800; font-variant-numeric: tabular-nums; }
+.mp-tr .r { display: flex; gap: 6px; justify-content: flex-end; }
+.mp-persona { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.mp-persona i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.mp-muted { color: #c4c9d4; }
+a.mp-lk { font-size: 12.5px; font-weight: 700; color: #2f5bd8 !important; background: #eef3ff; border-radius: 8px;
+    padding: 6px 11px; display: inline-flex; gap: 5px; align-items: center; text-decoration: none !important;
+    white-space: nowrap; }
+a.mp-lk:hover { background: #e0e9ff; }
+.mp-play { font-size: 12.5px; font-weight: 700; color: #4b5563; border: 1px solid #e5e7eb; background: #fff;
+    border-radius: 8px; padding: 5px 10px; display: inline-flex; gap: 5px; align-items: center; cursor: pointer;
+    white-space: nowrap; }
+.mp-play:hover { background: #f7f8fb; }
+.mp-play.primary { font-size: 13.5px; color: #fff; background: #3b6def; border-color: #3b6def;
+    border-radius: 10px; padding: 10px 16px; gap: 7px; }
+.mp-play.primary:hover { background: #2f5bd8; }
+
+.mp-note { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #6b7280; margin: -4px 0 18px; }
+.mp-vlist { display: flex; flex-direction: column; gap: 10px; }
+.mp-vrow { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto auto; align-items: center; gap: 18px;
+    border: 1px solid #eef0f4; border-radius: 14px; padding: 14px 18px; background: #fff; }
+.mp-vrow .ic { width: 52px; height: 52px; border-radius: 12px; background: #eef3ff; color: #3b6def;
+    display: flex; align-items: center; justify-content: center; font-size: 24px; }
+.mp-vrow b { font-size: 15px; display: block; color: #111827; }
+.mp-vrow small { font-size: 13px; color: #6b7280; }
+.mp-vrow .sc { text-align: right; }
+.mp-vrow .sc small { display: block; font-size: 11.5px; color: #9ca3af; }
+.mp-vrow .sc b { font-size: 20px; font-weight: 800; }
+.mp-vrow .lks { display: flex; gap: 6px; }
+.mp-vrow a.mp-lk { color: #4b5563 !important; background: #fff; border: 1px solid #e5e7eb; padding: 7px 11px; }
+.mp-vrow a.mp-lk:hover { background: #f7f8fb; }
+
+@media (max-width: 1000px) {
+    .mp-stats { grid-template-columns: repeat(2, 1fr); }
+    .mp-row { grid-template-columns: 1fr; }
 }
-[data-testid="stPlotlyChart"] { border: none !important; outline: none !important; }
-[data-testid="stPlotlyChart"] > div { border: none !important; }
+@media (max-width: 640px) {
+    [data-testid="stMainBlockContainer"] { padding: 24px 16px 60px !important; }
+    .mp-stats { grid-template-columns: 1fr; }
+    .mp-card { padding: 20px 18px; }
+    .mp-vrow { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; }
+    .mp-vrow .ic { width: 44px; height: 44px; font-size: 20px; }
+    .mp-vrow .lks, .mp-vrow .mp-play { grid-column: 1 / -1; }
+    .mp-vrow .mp-play { justify-content: center; }
+}
 </style>""", unsafe_allow_html=True)
 
 
 # ── 헤더 ─────────────────────────────────────────────────────────────────
-st.markdown(
-    '<div style="margin-bottom:28px;">'
-    '<p style="font-size:22px;font-weight:700;color:#111827;margin:0 0 4px;'
-    'font-family:Pretendard,-apple-system,sans-serif;">마이페이지</p>'
-    '<p style="font-size:14px;color:#6b7280;margin:0;'
-    'font-family:Pretendard,-apple-system,sans-serif;">'
-    '면접 히스토리, 점수 추이, 이력서 버전을 관리하세요</p>'
-    '</div>',
-    unsafe_allow_html=True,
+_HEAD_HTML = (
+    '<div class="mp-head"><div class="t">마이페이지</div>'
+    '<div class="sub">면접 히스토리, 점수 추이, 이력서 버전을 관리하세요</div></div>'
 )
 
 
 # ── 통계 카드 4개 ─────────────────────────────────────────────────────────
-_ICON_GROUP = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#3b6def" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '<circle cx="9" cy="7" r="4" stroke="#3b6def" stroke-width="1.8"/>'
-    '<path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"'
-    ' stroke="#3b6def" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_MIC = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<rect x="9" y="2" width="6" height="11" rx="3" stroke="#16a34a" stroke-width="1.8"/>'
-    '<path d="M5 10a7 7 0 0 0 14 0" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="12" y1="17" x2="12" y2="21" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="9" y1="21" x2="15" y2="21" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_ORDER = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"'
-    ' stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '<polyline points="14 2 14 8 20 8" stroke="#7c3aed" stroke-width="1.8"'
-    ' stroke-linecap="round" stroke-linejoin="round"/>'
-    '<line x1="8" y1="13" x2="16" y2="13" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>'
-    '<line x1="8" y1="17" x2="13" y2="17" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>'
-    '</svg>'
-)
-_ICON_LINEUP = (
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none">'
-    '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"'
-    ' stroke="#d97706" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '<polyline points="17 6 23 6 23 12"'
-    ' stroke="#d97706" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    '</svg>'
-)
-
 _now = datetime.now(timezone.utc)
 _recent_scored = [
     h for h in HISTORY
@@ -149,258 +256,234 @@ _recent_scored = [
 ]
 if len(_recent_scored) >= 2:
     _delta = _recent_scored[0]["iv"] - _recent_scored[-1]["iv"]
-    _delta_str = f"{_delta:+d}"
+    _delta_str = f"{_delta:+d}점"
 else:
+    _delta = None
     _delta_str = "-"
 
 _avg_iv = _summary.get("average_interview_score")
 _latest_resume = _summary.get("latest_resume_score")
 
+_NEUTRAL = "#4b5563"
+_delta_color = (
+    "#16a34a" if _delta is not None and _delta > 0
+    else "#cf5e96" if _delta is not None and _delta < 0
+    else _NEUTRAL
+)
+
+
+def _tint(color: str) -> str:
+    return {"#16a34a": "#f0fdf4", "#d97706": "#fffbeb", "#cf5e96": "#fdf3f8"}.get(color, "#f3f4f6")
+
+
 STAT_CARDS = [
-    {"v": f"{_summary.get('total_interviews', 0)}회", "lbl": "총 면접 횟수",       "color": "#3b6def", "bg": "#eef3ff", "icon": _ICON_GROUP},
-    {"v": f"{_avg_iv}점" if _avg_iv is not None else "-", "lbl": "평균 면접 점수",     "color": "#16a34a", "bg": "#f0fdf4", "icon": _ICON_MIC},
-    {"v": f"{_latest_resume}점" if _latest_resume is not None else "-", "lbl": "현재 이력서 점수",   "color": "#7c3aed", "bg": "#f5f3ff", "icon": _ICON_ORDER},
-    {"v": _delta_str,  "lbl": "최근 30일 점수 향상", "color": "#d97706", "bg": "#fffbeb", "icon": _ICON_LINEUP},
+    ("총 면접 횟수", f"{_summary.get('total_interviews', 0)}회", _NEUTRAL, "ph-users-three"),
+    ("평균 면접 점수", f"{_avg_iv}점" if _avg_iv is not None else "-", score_color(_avg_iv), "ph-microphone"),
+    ("현재 이력서 점수", f"{_latest_resume}점" if _latest_resume is not None else "-", score_color(_latest_resume), "ph-file-text"),
+    ("최근 30일 점수 향상", _delta_str, _delta_color, "ph-trend-up"),
+]
+st.markdown(
+    _HEAD_HTML + '<div class="mp-stats">' + "".join(
+        f'<div class="mp-stat"><span class="ic" style="background:{_tint(c)};color:{c}">'
+        f'<i class="ph-bold {icon}"></i></span><div><small>{lbl}</small>'
+        f'<b style="color:{"#111827" if c == _NEUTRAL else c}">{_esc(v)}</b></div></div>'
+        for lbl, v, c, icon in STAT_CARDS
+    ) + '</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    "<style>.st-key-_mypage_tab_restore { position:absolute; width:0; height:0; "
+    "overflow:hidden; clip:rect(0,0,0,0); margin:0; padding:0; }</style>",
+    unsafe_allow_html=True,
+)
+_mypage_tab_restored = st.text_input(
+    "_mypage_tab_restore", key="_mypage_tab_restore", label_visibility="collapsed"
+)
+if st.session_state.get("mypage_tab"):
+    _mypage_tab = st.session_state["mypage_tab"]
+    components.html(
+        f"<script>localStorage.setItem('iv_mypage_tab', {json.dumps(_mypage_tab)});</script>",
+        height=0,
+    )
+elif _mypage_tab_restored:
+    st.session_state["mypage_tab"] = _mypage_tab_restored
+    st.rerun()
+else:
+    _mypage_tab = "overview"
+    components.html("""
+    <script>
+    (function() {
+      var doc = window.parent.document;
+      var tries = 0;
+      function attempt() {
+        var input = doc.querySelector('.st-key-_mypage_tab_restore input');
+        if (!input) {
+          tries++;
+          if (tries < 20) setTimeout(attempt, 50);
+          return;
+        }
+        var saved = localStorage.getItem('iv_mypage_tab');
+        if (!saved) return;
+        var setter = Object.getOwnPropertyDescriptor(
+          window.parent.HTMLInputElement.prototype, 'value'
+        ).set;
+        setter.call(input, saved);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+      }
+      attempt();
+    })();
+    </script>
+    """, height=0)
+
+_MYPAGE_TABS = [("overview", "점수 · 이력서"), ("history", "면접 히스토리"), ("video", "영상 확인")]
+st.markdown(
+    '<style>'
+    '.st-key-mypage_tabs_row { width: fit-content !important; max-width: 100% !important; background: #eef0f4 !important; '
+    'border-radius: 12px !important; padding: 4px !important; margin-bottom: 18px !important; }'
+    '.st-key-mypage_tabs_row [data-testid="stHorizontalBlock"] { gap: 4px !important; flex-wrap: nowrap !important; }'
+    '.st-key-mypage_tabs_row [data-testid="stColumn"] { width: auto !important; flex: 0 0 auto !important; min-width: 0 !important; }'
+    '.st-key-mypage_tabs_row button { background: transparent !important; border: none !important; border-radius: 9px !important; '
+    'padding: 8px 18px !important; min-height: 0 !important; box-shadow: none !important; }'
+    '.st-key-mypage_tabs_row button p { font-size: 14px !important; white-space: nowrap !important; }'
+    + ''.join(
+        f'.st-key-mypage_tab_btn_{key} button {{ background: {"#fff" if key == _mypage_tab else "transparent"} !important; '
+        f'{"box-shadow: 0 1px 2px rgba(17,24,39,.06) !important;" if key == _mypage_tab else ""} }}'
+        f'.st-key-mypage_tab_btn_{key} button p {{ color: {"#111827" if key == _mypage_tab else "#6b7280"} !important; '
+        f'font-weight: {"700" if key == _mypage_tab else "600"} !important; }}'
+        for key, _ in _MYPAGE_TABS
+    )
+    + '</style>',
+    unsafe_allow_html=True,
+)
+with st.container(key="mypage_tabs_row"):
+    _tab_cols = st.columns(len(_MYPAGE_TABS))
+    for _col, (_key, _label) in zip(_tab_cols, _MYPAGE_TABS):
+        with _col:
+            if st.button(_label, key=f"mypage_tab_btn_{_key}"):
+                st.session_state["mypage_tab"] = _key
+                st.rerun()
+
+_REPORT_LINKS = [
+    ("결과리포트", "결과", "ph-chart-bar"),
+    ("피드백보고서", "피드백", "ph-chat-text"),
+    ("이력서최적화", "최적화", "ph-file-text"),
 ]
 
-stat_html = '<div style="display:flex;gap:17px;padding-bottom:32px;">'
-for s in STAT_CARDS:
-    stat_html += (
-        f'<div style="flex:1;background:white;border:1px solid #e5e7eb;border-radius:8px;'
-        f'height:90px;padding:16px 19px 14px;display:flex;flex-direction:column;'
-        f'justify-content:space-between;box-sizing:border-box;">'
-        f'<div style="display:flex;align-items:center;gap:10px;">'
-        f'<div style="width:36px;height:36px;border-radius:8px;background:{s["bg"]};'
-        f'flex-shrink:0;display:flex;align-items:center;justify-content:center;">{s["icon"]}</div>'
-        f'<p style="margin:0;font-size:22px;font-weight:700;color:{s["color"]};'
-        f'font-family:Pretendard,-apple-system,sans-serif;line-height:1;white-space:nowrap;">{s["v"]}</p>'
-        f'</div>'
-        f'<p style="margin:0;font-size:11px;color:#6b7280;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{s["lbl"]}</p>'
-        f'</div>'
-    )
-stat_html += '</div>'
-st.markdown(stat_html, unsafe_allow_html=True)
+if _mypage_tab == "overview":
+    # ── 01 면접 점수 변화 + 02 이력서 버전 ─────────────────────────────────────
+    _SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
 
-# ── 점수 추이 차트 + 이력서 버전 관리 ──────────────────────────────────────
-_chart_ver_row = st.container(key="chart_ver_row")
-col_chart, _gap, col_ver = _chart_ver_row.columns([35, 1, 21])
-
-_SCORED_HISTORY = [h for h in HISTORY if h["iv"] is not None]
-
-with col_chart:
     if not _SCORED_HISTORY:
-        st.info("완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.")
-    elif HAS_PLOTLY:
-        CHART_HISTORY = _SCORED_HISTORY[:5]
-        x_labels = [f"{i+1}회차" for i in range(len(CHART_HISTORY))]
-        iv_scores = [h["iv"] for h in reversed(CHART_HISTORY)]
-
-        def ann_style(s):
-            if s >= 80: return {"color": "#16a34a", "size": 11}
-            if s < 65:  return {"color": "#dc2626", "size": 11}
-            return {"color": "#374151", "size": 9}
-
-        def dot_color(s):
-            if s >= 80: return "#16a34a"
-            if s < 65:  return "#dc2626"
-            return "#3b6def"
-
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=x_labels, y=iv_scores,
-            fill="tozeroy", fillcolor="rgba(59,109,239,0.07)",
-            line=dict(color="#3b6def", width=2),
-            mode="lines+markers",
-            marker=dict(
-                size=[14 if (s >= 80 or s < 65) else 10 for s in iv_scores],
-                color=[dot_color(s) for s in iv_scores],
-                line=dict(color="white", width=2),
-            ),
-            showlegend=False,
-        ))
-
-        _last_idx = len(CHART_HISTORY) - 1
-        fig.add_shape(type="line", x0=-0.45, x1=_last_idx + 0.45, y0=70, y1=70,
-                      line=dict(color="#94a3b8", width=1))
-        fig.add_annotation(
-            x=_last_idx + 0.55, y=70, text="기준<br>70",
-            showarrow=False, xanchor="left", yanchor="middle",
-            font=dict(size=8, color="#94a3b8", family="Pretendard"),
-            align="center",
-        )
-
-        fig.add_trace(go.Scatter(
-            x=x_labels,
-            y=[s + 4 for s in iv_scores],
-            mode="text",
-            text=[str(s) for s in iv_scores],
-            textposition="top center",
-            textfont=dict(
-                size=[ann_style(s)["size"] for s in iv_scores],
-                color=[ann_style(s)["color"] for s in iv_scores],
-                family="Pretendard",
-            ),
-            showlegend=False,
-        ))
-
-        fig.update_layout(
-            title=dict(
-                text="<b>점수 추이</b>",
-                x=0, xanchor="left",
-                font=dict(size=13, color="#374151",
-                          family="Pretendard,-apple-system,sans-serif"),
-                pad=dict(l=2, t=0, b=4),
-            ),
-            margin=dict(l=28, r=38, t=36, b=28),
-            height=258,
-            paper_bgcolor="white", plot_bgcolor="white",
-            yaxis=dict(
-                range=[35, 112],
-                tickvals=[40, 60, 80, 100],
-                gridcolor="#f3f4f6",
-                tickfont=dict(size=9, color="#9ca3af", family="Pretendard"),
-                showgrid=True, zeroline=False, showline=False,
-            ),
-            xaxis=dict(
-                type="category",
-                tickfont=dict(size=8, color="#9ca3af", family="Pretendard"),
-                showgrid=False, zeroline=False, showline=False,
-            ),
-            font=dict(family="Pretendard, sans-serif"),
-        )
-        chart_html = pio.to_html(
-            fig, include_plotlyjs="cdn", full_html=False,
-            config={"displayModeBar": False},
-        )
-        components.html(
-            f"""
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
-            <style>* {{ margin:0; padding:0; font-family:'Pretendard',-apple-system,sans-serif !important; }}</style>
-            {chart_html}
-            """,
-            height=275,
-            scrolling=False,
-        )
+        chart_body = '<div class="mp-empty">완료된 면접이 아직 없어서 점수 추이를 보여드릴 수 없어요.</div>'
     else:
-        st.info("pip install plotly 후 차트를 확인할 수 있습니다.")
-
-with col_ver:
-    ver_rows = ""
-    for v in VERSIONS:
-        if v["active"]:
-            row_bg = "background:#eef3ff;border:1.5px solid #3b6def;"
-            v_color = "#3b6def"
-            s_color = "#3b6def"
-        else:
-            row_bg = "background:#f9fafb;border:1px solid #e5e7eb;"
-            v_color = "#374151"
-            s_color = "#6b7280"
-        ver_rows += (
-            f'<div style="{row_bg}border-radius:6px;height:36px;'
-            f'display:flex;align-items:center;padding:0 16px;margin-bottom:8px;">'
-            f'<span style="font-size:12px;font-weight:700;color:{v_color};'
-            f'min-width:36px;font-family:Pretendard,-apple-system,sans-serif;">{v["v"]}</span>'
-            f'<span style="font-size:10px;color:#6b7280;flex:1;margin-left:18px;'
-            f'font-family:Pretendard,-apple-system,sans-serif;">{v["date"]}</span>'
-            f'<span style="font-size:11px;font-weight:700;color:{s_color};'
-            f'font-family:Pretendard,-apple-system,sans-serif;">{v["score"]}점</span>'
-            f'</div>'
+        _chart_points = [(h["date_axis"], h["iv"]) for h in reversed(_SCORED_HISTORY[:5])]
+        chart_body = (
+            '<div class="mp-legend">'
+            '<span><i style="width:14px;height:3px;background:#3b6def;display:inline-block"></i>면접 점수</span>'
+            '<span><i style="width:14px;border-top:2px dashed #d97706;display:inline-block"></i>보통 65</span>'
+            '<span><i style="width:14px;border-top:2px dashed #16a34a;display:inline-block"></i>우수 80</span>'
+            '</div>' + _trend_svg(_chart_points)
         )
+
+    if not VERSIONS:
+        ver_body = '<div class="mp-empty">업로드된 이력서가 없어요</div>'
+    else:
+        ver_body = '<div class="mp-ver">'
+        for v in VERSIONS:
+            tag = '<span class="tag">현재</span>' if v["active"] else ""
+            ver_body += (f'<div class="mp-vr{" on" if v["active"] else ""}"><b>{_esc(v["v"])}</b>'
+                         f'<span>{_esc(v["date"])}</span>{tag}</div>')
+        ver_body += '</div>'
+
     st.markdown(
-        '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
-        'padding:15px 19px;">'
-        '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 14px;'
-        'font-family:Pretendard,-apple-system,sans-serif;">이력서 버전 관리</p>'
-        + ver_rows +
+        '<div class="mp-row">'
+        '<div class="mp-card"><div class="mp-sh"><span class="n">01</span>면접 점수 변화</div>'
+        '<div class="mp-sd">최근 5회까지 · 결과 리포트의 점수 변화 그래프와 같은 기준이에요</div>'
+        + chart_body + '</div>'
+        '<div class="mp-card"><div class="mp-sh"><span class="n">02</span>이력서 버전</div>'
+        '<div class="mp-sd">가장 최근 이력서로 면접을 봐요</div>'
+        + ver_body + '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
 
-# ── 면접 히스토리 ──────────────────────────────────────────────────────────
-COLS = "minmax(90px,1fr) minmax(120px,1.4fr) minmax(60px,0.7fr) minmax(55px,0.6fr) minmax(55px,0.6fr) minmax(80px,0.9fr) minmax(90px,1fr)"
-
-def _play_btn(video_url: str) -> str:
-    full_url = f"{api.BASE_URL}{video_url}" if video_url else ""
-    return (
-        f'<div data-video-url="{full_url}" style="display:inline-flex;align-items:center;gap:6px;'
-        'background:#eef2ff;border:1px solid #c6d2f4;border-radius:12px;'
-        'height:24px;padding:0 10px;box-sizing:border-box;cursor:pointer;">'
-        '<span style="width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;'
-        'border-color:transparent transparent transparent #3b6def;flex-shrink:0;"></span>'
-        '<span style="font-size:11px;font-weight:600;color:#3b6def;'
-        'font-family:Pretendard,-apple-system,sans-serif;line-height:1;">영상</span>'
-        '</div>'
-    )
-
-_HDR_STYLE = (
-    'font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;'
-    'font-family:Pretendard,-apple-system,sans-serif;'
-)
-
-header_html = (
-    f'<div style="display:grid;grid-template-columns:{COLS};'
-    f'align-items:center;padding:0 0 10px 0;border-bottom:1px solid #e5e7eb;margin-bottom:0;">'
-    f'<span style="{_HDR_STYLE}padding-left:16px;">날짜</span>'
-    f'<span style="{_HDR_STYLE}padding-left:16px;">면접관 스타일</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">이력서</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">면접</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">종합</span>'
-    f'<span style="{_HDR_STYLE}text-align:center;">영상</span>'
-    f'<span style="{_HDR_STYLE}"></span>'
-    f'</div>'
-)
-
-rows_html = ""
-for i, h in enumerate(HISTORY):
-    row_bg = "#f9fafb" if i % 2 == 0 else "white"
-    iv_c   = score_color(h["iv"])
-    tot_c  = score_color(h["total"])
-    resume_txt = h["resume"] if h["resume"] is not None else "-"
-    iv_txt     = h["iv"] if h["iv"] is not None else "-"
-    total_txt  = h["total"] if h["total"] is not None else "-"
-    rows_html += (
-        f'<div style="display:grid;grid-template-columns:{COLS};'
-        f'align-items:center;height:42px;background:{row_bg};'
-        f'margin:0 -19px;padding:0 19px;box-sizing:border-box;">'
-        f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["date"]}</span>'
-        f'<span style="font-size:11px;color:#6b7280;padding-left:16px;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{h["style"]}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:#3b6def;text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{resume_txt}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:{iv_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{iv_txt}</span>'
-        f'<span style="font-size:11px;font-weight:700;color:{tot_c};text-align:center;'
-        f'font-family:Pretendard,-apple-system,sans-serif;">{total_txt}</span>'
-        f'<div style="display:flex;justify-content:center;">'
-        f'{_play_btn(h["video_url"]) if h["has_video"] else ""}'
-        f'</div>'
-        + (
-            f'<a href="/결과리포트?sid={h["session_id"]}" target="_self" style="font-size:11px;font-weight:600;'
-            f'color:#3b6def;text-decoration:none;text-align:right;padding-right:24px;'
-            f'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">결과 보기</a>'
-            if h["iv"] is not None and h["session_id"] else
-            '<span style="font-size:11px;color:#c7ccd4;text-align:right;padding-right:24px;'
-            'white-space:nowrap;font-family:Pretendard,-apple-system,sans-serif;">-</span>'
+elif _mypage_tab == "history":
+    # ── 01 면접 기록 ───────────────────────────────────────────────────────────
+    if not HISTORY:
+        table_body = '<div class="mp-empty">아직 면접 기록이 없어요.</div>'
+    else:
+        rows_html = ""
+        for h in HISTORY:
+            def _sc(v):
+                return (f'<span class="c sc" style="color:{score_color(v)}">{v}</span>' if v is not None
+                        else '<span class="c mp-muted">-</span>')
+            video_cell = (
+                _play_btn(h["video_url"], f'{h["date_full"]} · {h["style"]} 면접관') if h["has_video"]
+                else '<span class="mp-muted">–</span>'
+            )
+            links_cell = (
+                _report_links(h["session_id"], _REPORT_LINKS)
+                if h["iv"] is not None and h["session_id"] else '<span class="mp-muted">-</span>'
+            )
+            rows_html += (
+                f'<div class="mp-tr"><span>{_esc(h["date"])}</span>{_persona_html(h["style"])}'
+                f'{_sc(h["resume"])}{_sc(h["iv"])}{_sc(h["total"])}'
+                f'<span class="c">{video_cell}</span><span class="r">{links_cell}</span></div>'
+            )
+        table_body = (
+            '<div class="mp-tbl-wrap"><div class="mp-tbl">'
+            '<div class="mp-tr h"><span>날짜</span><span>면접관</span><span class="c">이력서</span>'
+            '<span class="c">면접</span><span class="c">종합</span><span class="c">영상</span>'
+            '<span style="text-align:right">리포트</span></div>'
+            + rows_html + '</div></div>'
         )
-        + '</div>'
+
+    st.markdown(
+        '<div class="mp-card"><div class="mp-sh"><span class="n">01</span>면접 기록</div>'
+        '<div class="mp-sd">오른쪽 버튼으로 결과 리포트 · 피드백 보고서 · 이력서 최적화를 바로 열 수 있어요</div>'
+        + table_body + '</div>',
+        unsafe_allow_html=True,
     )
 
-st.markdown(
-    '<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
-    'padding:15px 19px;margin-top:20px;">'
-    '<p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 12px;'
-    'font-family:Pretendard,-apple-system,sans-serif;">면접 히스토리</p>'
-    '<div style="overflow-x:auto;">'
-    f'<div>{header_html}{rows_html}</div>'
-    '</div>'
-    '</div>',
-    unsafe_allow_html=True,
-)
 
+elif _mypage_tab == "video":
+    # ── 01 저장된 면접 영상 ────────────────────────────────────────────────────
+    _video_items = [h for h in HISTORY if h["has_video"]]
+    if not _video_items:
+        video_body = ('<div class="mp-empty">저장된 면접 영상이 없어요.<br>'
+                      '웹캠을 켜고 면접을 진행하면 여기에서 다시 볼 수 있어요.</div>')
+    else:
+        video_body = '<div class="mp-vlist">'
+        for h in _video_items:
+            total_html = (
+                f'<div class="sc"><small>종합</small><b style="color:{score_color(h["total"])}">{h["total"]}</b></div>'
+                if h["total"] is not None else '<div class="sc"><small>종합</small><b class="mp-muted">-</b></div>'
+            )
+            links_html = (
+                _report_links(h["session_id"], [("결과리포트", "결과 리포트", ""), ("피드백보고서", "피드백", "")])
+                if h["iv"] is not None and h["session_id"] else ""
+            )
+            video_body += (
+                '<div class="mp-vrow"><span class="ic"><i class="ph-fill ph-video-camera"></i></span>'
+                f'<div><b>{_esc(h["date_full"])}</b><small>{_esc(h["style"])} 면접관</small></div>'
+                f'{total_html}<div class="lks">{links_html}</div>'
+                + _play_btn(h["video_url"], f'{h["date_full"]} · {h["style"]} 면접관', "영상 보기", primary=True)
+                + '</div>'
+            )
+        video_body += '</div>'
+
+    st.markdown(
+        '<div class="mp-card"><div class="mp-sh"><span class="n">01</span>저장된 면접 영상</div>'
+        '<div class="mp-sd">웹캠을 켜고 본 면접만 저장돼요</div>'
+        '<div class="mp-note"><i class="ph-bold ph-info"></i>'
+        '영상은 최근 3개까지 보관돼요. 새로 녹화하면 가장 오래된 영상부터 지워져요.</div>'
+        + video_body + '</div>',
+        unsafe_allow_html=True,
+    )
 
 _access_token = st.session_state.get("access_token", "")
 
@@ -409,10 +492,7 @@ components.html(f"""
 (function () {{
     var doc = window.parent.document;
     var ACCESS_TOKEN = {json.dumps(_access_token)};
-    if (doc._videoModalReady) {{
-        doc._videoModalToken = ACCESS_TOKEN;
-        return;
-    }}
+    if (doc._videoModalHandler) doc.removeEventListener('click', doc._videoModalHandler);
     doc._videoModalReady = true;
     doc._videoModalToken = ACCESS_TOKEN;
 
@@ -425,7 +505,7 @@ components.html(f"""
         }}
     }}
 
-    function openModal(url) {{
+    function openModal(url, meta) {{
         closeModal();
 
         var modal = doc.createElement('div');
@@ -433,19 +513,28 @@ components.html(f"""
         modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         var box = doc.createElement('div');
-        box.style.cssText = 'background:white;border-radius:16px;padding:24px;max-width:760px;width:90%;position:relative;box-sizing:border-box;';
+        box.style.cssText = 'background:white;border-radius:18px;padding:22px 24px 24px;max-width:760px;width:90%;position:relative;box-sizing:border-box;font-family:Pretendard,-apple-system,sans-serif;';
 
         var closeBtn = doc.createElement('button');
         closeBtn.textContent = '✕';
         closeBtn.style.cssText = 'position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#9ca3af;line-height:1;';
         closeBtn.addEventListener('click', closeModal);
 
-        var title = doc.createElement('p');
+        var title = doc.createElement('div');
         title.textContent = '면접 영상';
-        title.style.cssText = 'font-size:15px;font-weight:600;color:#1f1f1f;margin:0 0 16px;';
+        title.style.cssText = 'font-size:16px;font-weight:800;color:#111827;margin:0;';
+
+        var sub = doc.createElement('div');
+        sub.textContent = meta || '';
+        sub.style.cssText = 'font-size:13px;color:#6b7280;margin:2px 0 0;';
+
+        var head = doc.createElement('div');
+        head.style.cssText = 'margin:0 32px 14px 0;';
+        head.appendChild(title);
+        if (meta) head.appendChild(sub);
 
         box.appendChild(closeBtn);
-        box.appendChild(title);
+        box.appendChild(head);
 
         if (url) {{
             var status = doc.createElement('p');
@@ -463,7 +552,17 @@ components.html(f"""
                     video.controls = true;
                     video.autoplay = true;
                     video.src = URL.createObjectURL(blob);
-                    video.style.cssText = 'width:100%;max-height:70vh;border-radius:8px;background:#000;display:block;';
+                    video.style.cssText = 'width:100%;max-height:70vh;border-radius:12px;background:#000;display:block;';
+                    video.addEventListener('loadedmetadata', function () {{
+                        if (video.duration === Infinity || isNaN(video.duration)) {{
+                            video.currentTime = 1e101;
+                            video.addEventListener('timeupdate', function fixDuration() {{
+                                video.removeEventListener('timeupdate', fixDuration);
+                                video.currentTime = 0;
+                            }}, {{ once: true }});
+                        }}
+                    }});
+
                     if (status.parentNode) status.replaceWith(video);
                 }})
                 .catch(function (err) {{
@@ -472,7 +571,7 @@ components.html(f"""
         }} else {{
             var ph = doc.createElement('div');
             ph.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:#9ca3af;gap:12px;';
-            ph.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span style="font-size:14px;">저장된 영상이 없습니다</span>';
+            ph.innerHTML = '<i class="ph-bold ph-video-camera-slash" style="font-size:40px;color:#e5e7eb;"></i><span style="font-size:14px;">저장된 영상이 없습니다</span>';
             box.appendChild(ph);
         }}
 
@@ -481,10 +580,11 @@ components.html(f"""
         doc.body.appendChild(modal);
     }}
 
-    doc.addEventListener('click', function (e) {{
+    doc._videoModalHandler = function (e) {{
         var btn = e.target.closest('[data-video-url]');
-        if (btn) openModal(btn.getAttribute('data-video-url'));
-    }});
+        if (btn) openModal(btn.getAttribute('data-video-url'), btn.getAttribute('data-video-meta'));
+    }};
+    doc.addEventListener('click', doc._videoModalHandler);
 }}());
 </script>
 """, height=0)

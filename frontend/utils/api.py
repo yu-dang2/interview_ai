@@ -1,16 +1,22 @@
+import json
+import os
+
 import requests
 import streamlit as st
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+
+PUBLIC_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", BASE_URL)
 
 
 class SessionExpiredError(Exception):
-    """토큰이 만료·무효(401)일 때 — 호출부에서 재로그인 유도용으로 구분해서 잡는다."""
     pass
 
 
-def _headers() -> dict:
-    token = st.session_state.get("access_token", "")
+def _headers(token: str | None = None) -> dict:
+
+    if token is None:
+        token = st.session_state.get("access_token", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
@@ -19,6 +25,61 @@ def _check(res: requests.Response) -> requests.Response:
         raise SessionExpiredError()
     res.raise_for_status()
     return res
+
+
+PASSWORD_TOO_LONG_MSG = "비밀번호가 너무 깁니다. 더 짧은 비밀번호를 입력해주세요."
+
+_FIELD_LABELS = {"password": "비밀번호", "email": "이메일", "name": "이름"}
+
+
+def _josa(word: str, with_batchim: str, without_batchim: str) -> str:
+    """마지막 글자 받침 유무로 조사를 고른다 (예: 비밀번호'는' / 이메일'은')."""
+    last = word[-1] if word else ""
+    if "가" <= last <= "힣":
+        return with_batchim if (ord(last) - ord("가")) % 28 else without_batchim
+    return without_batchim
+
+
+def _validation_message(item: dict) -> str | None:
+    """Pydantic 검증 오류 하나를 사용자용 한국어 문장으로 바꾼다."""
+    if not isinstance(item, dict):
+        return None
+    loc = item.get("loc") or []
+    field = next((str(x) for x in reversed(loc) if str(x) in _FIELD_LABELS), None)
+    label = _FIELD_LABELS.get(field) if field else None
+    kind = item.get("type", "")
+    ctx = item.get("ctx") or {}
+    if field == "email" and kind in ("value_error", "string_type"):
+        return "올바른 이메일 형식이 아닙니다."
+    if label and (kind == "missing" or (kind == "string_too_short" and ctx.get("min_length") == 1)):
+        return f"{label}{_josa(label, '을', '를')} 입력해주세요."
+    if label and kind == "string_too_short":
+        return f"{label}{_josa(label, '은', '는')} {ctx.get('min_length', '')}자 이상이어야 합니다."
+    if label and kind == "string_too_long":
+        return f"{label}{_josa(label, '은', '는')} {ctx.get('max_length', '')}자 이하여야 합니다."
+    msg = str(item.get("msg") or "")
+    # 백엔드의 bcrypt 72바이트 제한 메시지는 사용자에게 '바이트'가 낯설어서 바꿔 보여준다.
+    if field == "password" and kind == "value_error" and "바이트" in msg:
+        return PASSWORD_TOO_LONG_MSG
+    # field_validator에서 직접 올린 한국어 메시지("Value error, ..." 접두어만 떼서 그대로 쓴다)
+    if kind == "value_error" and msg.startswith("Value error, "):
+        return msg[len("Value error, "):]
+    return None
+
+
+def error_detail(e: requests.exceptions.HTTPError, fallback: str) -> str:
+    if e.response is not None:
+        try:
+            detail = e.response.json().get("detail")
+            if isinstance(detail, list):
+                msgs = [m for m in (_validation_message(d) for d in detail) if m]
+                return " ".join(dict.fromkeys(msgs)) if msgs else fallback
+            if detail:
+                return str(detail)
+        except Exception:
+            pass
+    status = e.response.status_code if e.response is not None else "?"
+    return f"{fallback} (서버 오류: {status})"
 
 
 # ── 인증 ────────────────────────────────────────────────────────────────────
@@ -30,6 +91,33 @@ def login(email: str, password: str) -> dict:
         timeout=30,
     )
     res.raise_for_status()
+    return res.json()
+
+
+def exchange_login_code(code: str) -> dict:
+    """소셜 로그인 일회용 코드를 액세스 토큰으로 바꾼다.
+
+    백엔드가 토큰을 주소에 직접 싣지 않는 이유는, 24시간짜리 토큰이 브라우저 기록과
+    서버 접근 로그에 그대로 남기 때문이다. 주소에는 수명 60초짜리 일회용 코드만 오고
+    교환은 이 함수(화면 서버)가 한다.
+    """
+    res = requests.post(
+        f"{BASE_URL}/auth/exchange",
+        json={"code": code},
+        timeout=30,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+def me(access_token: str | None = None) -> dict:
+    """현재 로그인한 사용자. 소셜 로그인은 이메일을 모른 채 토큰만 받으므로 이걸로 채운다."""
+    res = requests.get(
+        f"{BASE_URL}/auth/me",
+        headers=_headers(access_token),
+        timeout=30,
+    )
+    _check(res)
     return res.json()
 
 
@@ -69,15 +157,30 @@ def upload_jd(file_bytes: bytes, filename: str) -> int:
 
 # ── 면접 ────────────────────────────────────────────────────────────────────
 
-def start_interview(resume_id: int, jd_id: int, persona: str) -> dict:
+def start_interview(resume_id: int, jd_id: int, persona: str, access_token: str | None = None) -> dict:
     res = requests.post(
         f"{BASE_URL}/interview/sessions",
         json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
-        headers=_headers(),
+        headers=_headers(access_token),
         timeout=180,
     )
     _check(res)
     return res.json()
+
+
+def start_interview_stream(resume_id: int, jd_id: int, persona: str, access_token: str | None = None):
+
+    res = requests.post(
+        f"{BASE_URL}/interview/sessions/stream",
+        json={"resume_id": resume_id, "jd_id": jd_id, "persona": persona},
+        headers=_headers(access_token),
+        timeout=180,
+        stream=True,
+    )
+    _check(res)
+    for line in res.iter_lines(decode_unicode=True):
+        if line:
+            yield json.loads(line)
 
 
 def send_answer(session_id: str, answer: str, input_type: str | None = None) -> dict:
@@ -98,16 +201,18 @@ def end_session(session_id: str) -> None:
     res = requests.post(
         f"{BASE_URL}/interview/sessions/{session_id}/end",
         headers=_headers(),
-        timeout=30,
+        timeout=180,
     )
     _check(res)
 
 
-def get_result(session_id: str) -> dict:
+def get_result(session_id: str, access_token: str | None = None) -> dict:
     res = requests.get(
         f"{BASE_URL}/interview/sessions/{session_id}/result",
-        headers=_headers(),
-        timeout=90,
+        headers=_headers(access_token),
+        # 면접 종료가 비동기(202)로 바뀌면서 /result 가 리포트 완성까지 서버에서 최대 150초 기다린다.
+        # 리포트 생성 실측 62~245초(중앙값 126초)라 그보다 넉넉하게 둔다.
+        timeout=180,
     )
     _check(res)
     return res.json()
@@ -158,6 +263,17 @@ def get_my_sessions(limit: int = 20) -> dict:
     return res.json()
 
 
+def get_my_resumes() -> list[dict]:
+    """내 이력서 목록. resume_id 내림차순(최신 먼저)으로 온다."""
+    res = requests.get(
+        f"{BASE_URL}/resume/",
+        headers=_headers(),
+        timeout=30,
+    )
+    _check(res)
+    return res.json()
+
+
 # ── 이력서 최적화 ──────────────────────────────────────────────────────────
 
 def get_resume_optimization(session_id: str) -> dict:
@@ -168,29 +284,3 @@ def get_resume_optimization(session_id: str) -> dict:
     )
     _check(res)
     return res.json()
-
-
-def apply_resume_optimization(
-    resume_id: int, session_id: str, suggestion_ids: list | None = None
-) -> dict:
-    payload = {"session_id": session_id}
-    if suggestion_ids:
-        payload["suggestion_ids"] = suggestion_ids
-    res = requests.post(
-        f"{BASE_URL}/resume/{resume_id}/apply",
-        json=payload,
-        headers=_headers(),
-        timeout=30,
-    )
-    _check(res)
-    return res.json()
-
-
-def download_resume(resume_id: int) -> bytes:
-    res = requests.get(
-        f"{BASE_URL}/resume/{resume_id}/download",
-        headers=_headers(),
-        timeout=30,
-    )
-    _check(res)
-    return res.content

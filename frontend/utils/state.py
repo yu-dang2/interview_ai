@@ -3,6 +3,8 @@ import json
 import streamlit as st
 import streamlit.components.v1 as components
 
+from utils.ui import show_session_expired
+
 
 # ── 초기화 ────────────────────────────────────────────────────────────
 
@@ -168,6 +170,9 @@ def sync_interviewer_style():
 # ── 면접 세션 ID 유지 ────────────────────────────────────────────────────
 
 def sync_session_id():
+    if st.session_state.get("_suppress_session_id_restore"):
+        return
+
     if st.session_state.get("_session_id_clear_pending", False):
         st.session_state["_session_id_restore"] = "__NONE__"
 
@@ -336,16 +341,8 @@ def is_session_expired() -> bool:
     return bool(st.session_state.get("_session_expired"))
 
 
-def render_session_expired_inline():
-    st.session_state["_session_expired"] = False
-    st.error("로그인이 만료되었습니다. 다시 로그인해주세요.")
-    if st.button("로그인 화면으로 이동", key="_session_expired_relogin", use_container_width=True):
-        st.switch_page("pages/01_로그인.py")
-
-
 def render_session_expired_banner():
     if not is_session_expired():
         return
-    _, mid, _ = st.columns([1, 2, 1])
-    with mid:
-        render_session_expired_inline()
+    st.session_state["_session_expired"] = False
+    show_session_expired()

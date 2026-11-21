@@ -1,9 +1,12 @@
 import streamlit as st
+from utils.brand import FAVICON
 from components.sidebar import render_sidebar
+from components.setup_steps import SETUP_CSS, steps_html
 from utils.state import init_session
 
 st.set_page_config(
     page_title="웹캠 허용 | intro",
+    page_icon=FAVICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -11,151 +14,82 @@ st.set_page_config(
 init_session()
 render_sidebar(active="면접 시작")
 
+# 단계 표시·카드·번호 제목은 환경설정·문서 업로드와 같은 규칙(components/setup_steps.py)을 쓴다.
+st.markdown(SETUP_CSS, unsafe_allow_html=True)
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"] {
-    padding: 200px 0 0 0 !important;
-    background: #f8fafc !important;
-    min-height: 100vh !important;
-}
-[data-testid="stVerticalBlock"] { gap: 0 !important; }
-[data-testid="stHorizontalBlock"] { gap: 0 !important; }
-[data-testid="stColumn"] { padding: 0 !important; }
-[data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
-    width: 100% !important;
-}
-
-[data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
-[data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] {
-    background: white !important;
-    border: none !important;
-    outline: none !important;
-}
-
-[data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {
-    border-radius: 16px !important;
-    box-shadow: 0px 4px 24px rgba(0,0,0,0.1) !important;
-    padding: 20px !important;
-    box-sizing: border-box !important;
-    width: 480px !important;
-    max-width: 480px !important;
-    position: relative !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-}
-
-[data-testid="stBaseButton-primary"] {
-    font-size: 16px !important;
-    padding: 12px 50px !important;
-}
-[data-testid="stBaseButton-primary"]:hover {
-    background: #2d55c8 !important;
-    border-color: #2d55c8 !important;
-}
-
-[data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="element-container"]:last-child {
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
-}
-
-[data-testid="stBaseButton-secondary"] {
-    width: 100% !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #a6afbc !important;
-    font-size: 13px !important;
-    font-weight: 400 !important;
-}
-[data-testid="stBaseButton-secondary"]:hover {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #6b7280 !important;
-}
-[data-testid="stBaseButton-secondary"] p {
-    color: inherit !important;
-    font-size: 13px !important;
+.st-key-cam_choice_card [data-testid="stHorizontalBlock"] { gap: 16px !important; align-items: stretch !important; }
+.st-key-cam_choice_card [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { height: 100%; }
+.st-key-cam_opt_on, .st-key-cam_opt_off { border-radius: 16px !important; padding: 24px 22px !important; height: 100%;
+    box-sizing: border-box !important; display: flex !important; flex-direction: column !important; }
+.st-key-cam_opt_on { border: 1.5px solid #3b6def !important; background: #f5f8ff !important; }
+.st-key-cam_opt_off { border: 1px solid #e9ecf2 !important; background: #fff !important; }
+.st-key-cam_opt_on [data-testid="stElementContainer"]:last-child,
+.st-key-cam_opt_off [data-testid="stElementContainer"]:last-child { margin-top: auto !important; }
+.cam-top { display: flex; align-items: center; gap: 14px; }
+.cam-top .ic { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0; }
+.cam-top .nm { font-size: 17px; font-weight: 800; color: #111827; display: flex; align-items: center; gap: 8px; }
+.cam-top .tg { font-size: 11px; font-weight: 800; color: #2f5bd8; background: #fff; border-radius: 999px; padding: 3px 9px; }
+.cam-top .ds { font-size: 13px; color: #6b7280; margin-top: 3px; }
+.cam-list { margin: 18px 0 22px; padding: 16px 0 0; border-top: 1px solid #eef0f4; display: flex; flex-direction: column; gap: 9px; }
+.cam-list div { font-size: 13.5px; color: #374151; display: flex; gap: 8px; align-items: center; }
+.cam-list i { font-size: 14px; }
+.st-key-cam_opt_on button, .st-key-cam_opt_off button { width: 100% !important; padding: 12px 0 !important;
+    border-radius: 12px !important; min-height: 0 !important; }
+.st-key-cam_opt_on button p, .st-key-cam_opt_off button p { font-size: 14.5px !important; font-weight: 700 !important; }
+.st-key-cam_opt_off button { background: #fff !important; border: 1px solid #e5e7eb !important; }
+.st-key-btn_back_cam { margin-top: 6px; }
+.st-key-btn_back_cam button { background: transparent !important; border: none !important; padding: 8px 0 !important;
+    min-height: 0 !important; box-shadow: none !important; }
+.st-key-btn_back_cam button p { font-size: 14px !important; font-weight: 700 !important; color: #4b5563 !important; }
+@media (max-width: 760px) {
+    .st-key-cam_choice_card [data-testid="stHorizontalBlock"] { flex-direction: column !important; }
 }
 </style>""", unsafe_allow_html=True)
 
-_, card_col, _ = st.columns([36, 50, 36])
+st.markdown(
+    steps_html(3)
+    + '<div class="su-head"><div class="t">면접 방식을 선택해주세요</div>'
+    '<div class="sub">웹캠을 켜면 시선 처리·발화 속도까지 분석해드려요.</div></div>',
+    unsafe_allow_html=True,
+)
 
-with card_col:
-    with st.container(border=True):
 
-        st.markdown(
-            '<div style="display:flex;align-items:center;justify-content:center;margin-bottom:32px;">'
-            '<div style="width:10px;height:10px;border-radius:50%;background:#d9dee8;flex-shrink:0;"></div>'
-            '<span style="font-size:11px;color:#6b7280;margin:0 6px 0 4px;">환경 설정</span>'
-            '<div style="width:52px;height:1px;background:#d9dee8;"></div>'
-            '<div style="width:10px;height:10px;border-radius:50%;background:#3b6def;flex-shrink:0;margin:0 4px;"></div>'
-            '<span style="font-size:11px;font-weight:600;color:#3b6def;margin-right:6px;">웹캠 허용</span>'
-            '<div style="width:52px;height:1px;background:#d9dee8;"></div>'
-            '<div style="width:10px;height:10px;border-radius:50%;background:#d9dee8;flex-shrink:0;margin-left:4px;"></div>'
-            '<span style="font-size:11px;color:#6b7280;margin-left:4px;">면접 시작</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+def _option_html(icon: str, icon_style: str, name: str, tag: str, desc: str, items: list[str], check_color: str) -> str:
+    tag_html = f'<span class="tg">{tag}</span>' if tag else ""
+    rows = "".join(f'<div><i class="ph-bold ph-check" style="color:{check_color}"></i>{t}</div>' for t in items)
+    return (
+        f'<div class="cam-top"><span class="ic" style="{icon_style}"><i class="ph-fill {icon}"></i></span>'
+        f'<div><div class="nm">{name}{tag_html}</div><div class="ds">{desc}</div></div></div>'
+        f'<div class="cam-list">{rows}</div>'
+    )
 
-        st.markdown(
-            '<div style="display:flex;justify-content:center;margin-bottom:24px;">'
-            '<svg width="88" height="88" viewBox="0 0 88 88" fill="none">'
-            '<circle cx="44" cy="44" r="44" fill="#eef2ff"/>'
-            '<rect x="23" y="30" width="42" height="30" rx="5" fill="#3b6def"/>'
-            '<rect x="38" y="23" width="12" height="9" rx="3" fill="#3b6def"/>'
-            '<circle cx="44" cy="45" r="8" fill="white"/>'
-            '<circle cx="44" cy="45" r="4" fill="#3b6def"/>'
-            '</svg></div>',
-            unsafe_allow_html=True,
-        )
 
-        st.markdown(
-            '<p style="text-align:center;font-size:22px;font-weight:700;'
-            'color:#1f1f1f;margin:0 0 20px;">웹캠을 허용해주세요</p>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<p style="text-align:center;font-size:14px;color:#6b7280;'
-            'line-height:22px;margin:0 0 28px;">'
-            'AI가 면접 중 시선 처리와 발화 속도를 실시간으로<br>'
-            '분석하여 더 정확한 피드백을 제공합니다.</p>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<div style="height:36px;background:#eef2ff;border-radius:8px;'
-            'display:flex;align-items:center;padding:0 14px;margin-bottom:12px;">'
-            '<div style="width:7px;height:7px;border-radius:50%;background:#3b6def;'
-            'margin-right:10px;flex-shrink:0;"></div>'
-            '<span style="font-size:13px;font-weight:500;color:#1a3380;">시선 처리 점수화</span>'
-            '</div>'
-            '<div style="height:36px;background:#eef2ff;border-radius:8px;'
-            'display:flex;align-items:center;padding:0 14px;margin-bottom:12px;">'
-            '<div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;'
-            'margin-right:10px;flex-shrink:0;"></div>'
-            '<span style="font-size:13px;font-weight:500;color:#1a3380;">발화 속도 분석</span>'
-            '</div>'
-            '<div style="height:36px;background:#eef2ff;border-radius:8px;'
-            'display:flex;align-items:center;padding:0 14px;margin-bottom:32px;">'
-            '<div style="width:7px;height:7px;border-radius:50%;background:#ef4444;'
-            'margin-right:10px;flex-shrink:0;"></div>'
-            '<span style="font-size:13px;font-weight:500;color:#1a3380;">영상 녹화 및 저장 허용</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        # 허용 버튼
-        _bl, _bc, _br = st.columns([1, 4.5, 1])
-        with _bc:
-            if st.button("카메라 & 마이크 허용하기", type="primary",
-                         use_container_width=True, key="allow_btn"):
+with st.container(key="cam_choice_card"):
+    st.markdown(
+        '<div class="su-sh"><span class="n">01</span>웹캠 사용</div>'
+        '<div class="su-sd">답변 내용·논리성 평가는 두 방식 모두 같아요</div>',
+        unsafe_allow_html=True,
+    )
+    col_on, col_off = st.columns(2)
+    with col_on:
+        with st.container(key="cam_opt_on"):
+            st.markdown(_option_html(
+                "ph-video-camera", "background:#3b6def;color:#fff", "웹캠 켜고 진행", "추천", "AI 분석 항목 추가",
+                ["시선 처리 점수화", "발화 속도 분석", "영상 녹화 및 저장 허용"], "#3b6def",
+            ), unsafe_allow_html=True)
+            if st.button("카메라 & 마이크 허용하고 시작", type="primary", key="allow_btn", use_container_width=True):
                 st.session_state.webcam_on = True
                 st.switch_page("pages/04_면접_진행.py")
+    with col_off:
+        with st.container(key="cam_opt_off"):
+            st.markdown(_option_html(
+                "ph-video-camera-slash", "background:#f3f4f6;color:#6b7280", "웹캠 없이 진행", "", "음성·텍스트 답변만으로 평가",
+                ["답변 내용·논리성 분석은 동일", "카메라·영상 녹화 없음", "얼굴 노출 없이 편안하게 진행"], "#9ca3af",
+            ), unsafe_allow_html=True)
+            if st.button("웹캠 없이 시작", key="skip_btn", use_container_width=True):
+                st.session_state.webcam_on = False
+                st.switch_page("pages/04_면접_진행.py")
 
-        st.markdown('<div style="height:14px;"></div>', unsafe_allow_html=True)
-
-        if st.button("웹캠 없이 면접 진행하기 →",
-                     use_container_width=True, key="skip_btn"):
-            st.session_state.webcam_on = False
-            st.switch_page("pages/04_면접_진행.py")
+if st.button("← 이전 단계", key="btn_back_cam"):
+    st.switch_page("pages/031_문서업로드.py")

@@ -1,12 +1,3 @@
-"""
-follow_up_generator 노드
-작성: 이현주
-
-예진님 FOLLOW_UP_GENERATOR_SYSTEM_PROMPT + 페르소나 조합하여 꼬리질문 생성.
-eval_result의 follow_up_focus를 받아서 허점 파고들기.
-최대 3회 제한은 topic_router에서 관리.
-"""
-
 import json
 from langchain_core.messages import HumanMessage, AIMessage
 from agent.parsers.follow_up_prompt import FOLLOW_UP_GENERATOR_SYSTEM_PROMPT
@@ -23,7 +14,6 @@ async def follow_up_generator(state: InterviewState):
     persona_prompt = PERSONA_MAP.get(state.get("persona"), PERSONA_TECH_LEAD)
     system_prompt = persona_prompt + FOLLOW_UP_GENERATOR_SYSTEM_PROMPT
 
-    # 최근 대화 맥락 + follow_up_focus 전달
     recent_context = []
     for msg in state.get("messages", [])[-4:]:
         if isinstance(msg, HumanMessage):
@@ -36,7 +26,7 @@ async def follow_up_generator(state: InterviewState):
         "follow_up_focus": eval_result.get("follow_up_focus", "")
     }, ensure_ascii=False)
 
-    result = await call_llm(system_prompt, user_content)
+    result = await call_llm(system_prompt, user_content, stage="follow_up_generator")
     return {
         "messages": [AIMessage(content=result.get("follow_up_question", ""))],
         "follow_up_count": count + 1

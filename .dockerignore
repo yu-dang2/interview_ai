@@ -11,8 +11,13 @@ uploads/
 *.db-wal
 *.db-shm
 
-# 백엔드 이미지에 필요 없는 것
-frontend/
+# 직무 지식 벡터 인덱스. 임베딩 결과라 이미지에 굽지 않는다(Dockerfile 참고).
+# 컨테이너를 띄운 뒤 만들면 KNOWLEDGE_INDEX_PATH 볼륨에 남는다.
+# chroma.sqlite3 는 확장자가 달라 위 *.db 에 걸리지 않으므로 따로 적는다.
+data/knowledge_index/
+
+# 이미지에 필요 없는 것
+# (frontend/ 는 web 서비스가 같은 이미지로 뜨므로 제외하지 않는다)
 docs/
 .git/
 .github/
